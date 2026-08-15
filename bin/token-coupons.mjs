@@ -4,7 +4,7 @@
 //
 //   token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]
 //                        [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--out=FILE] [--open] [--no-color] [--cwd=DIR]
-//   token-coupons apply <decisions.json> [--yes] [--trash=DIR] [--json]
+//   token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 //   token-coupons pricing [--pricing=FILE] [--json]
 //   token-coupons help
 
@@ -60,7 +60,7 @@ export function parseArgs (argv) {
     if (a === '-v') { flags.version = true; continue }
     positional.push(a)
   }
-  const command = positional.length && !positional[0].endsWith('.json') && !positional[0].includes('/') ? positional.shift() : 'report'
+  const command = positional.length && !positional[0].endsWith('.json') && !positional[0].includes('/') && positional[0] !== '-' ? positional.shift() : 'report'
   return { command, positional, flags, errors }
 }
 
@@ -74,7 +74,7 @@ export function helpText () {
     'Usage',
     '  token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]',
     '                       [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--out=FILE] [--open] [--no-color] [--cwd=DIR]',
-    '  token-coupons apply <decisions.json> [--yes] [--trash=DIR] [--json]',
+    '  token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]',
     '  token-coupons pricing [--pricing=FILE] [--json]',
     '  token-coupons help',
     '',
@@ -182,13 +182,22 @@ export async function runReport (flags, io) {
 export async function runApply (positional, flags, io) {
   const file = positional[0]
   if (!file) {
-    io.err('apply needs the decisions file you exported from the report page, for example: token-coupons apply decisions.json\n')
+    io.err('apply needs the decisions JSON copied from the report page: a file path, or - to read it from stdin. For example: token-coupons apply decisions.json\n')
     return 1
   }
   let text
-  try { text = readFileSync(resolve(file), 'utf8') } catch (e) {
-    io.err('could not read ' + file + ': ' + (e && e.message ? e.message : e) + '\n')
-    return 1
+  if (file === '-') {
+    // The page says "paste it into your next message", so the agent usually
+    // has the JSON as text, not as a file. Let it pipe the text straight in.
+    try { text = readFileSync(0, 'utf8') } catch (e) {
+      io.err('could not read the decisions JSON from stdin: ' + (e && e.message ? e.message : e) + '\n')
+      return 1
+    }
+  } else {
+    try { text = readFileSync(resolve(file), 'utf8') } catch (e) {
+      io.err('could not read ' + file + ': ' + (e && e.message ? e.message : e) + '\n')
+      return 1
+    }
   }
   const parsed = parseDecisions(text)
   if (!parsed.ok) {

@@ -221,12 +221,13 @@ costModel({ wastedTokens, listingTokens, stats, pricing, cached = true }) -> {
   assumptions: { apiCallsPerSession, sessionsPerDay, sessionsPerWeek, measured, cached, note },
   perModel: [{
     id, label, vendor, tier, source, seenInTranscripts: bool,   // source is the pricing page URL, or null
-    listing: { perCall, perChat, perDay, perWeek },   // dollars, listing as a whole
-    wasted:  { perCall, perChat, perDay, perWeek },   // dollars, never-called plus summoned-only
-    uncached: { wastedPerChat, wastedPerWeek },       // same at list price, for the honest upper bound
+    listing: { perCall, perChat, perDay, perWeek, perMonth },   // dollars, listing as a whole (month = week * 52/12)
+    wasted:  { perCall, perChat, perDay, perWeek, perMonth },   // dollars, never-called plus summoned-only
+    uncached: { wastedPerChat, wastedPerWeek, wastedPerMonth }, // same at list price, for the honest upper bound
   }],
   volume: {
     listingTokensPerWeek, wastedTokensPerWeek,
+    listingTokensPerMonth, wastedTokensPerMonth,       // week * 52/12
     inputTokensPerWeek,                                // measured, all input
     listingShareOfInput, wastedShareOfInput,           // 0..1, this is the "usage limits" view
   },
@@ -258,7 +259,7 @@ sessions per day and per week.
   summary: {                     // the twelve fields the agent reads first
     skills, notListed, listingTokensPerCall, overBudgetRatio, neverCalledPassive, unroutable, summonedOnly,
     wastedTokensPerCall, savedTokensPerCallIfApplied, fitsAfter,
-    wastedPerWeekOnYourModel: { model, dollars } | null,
+    wastedPerWeekOnYourModel: { model, dollars, dollarsPerMonth } | null,
     recommendedActions: { active: n, delete: n, optimize: n, review: n, keep: n, passive: n }
   }
 }
@@ -355,9 +356,9 @@ report; apply exits 1 if any step errored.
 ## HTML report requirements
 
 - One file, no external assets, no fetch, no fonts from the network. Works
-  opened from disk and inside a sandboxed artifact frame. Do not rely on
-  `<a download>` (inert in artifact sandboxes): offer Copy to clipboard, a
-  visible textarea with the JSON, and a download button that degrades quietly.
+  opened from disk and inside a sandboxed artifact frame. No `<a download>`
+  (inert in artifact sandboxes): the flow is Copy to clipboard, with the
+  textarea visible and selectable as the fallback.
 - Theme aware: light palette on `:root`, dark under
   `@media (prefers-color-scheme: dark)` guarded as `:root:not([data-theme="light"])`,
   and again under `:root[data-theme="dark"]`. Body has an explicit background.

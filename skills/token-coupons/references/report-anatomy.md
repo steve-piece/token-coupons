@@ -21,7 +21,7 @@ Walk the ladder and stop at the first hit. Silently broken beats expensive, expe
 
 1. `summary.unroutable > 0`. Lead with it: that many skills are installed and correct but the agent
    cannot see what they are for, and nothing anywhere reports an error. Say the count and name two.
-2. `summary.wastedPerWeekOnYourModel` is present. Lead with the dollars per week, and name the model
+2. `summary.wastedPerWeekOnYourModel` is present. Lead with the dollars per week (add the month figure), and name the model
    it was priced on. Add "on current prices, cached" so nobody reads it as a bill.
 3. Otherwise lead with `summary.wastedTokensPerCall`: tokens paid on every single API call for
    descriptions that have never once been used.
@@ -46,7 +46,7 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 | `wastedTokensPerCall` | never called plus summoned only, per API call |
 | `savedTokensPerCallIfApplied` | what the recommendations recover, per API call |
 | `fitsAfter` | true if the listing fits the budget once the recommendations are applied |
-| `wastedPerWeekOnYourModel` | `{ model, dollars }` for the model the transcripts actually ran on, or null when none of them is in the price list |
+| `wastedPerWeekOnYourModel` | `{ model, dollars, dollarsPerMonth }` for the model the transcripts actually ran on, or null when none of them is in the price list |
 | `recommendedActions` | how many skills landed on each action: `active`, `delete`, `optimize`, `review`, `keep`, `passive`. The six add up to `skills` |
 
 ## The other blocks, and who they are for
@@ -59,7 +59,7 @@ being in the listing, so they cost nothing per message. It is reassurance, never
   plain `note` sentence you can quote as is.
 - `stats`: sessions, API calls per session, models seen, input tokens per week, cache shares. This is
   the multiplier that turns a listing size into money.
-- `cost`: per model dollars, cached and uncached, plus the share of input line. See
+- `cost`: per model dollars per week and per month, cached and uncached, the wasted tokens per week and month in `cost.volume`, plus the share of input line. See
   [cost-model](cost-model.md).
 - `skills`: every skill as a ranked row. The page renders this. Do not paste it.
 - `heaviest` and `thin`: the longest descriptions, and the ones too short to route to.

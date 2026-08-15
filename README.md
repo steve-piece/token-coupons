@@ -12,7 +12,7 @@ Every skill you install carries a description. The agent client puts a listing o
 
 That listing has a budget you never see. Claude Code gives it about 1 percent of the context window. When the listing goes over, the client keeps every name but starts dropping descriptions, least-invoked first, until the rest fits. A skill with no description in the listing cannot be picked by the agent on its own. It is installed, it is correct, and it is unreachable, and nothing anywhere prints an error.
 
-`token-coupons` reads the skills on your disk and the session transcripts already on your disk, and tells you: what the listing costs per message, which skills have never once been chosen, which ones are being dropped right now, what the waste costs in dollars per week on the model you actually use, and one recommended action per skill. It counts only what Claude Code actually lists from where you run it (your `~/.claude/skills`, the current project's `.claude/skills`, and enabled plugins); everything else on disk is shown separately and costs nothing.
+`token-coupons` reads the skills on your disk and the session transcripts already on your disk, and tells you: what the listing costs per message, which skills have never once been chosen, which ones are being dropped right now, what the waste costs in dollars per week and per month on the model you actually use, and one recommended action per skill. It counts only what Claude Code actually lists from where you run it (your `~/.claude/skills`, the current project's `.claude/skills`, and enabled plugins); everything else on disk is shown separately and costs nothing.
 
 ## Quick start
 
@@ -30,18 +30,14 @@ Write the interactive page and open it in your browser.
 npx token-coupons@latest report --html=report.html --open
 ```
 
-In the page, every row is preset to the recommendation. Change the rows you disagree with, press Accept all recommendations, then Copy JSON and save it as `decisions.json` (or paste it into a file by hand).
-
-```bash
-pbpaste > decisions.json
-```
-
-Carry out the decisions. Run it once without `--yes` to read the plan, then again with `--yes`.
+In the page, every row starts on the recommendation. Change the rows you disagree with, then press Copy on the decisions box at the bottom. If an agent is driving, paste that JSON into your next message and say "proceed with these decisions". By hand, save it as `decisions.json` and carry it out yourself: once without `--yes` to read the plan, then again with `--yes`.
 
 ```bash
 npx token-coupons@latest apply decisions.json         # prints the plan, writes nothing
 npx token-coupons@latest apply decisions.json --yes   # makes the changes
 ```
+
+`apply -` reads the same JSON from stdin, so `pbpaste | npx token-coupons@latest apply -` works too.
 
 ## What you get
 
@@ -67,13 +63,15 @@ WHAT THE LISTING COSTS
   every message, and the list fits its allowance again.
 
 WHAT IT COSTS IN DOLLARS
-    model                     wasted/chat  wasted/week  uncached/week  whole list/week
-  * Claude Opus 5                  $0.593        $8.66         $75.67           $11.75
-  * Claude Sonnet 5                $0.237        $3.47         $30.27            $4.70
-    GPT-5.6 Sol                    $0.554        $8.09         $75.67           $10.96
+  15,238,064 tokens wasted per week, 66,031,611 per month, from 7,913 unused tokens riding in every message.
+
+    model                     wasted/week  wasted/month  uncached/week  whole list/month
+  * Claude Opus 5                   $8.72        $37.80         $76.19            $51.29
+  * Claude Sonnet 5                 $3.49        $15.12         $30.48            $20.52
+    GPT-5.6 Sol                     $8.14        $35.28         $76.19            $47.87
   * seen in your own sessions
-  Assumes 131 messages per chat and 14.6 chats per week, measured from your sessions.
-  Share of everything you send: the list is 1.98 percent of your input, the wasted part is 1.46 percent.
+  Assumes 131 messages per chat and 14.7 chats per week, measured from your sessions.
+  Share of everything you send: the list is 1.99 percent of your input, the wasted part is 1.47 percent.
 
 RECOMMENDED
   48 to gate (active), 25 to delete, 8 to rewrite (optimize), 11 to keep
@@ -117,8 +115,8 @@ sequenceDiagram
   T-->>A: summary + report.html
   A->>P: verdict, then the page
   P->>H: mark a decision per skill
-  H-->>P: Copy JSON (the decisions file)
-  P->>A: paste it: "here is my decisions.json, proceed"
+  H-->>P: Copy (the decisions JSON)
+  P->>A: paste it: "proceed with these decisions"
   A->>T: apply (plan first, then --yes)
   T-->>A: steps, each with an undo line
   A->>A: rewrite the optimize descriptions
@@ -173,7 +171,7 @@ claude plugin install token-coupons@token-coupons
 ln -s "$PWD/skills/token-coupons" ~/.claude/skills/token-coupons
 ```
 
-Then say `/token-coupons`. The agent runs the report, leads with one verdict line, hands you the HTML page, and stops. Nothing on disk changes while it waits. When you paste your decisions back, it runs `apply` without `--yes` first and shows you the plan, asks, then runs it, rewrites the descriptions marked `optimize`, re-runs the report, and closes with before and after.
+Then say `/token-coupons`. The agent runs the report, leads with one verdict line, hands you the HTML page, and stops. Nothing on disk changes while it waits. Mark your decisions in the page, press Copy, and paste the JSON into your next message with "proceed with these decisions". The agent runs `apply` without `--yes` first and shows you the plan, asks, then runs it, rewrites the descriptions marked `optimize`, re-runs the report, and closes with before and after.
 
 The skill itself ships with `disable-model-invocation: true`, so it only ever runs when you ask for it.
 
@@ -183,7 +181,7 @@ The skill itself ships with `disable-model-invocation: true`, so it only ever ru
 token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]
                      [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--out=FILE]
                      [--open] [--no-color] [--cwd=DIR]
-token-coupons apply <decisions.json> [--yes] [--trash=DIR] [--json]
+token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
 token-coupons help
 

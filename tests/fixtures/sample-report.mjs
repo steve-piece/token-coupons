@@ -473,22 +473,27 @@ function buildCost ({ wastedTokens, listingTokens }) {
         perChat: round(cachedChat(listingTokens)),
         perDay: round(cachedChat(listingTokens) * perDay),
         perWeek: round(cachedChat(listingTokens) * perWeek),
+        perMonth: round(cachedChat(listingTokens) * perWeek * (52 / 12)),
       },
       wasted: {
         perCall: round(wastedTokens * m.cachedInput / 1e6),
         perChat: round(cachedChat(wastedTokens)),
         perDay: round(cachedChat(wastedTokens) * perDay),
         perWeek: round(cachedChat(wastedTokens) * perWeek),
+        perMonth: round(cachedChat(wastedTokens) * perWeek * (52 / 12)),
       },
       uncached: {
         wastedPerChat: round(uncachedChat(wastedTokens)),
         wastedPerWeek: round(uncachedChat(wastedTokens) * perWeek),
+        wastedPerMonth: round(uncachedChat(wastedTokens) * perWeek * (52 / 12)),
       },
     }
   })
 
   const listingTokensPerWeek = listingTokens * calls * perWeek
   const wastedTokensPerWeek = wastedTokens * calls * perWeek
+  const listingTokensPerMonth = listingTokensPerWeek * (52 / 12)
+  const wastedTokensPerMonth = wastedTokensPerWeek * (52 / 12)
 
   return {
     assumptions: {
@@ -503,6 +508,8 @@ function buildCost ({ wastedTokens, listingTokens }) {
     volume: {
       listingTokensPerWeek,
       wastedTokensPerWeek,
+      listingTokensPerMonth,
+      wastedTokensPerMonth,
       inputTokensPerWeek: STATS.inputTokensPerWeek,
       listingShareOfInput: round(listingTokensPerWeek / STATS.inputTokensPerWeek),
       wastedShareOfInput: round(wastedTokensPerWeek / STATS.inputTokensPerWeek),

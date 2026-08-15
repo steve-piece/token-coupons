@@ -118,13 +118,20 @@ test('loads nothing from the network: the only URLs are the pricing sources', ()
   assert.equal(/url\(\s*['"]?https?:/.test(html), false)
 })
 
-test('the export footer says exactly what to do next', () => {
-  assert.ok(html.includes('Save this as decisions.json, then tell your agent: proceed with token-coupons apply decisions.json'))
+test('the export footer says exactly what to do next: copy, paste into the next message', () => {
+  assert.ok(html.includes('Paste the JSON into your next message and add: <code>proceed with these decisions</code>'))
   assert.ok(html.includes('id="decisions-json"'))
-  assert.ok(html.includes('Accept all recommendations'))
-  assert.ok(html.includes('Reset to recommendations'))
-  assert.ok(html.includes('Copy JSON'))
-  assert.ok(html.includes('Download decisions.json'))
+  assert.ok(html.includes('Reset my changes'))
+  // two copy controls, one in the header quick path and one on the code block, both icon plus the word Copy
+  assert.equal((html.match(/class="copy-decisions/g) || []).length, 2)
+  assert.ok(html.includes('class="codehead"'))
+  // the old file-based flow is gone
+  assert.equal(html.includes('Download decisions.json'), false)
+  assert.equal(html.includes('Accept all recommendations'), false)
+  assert.equal(html.includes('Save this as decisions.json'), false)
+  // the glossary exists and is closed by default
+  assert.ok(html.includes('<details class="howto">'))
+  assert.ok(html.includes('How to read this page'))
 })
 
 test('the textarea starts holding a decisions file in the contract shape', () => {
@@ -237,7 +244,7 @@ test('survives a report with the optional pieces missing', () => {
   const bare = { version: 1, generatedOn: '2026-08-15', summary: {}, skills: [] }
   const out = renderHtml(bare)
   assert.ok(out.startsWith('<!doctype html>'))
-  assert.ok(out.includes('Save this as decisions.json'))
+  assert.ok(out.includes('proceed with these decisions'))
   assert.equal(selectBlocks(out).length, 0)
   assert.deepEqual(islandJson(out).summary, {})
 })

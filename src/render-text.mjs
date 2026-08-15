@@ -93,14 +93,20 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   if (!models.length) {
     line('  No price list could be read' + (r.pricing && r.pricing.error ? ': ' + r.pricing.error : '.'))
   } else {
+    const vol = cost.volume || {}
+    if (vol.wastedTokensPerWeek) {
+      line('  ' + paint.bold(fmt(vol.wastedTokensPerWeek) + ' tokens') + ' wasted per week, ' + paint.bold(fmt(vol.wastedTokensPerMonth || 0)) + ' per month, from ' +
+        fmt(summary.wastedTokensPerCall || 0) + ' unused tokens riding in every message.')
+      line()
+    }
     const rows = models.map((m) => [
       (m.seenInTranscripts ? '* ' : '  ') + String(m.label || m.id),
-      money(m.wasted.perChat),
       money(m.wasted.perWeek),
+      money(m.wasted.perMonth),
       money(m.uncached.wastedPerWeek),
-      money(m.listing.perWeek),
+      money(m.listing.perMonth),
     ])
-    const header = ['  model', 'wasted/chat', 'wasted/week', 'uncached/week', 'whole list/week']
+    const header = ['  model', 'wasted/week', 'wasted/month', 'uncached/week', 'whole list/month']
     for (const l of table([header, ...rows], [1, 2, 3, 4])) line('  ' + l)
     if (models.some((m) => m.seenInTranscripts)) line(paint.dim('  * seen in your own sessions'))
     const a = cost.assumptions || {}
@@ -108,7 +114,6 @@ export function renderText (report, { color = false, top = 15 } = {}) {
       (a.measured ? ', measured from your sessions' : ', assumed because no session history was found') +
       (a.cached === false ? '. Prices are the no caching upper bound.' : '. Prices assume the usual caching, where the list is stored once per chat and re-read cheaply.')))
     line(paint.dim('  The uncached column is the same week with nothing stored and reused, so the whole list is paid at full price every message. It is the highest the bill could be.'))
-    const vol = cost.volume || {}
     if (vol.inputTokensPerWeek) {
       line(paint.dim('  Share of everything you send: the list is ' + pct(vol.listingShareOfInput) + ' of your input, the wasted part is ' + pct(vol.wastedShareOfInput) + '.'))
     }
@@ -116,7 +121,8 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   }
   const yours = summary.wastedPerWeekOnYourModel
   if (yours && typeof yours.dollars === 'number') {
-    line('  ' + paint.bold('On ' + yours.model + ', the model you actually use, the unused descriptions cost about ' + money(yours.dollars) + ' a week.'))
+    line('  ' + paint.bold('On ' + yours.model + ', the model you actually use, the unused descriptions cost about ' + money(yours.dollars) + ' a week' +
+      (typeof yours.dollarsPerMonth === 'number' ? ' (' + money(yours.dollarsPerMonth) + ' a month)' : '') + '.'))
   }
 
   // RECOMMENDED

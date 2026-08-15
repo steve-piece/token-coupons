@@ -148,7 +148,7 @@ describe('cli: apply', () => {
     try {
       const r = run(['apply'], fx.home)
       assert.equal(r.code, 1)
-      assert.match(r.err, /decisions file/)
+      assert.match(r.err, /decisions (file|JSON)/)
     } finally { fx.cleanup() }
   })
 

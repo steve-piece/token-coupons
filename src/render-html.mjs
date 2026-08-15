@@ -95,7 +95,7 @@ function header (r, s, economics, cost) {
   const yours = s.wastedPerWeekOnYourModel
   const dollars = yours && typeof yours.dollars === 'number'
     ? ' On ' + esc(yours.model) + ', the model you actually use, those unused descriptions cost about ' +
-      esc(money(yours.dollars)) + ' a week.'
+      esc(money(yours.dollars)) + ' a week' + (typeof yours.dollarsPerMonth === 'number' ? ' (' + esc(money(yours.dollarsPerMonth)) + ' a month)' : '') + '.'
     : ''
 
   const meta = []
@@ -121,10 +121,48 @@ function header (r, s, economics, cost) {
     nums.map(([value, label, tip]) =>
       '<div class="bignum" title="' + attr(tip) + '"><span class="v">' + esc(value) + '</span><span class="k">' + esc(label) + '</span></div>').join(''),
     '</div>',
-    '<p class="savings"><strong>' + fmt(saved) + ' tokens</strong> would come off every single message if you accepted every ' +
+    '<div class="savings">',
+    '<p><strong>' + fmt(saved) + ' tokens</strong> would come off every single message if you accepted every ' +
       'recommendation below. ' + esc(after) + dollars + '</p>',
+    '<p class="quick">Happy with all of it? ' + copyButton('quick') + ' and paste it into your next message to the agent. ' +
+      'Otherwise change any row below first.</p>',
+    '</div>',
+    howToRead(),
     meta.length ? '<p class="meta">' + meta.join(' &middot; ') + '</p>' : '',
     '</header>',
+  ].join('\n')
+}
+
+/**
+ * The copy control. Icon plus word, never icon alone, so it reads without a
+ * tooltip. Two of them exist (header quick path, export box); the script
+ * wires every .copy-decisions button to the same JSON.
+ */
+function copyButton (where) {
+  return '<button type="button" class="copy-decisions' + (where === 'box' ? ' copybtn' : ' inline') + '" data-where="' + attr(where) +
+    '" aria-label="copy the decisions JSON to your clipboard">' + ICON_COPY + '<span class="copylabel">Copy</span></button>'
+}
+
+// Two tiny inline glyphs. A single-file page cannot import an icon library, so
+// these two are drawn here on purpose; nothing else on the page is hand-drawn.
+const ICON_COPY = '<svg class="ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+  '<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"></path></svg>'
+const ICON_CHECK = '<svg class="ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>'
+
+/** A short, collapsible glossary. Closed by default so it never gets in the way of the numbers. */
+function howToRead () {
+  return [
+    '<details class="howto">',
+    '<summary>How to read this page</summary>',
+    '<dl class="terms">',
+    '<dt>Tokens</dt><dd>Small chunks of text, about four characters each. Everything you send is billed by the token, and the skill list rides along in every message.</dd>',
+    '<dt>Passive and active</dt><dd>A passive skill sends its whole description every message so the agent can pick it. An active skill sends only its name and runs when you type it. One line in the skill file decides which.</dd>',
+    '<dt>Routed and summoned</dt><dd>Routed means the agent read the description and chose the skill on its own. Summoned means you typed its name.</dd>',
+    '<dt>Out of reach</dt><dd>The list has a size allowance. Past it, the client quietly drops descriptions, least used first. A skill with no description in the list cannot be picked by the agent, and nothing tells you.</dd>',
+    '<dt>Your decision</dt><dd>Keep, Passive, Active, Optimize (rewrite the description shorter), or Delete (moved to a trash folder, never erased). Nothing changes until you paste your choices to the agent.</dd>',
+    '</dl>',
+    '</details>',
   ].join('\n')
 }
 
@@ -142,8 +180,8 @@ function costStrip (cost, summary) {
     const w = m.wasted || {}
     const u = m.uncached || {}
     const l = m.listing || {}
-    const listChatUncached = scale === null ? null : Number(u.wastedPerChat || 0) * scale
     const listWeekUncached = scale === null ? null : Number(u.wastedPerWeek || 0) * scale
+    const listMonthUncached = scale === null ? null : Number(u.wastedPerMonth || 0) * scale
     return [
       '<article class="card' + (i >= 6 ? ' extra" hidden' : '"') + '>',
       '<div class="cardhead">',
@@ -153,14 +191,14 @@ function costStrip (cost, summary) {
         : '',
       '</div>',
       '<div class="figs">',
-      fig(w.perChat, u.wastedPerChat, 'wasted per chat'),
       fig(w.perWeek, u.wastedPerWeek, 'wasted per week'),
+      fig(w.perMonth, u.wastedPerMonth, 'wasted per month'),
       '</div>',
-      '<p class="fine" data-cached="' + attr('Whole list: ' + money(l.perChat || 0) + ' per chat, ' + money(l.perWeek || 0) + ' per week.') +
-        '" data-uncached="' + attr(listChatUncached === null
-          ? 'Whole list: ' + money(l.perChat || 0) + ' per chat at the stored price.'
-          : 'Whole list: ' + money(listChatUncached) + ' per chat, ' + money(listWeekUncached) + ' per week.') + '">' +
-        esc('Whole list: ' + money(l.perChat || 0) + ' per chat, ' + money(l.perWeek || 0) + ' per week.') + '</p>',
+      '<p class="fine" data-cached="' + attr('Whole list: ' + money(l.perWeek || 0) + ' per week, ' + money(l.perMonth || 0) + ' per month. ' + money(w.perChat || 0) + ' wasted per chat.') +
+        '" data-uncached="' + attr(listWeekUncached === null
+          ? 'Whole list: ' + money(l.perWeek || 0) + ' per week at the stored price.'
+          : 'Whole list: ' + money(listWeekUncached) + ' per week, ' + money(listMonthUncached) + ' per month. ' + money(u.wastedPerChat || 0) + ' wasted per chat.') + '">' +
+        esc('Whole list: ' + money(l.perWeek || 0) + ' per week, ' + money(l.perMonth || 0) + ' per month. ' + money(w.perChat || 0) + ' wasted per chat.') + '</p>',
       '<p class="fine muted">' + esc([m.vendor, m.tier].filter(Boolean).join(', ')) +
         (m.source ? ' &middot; <a href="' + attr(m.source) + '" rel="noreferrer noopener">price list</a>' : '') + '</p>',
       '</article>',
@@ -189,8 +227,9 @@ function costStrip (cost, summary) {
     '<button type="button" class="chip" data-mode="uncached" aria-pressed="false" title="' + attr(TERMS.uncached) + '">Uncached</button>',
     '</div>',
     '</div>',
+    tokenTotals(v, wastedTokens, a),
     '<p class="sub">The same waste, priced on ' + (models.length === 1 ? 'the one model in the price list' : 'all ' + models.length + ' models in the price list') +
-      ', so you can see it whichever one you are on.</p>',
+      ', so you can see it whichever one you are on. Cached is what you normally pay; Uncached is the worst case, with nothing stored between messages.</p>',
     '<div class="cards">' + cards + '</div>',
     models.length > 6
       ? '<p><button type="button" id="show-all-models" class="ghost">Show all ' + models.length + ' models</button></p>'
@@ -200,6 +239,26 @@ function costStrip (cost, summary) {
       (cost.pricingStale ? ' <strong>These prices are more than two months old, so treat the dollars as a rough guide.</strong>' : '') + '</p>',
     '</section>',
   ].join('\n')
+}
+
+/** The bold token line: how many tokens the unused descriptions burn per week and per month, before any price is applied. */
+function tokenTotals (v, wastedPerCall, a) {
+  const week = Number(v.wastedTokensPerWeek) || 0
+  const month = Number(v.wastedTokensPerMonth) || 0
+  if (!week) return ''
+  return '<p class="tokentotal" title="' + attr('tokens the never used and summoned only descriptions cost, per message, times the ' +
+    fmt(a.apiCallsPerSession || 0) + ' messages a chat sends and the ' + trimNum(a.sessionsPerWeek || 0) + ' chats a week measured from your sessions') + '">' +
+    '<strong>' + esc(bigNum(week)) + ' tokens</strong> wasted per week, <strong>' + esc(bigNum(month)) + '</strong> per month, ' +
+    'from ' + fmt(wastedPerCall) + ' unused tokens riding in every message.</p>'
+}
+
+/** 15,134,404 -> 15.1M ; 20,518 -> 20.5K ; 812 -> 812 */
+function bigNum (n) {
+  const v = Number(n) || 0
+  if (v >= 1e9) return (v / 1e9).toFixed(v >= 1e10 ? 0 : 1) + 'B'
+  if (v >= 1e6) return (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M'
+  if (v >= 1e4) return (v / 1e3).toFixed(0) + 'K'
+  return fmt(v)
 }
 
 function fig (cachedValue, uncachedValue, label) {
@@ -223,16 +282,20 @@ function table (skills) {
 
     // No search text in the markup: the script builds the index from the
     // embedded report, so descriptions are not written into the page twice.
+    const where = [s.plugin ? 'from the ' + s.plugin + ' plugin' : '', locationLabel(s.location)].filter(Boolean).join(', ')
+    const marks = []
+    if (flags.includes('unroutable')) marks.push('<span class="badge danger" title="' + attr(TERMS.unroutable) + '">out of reach</span>')
+    if (flags.includes('capped')) marks.push('<span class="badge warn" title="its description is longer than the client will read, so the tail is thrown away">cut off</span>')
+    if (s.sourcePath) marks.push('<span class="badge" title="' + attr('the editable source of this plugin skill is on this machine at ' + s.sourcePath + '; apply edits that copy, and the installed copy refreshes on the next plugin update') + '">source on disk</span>')
     return [
       '<tr data-index="' + i + '" data-flags="' + attr(flags.join(' ')) + '" data-changed="no">',
       '<td class="rank">' + esc(String(rec.rank || i + 1)) + '</td>',
       '<td class="skill">',
-      '<span class="sname">' + esc(name) + '</span>',
-      s.plugin ? '<span class="sub2">from the ' + esc(s.plugin) + ' plugin</span>' : '',
-      '<span class="badge loc" title="' + attr(locationTip(s.location)) + '">' + esc(locationLabel(s.location)) + '</span>',
-      (s.sourcePath ? ' <span class="badge loc" title="' + attr('the editable source of this plugin skill is on this machine at ' + s.sourcePath + '; apply edits that copy, and the installed copy refreshes on the next plugin update') + '">source on disk</span>' : ''),
+      '<button type="button" class="sname" data-detail="' + i + '" aria-expanded="false" title="show the full description, path and reasoning">' + esc(name) + '</button>',
+      '<span class="sub2" title="' + attr(locationTip(s.location)) + '">' + esc(where) + '</span>',
+      marks.length ? '<span class="marks">' + marks.join(' ') + '</span>' : '',
       '</td>',
-      '<td>' + modeCell(s.mode) + '</td>',
+      '<td class="mode">' + modeCell(s.mode) + '</td>',
       '<td class="num" title="' + attr(TERMS.routed) + '">' + fmt(s.passiveCalls || 0) + '</td>',
       '<td class="num" title="' + attr(TERMS.summoned) + '">' + fmt(s.activeCalls || 0) + '</td>',
       '<td class="num tok"><span>' + fmt(s.descriptionTokens || 0) + '</span>' +
@@ -247,8 +310,10 @@ function table (skills) {
   return [
     '<section class="section" id="recommendations">',
     '<div class="sechead"><h2>Every skill, worst offender first</h2></div>',
-    '<p class="sub">Pick what you want done with each one in the last column. Nothing happens on this page: you export your ' +
-      'choices at the bottom and the agent carries them out.</p>',
+    '<p class="sub">Every row starts on the recommendation. Change the last column where you disagree, then copy the result at the bottom ' +
+      'and paste it to the agent. Nothing happens on this page itself. Click a skill name to see its full description and path.</p>',
+    '<p class="legend"><span><strong>Routed</strong> = the agent chose it on its own.</span> <span><strong>Summoned</strong> = you typed its name.</span> ' +
+      '<span><strong>Desc. tokens</strong> = what its description costs in every message.</span></p>',
     '<div class="chips" role="group" aria-label="filters">',
     FILTERS.map(([value, label, tip]) =>
       '<button type="button" class="chip' + (value === 'all' ? ' on' : '') + '" data-filter="' + attr(value) +
@@ -263,13 +328,13 @@ function table (skills) {
     '<thead><tr>',
     '<th class="rank">#</th>',
     '<th>Skill</th>',
-    '<th title="passive means the agent can pick it and pays for its description, active means it only runs when you ask for it by name">Mode now</th>',
+    '<th title="passive means the agent can pick it and pays for its description, active means it only runs when you ask for it by name">Today</th>',
     '<th class="num" title="' + attr(TERMS.routed) + '">Routed</th>',
     '<th class="num" title="' + attr(TERMS.summoned) + '">Summoned</th>',
     '<th class="num" title="how much of every message this one description takes up">Desc. tokens</th>',
     '<th>Recommended</th>',
     '<th>Why</th>',
-    '<th>Your call</th>',
+    '<th>Your decision</th>',
     '</tr></thead>',
     '<tbody id="rows">',
     rows,
@@ -301,8 +366,8 @@ function presetFor (action, location) {
 
 function modeCell (mode) {
   return mode === 'active'
-    ? '<span class="badge" title="the agent will not pick this on its own, so it costs one short line and nothing more">Only when you ask</span>'
-    : '<span class="badge" title="the agent can pick this on its own, which is why its full description is sent every message">Agent can pick it</span>'
+    ? '<span title="the agent will not pick this on its own, so it costs one short line and nothing more">Active, you type it</span>'
+    : '<span title="the agent can pick this on its own, which is why its full description is sent every message">Passive, agent picks</span>'
 }
 
 function recBadge (action) {
@@ -420,21 +485,21 @@ function exportFooter (r, skills) {
 
   return [
     '<section class="section" id="export">',
-    '<div class="sechead"><h2>Send your choices back</h2></div>',
-    '<p class="sub">The box below is the file the agent needs. It updates as you change the last column above.</p>',
+    '<div class="sechead"><h2>Send your choices to the agent</h2></div>',
+    '<p class="sub">This box is your decisions file. It updates as you change the last column above. Copy it and paste it into ' +
+      'your next message; the agent will show you the plan and wait for a yes before touching anything.</p>',
     '<div class="btns">',
-    '<button type="button" id="accept-all" class="primary" title="set every row back to what the tool recommends">Accept all recommendations</button>',
-    '<button type="button" id="reset" class="ghost" title="undo your changes and clear the filters">Reset to recommendations</button>',
-    '<button type="button" id="copy" class="ghost" title="copy the text in the box to your clipboard">Copy JSON</button>',
-    '<button type="button" id="download" class="ghost" title="save the box as a file, if this viewer allows it">Download decisions.json</button>',
     '<span class="count" id="changed-count">0 rows changed from the recommendation</span>',
+    '<button type="button" id="reset" class="ghost" title="put every row back on the recommendation and clear the filters">Reset my changes</button>',
     '</div>',
-    '<p class="note" id="export-note" role="status">If the download does nothing, copy the text from the box instead. ' +
-      'Some viewers block files from saving, and that is fine: copying works everywhere.</p>',
+    '<div class="codeblock">',
+    '<div class="codehead"><span class="codetitle">decisions.json</span>' + copyButton('box') + '</div>',
     '<textarea id="decisions-json" spellcheck="false" aria-label="the decisions file, ready to copy">' + esc(starting) + '</textarea>',
+    '</div>',
+    '<p class="note" id="export-note" role="status" aria-live="polite">Nothing has changed on disk. Nothing will until the agent shows you the plan and you say yes.</p>',
     '<div class="callout">',
     '<p><strong>Next step</strong></p>',
-    '<p>Save this as decisions.json, then tell your agent: proceed with token-coupons apply decisions.json</p>',
+    '<p>Paste the JSON into your next message and add: <code>proceed with these decisions</code>. If you are running the tool by hand instead, save it as <code>decisions.json</code> and run <code>token-coupons apply decisions.json</code>.</p>',
     '</div>',
     '</section>',
   ].join('\n')
@@ -582,9 +647,27 @@ a { color: var(--accent); }
 
 .bignums { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 28px 0 20px; }
 .bignum { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 16px 14px; box-shadow: var(--shadow); }
-.bignum .v { display: block; font-size: 30px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.15; }
+.bignum .v { display: block; font-size: 30px; font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; font-variant-numeric: tabular-nums; }
 .bignum .k { display: block; color: var(--muted); font-size: 12.5px; margin-top: 6px; }
 .savings { background: var(--accent-soft); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; max-width: 78ch; }
+.savings p { margin: 0; }
+.savings .quick { margin-top: 8px; color: var(--muted); font-size: 14px; }
+.copy-decisions { display: inline-flex; align-items: center; gap: 6px; font: inherit; cursor: pointer; transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease; }
+.copy-decisions.inline { font-size: 13px; padding: 3px 9px 3px 7px; border-radius: 8px; border: 1px solid var(--accent); background: var(--surface); color: var(--accent); font-weight: 600; vertical-align: middle; }
+.copy-decisions.inline:hover { background: var(--accent); color: #ffffff; }
+.copy-decisions.copied { border-color: var(--ok); color: var(--ok); background: var(--ok-soft); }
+.copy-decisions.copied:hover { background: var(--ok-soft); color: var(--ok); }
+.ico { flex: 0 0 auto; }
+
+.howto { margin-top: 14px; max-width: 78ch; }
+.howto > summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+.howto > summary::-webkit-details-marker { display: none; }
+.howto > summary::before { content: ""; width: 7px; height: 7px; border-right: 1.8px solid currentColor; border-bottom: 1.8px solid currentColor; transform: rotate(-45deg); transition: transform 150ms ease; margin-right: 2px; }
+.howto[open] > summary::before { transform: rotate(45deg); }
+.terms { margin: 10px 0 0; display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; }
+.terms dt { font-weight: 600; }
+.terms dd { margin: 0; color: var(--muted); }
+@media (max-width: 620px) { .terms { grid-template-columns: 1fr; gap: 2px; } .terms dd { margin-bottom: 8px; } }
 
 .section { margin-top: 48px; }
 .sechead { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 14px; }
@@ -595,20 +678,27 @@ a { color: var(--accent); }
 
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip, .ghost, .primary {
-  font: inherit; font-size: 13px; cursor: pointer; border-radius: 999px;
+  font: inherit; font-size: 13px; cursor: pointer; border-radius: 999px; min-height: 32px;
   border: 1px solid var(--line); background: var(--surface); color: var(--text); padding: 5px 12px;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
 }
-.ghost, .primary { border-radius: 8px; padding: 7px 13px; }
+.ghost, .primary { border-radius: 8px; padding: 7px 13px; min-height: 36px; }
 .primary { background: var(--accent); border-color: var(--accent); color: #ffffff; font-weight: 600; }
 .chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 .chip:hover, .ghost:hover { background: var(--surface-2); }
 .chip.on:hover { background: var(--accent-soft); }
+button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
+.tokentotal { font-size: 17px; margin: 0 0 12px; max-width: 78ch; }
+.tokentotal strong { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; box-shadow: var(--shadow); }
 .cardhead { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
 .figs { display: flex; gap: 20px; margin: 12px 0 8px; }
-.fig .v { display: block; font-size: 21px; font-weight: 600; letter-spacing: -0.01em; }
+.fig .v { display: block; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
 .fig .k { display: block; color: var(--muted); font-size: 12px; }
 .fine { font-size: 12.5px; color: var(--muted); margin: 0 0 4px; }
 
@@ -635,8 +725,20 @@ tbody tr:hover td { background: var(--surface-2); }
 th.num, td.num { text-align: right; white-space: nowrap; }
 th.rank, td.rank { text-align: right; color: var(--muted); width: 34px; }
 td.skill { min-width: 200px; }
-.sname { font-weight: 600; }
-.sub2 { display: block; color: var(--muted); font-size: 12px; }
+.sname { font: inherit; font-weight: 600; color: var(--text); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; border-radius: 4px; }
+.sname:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.sname[aria-expanded="true"] { color: var(--accent); }
+.sub2 { display: block; color: var(--muted); font-size: 12px; margin-top: 1px; }
+.marks { display: block; margin-top: 4px; }
+.marks .badge + .badge { margin-left: 4px; }
+td.mode { color: var(--muted); white-space: nowrap; font-size: 12.5px; }
+tr.detail td { background: var(--surface-2); padding: 12px 16px 14px 58px; font-size: 13px; }
+tr.detail .dgrid { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; max-width: 90ch; }
+tr.detail .dgrid dt { color: var(--muted); }
+tr.detail .dgrid dd { margin: 0; }
+tr.detail .dgrid dd.desc { white-space: pre-wrap; }
+tr.detail code { word-break: break-all; }
+.legend { color: var(--muted); font-size: 12.5px; margin: -4px 0 8px; display: flex; flex-wrap: wrap; gap: 4px 16px; }
 td.tok span:first-child { display: inline-block; min-width: 34px; }
 .bar { display: block; height: 4px; background: var(--surface-2); border-radius: 3px; margin-top: 5px; overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--bar); }
@@ -656,12 +758,20 @@ tr[data-changed="yes"] td.act select { border-color: var(--accent); box-shadow: 
 details.groups > summary { cursor: pointer; color: var(--accent); font-weight: 600; margin: 6px 0; }
 .lm { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
 
-.btns { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.codeblock { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+.codehead { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px 8px 14px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+.codetitle { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; color: var(--muted); }
+.copybtn { font-size: 13px; padding: 5px 11px 5px 9px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #ffffff; font-weight: 600; min-height: 32px; }
+.copybtn:hover { filter: brightness(1.08); }
+.copybtn.copied { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+.copybtn.copied:hover { filter: none; }
 textarea {
-  width: 100%; min-height: 190px; margin-top: 10px; padding: 12px;
+  display: block; width: 100%; min-height: 220px; margin: 0; padding: 12px 14px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12.5px; line-height: 1.5;
-  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--text); resize: vertical;
+  border: 0; background: var(--surface); color: var(--text); resize: vertical;
 }
+textarea:focus-visible { outline-offset: -2px; }
 .callout { margin-top: 16px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: var(--radius); padding: 14px 16px; }
 .callout p { margin: 0; }
 .callout p + p { margin-top: 6px; font-size: 15px; }
@@ -692,6 +802,7 @@ function script () {
   var jsonBox = document.getElementById('decisions-json');
   var note = document.getElementById('export-note');
   var filter = 'all';
+  var openDetail = {};
 
   /* what the search box looks through, built from the embedded report */
   var searchIndex = skills.map(function (s) {
@@ -762,6 +873,8 @@ function script () {
       var passSearch = !q || (searchIndex[Number(tr.getAttribute('data-index'))] || '').indexOf(q) !== -1;
       var visible = passFilter && passSearch;
       tr.hidden = !visible;
+      var idx = Number(tr.getAttribute('data-index'));
+      if (openDetail[idx]) openDetail[idx].hidden = !visible;
       if (visible) shown++;
     });
     if (rowCount) rowCount.textContent = 'Showing ' + shown + ' of ' + rows.length + ' skills';
@@ -802,12 +915,6 @@ function script () {
 
   selects.forEach(function (sel) { on(sel, 'change', refresh); });
 
-  on(document.getElementById('accept-all'), 'click', function () {
-    selects.forEach(function (sel) { sel.value = sel.getAttribute('data-rec'); });
-    refresh();
-    say('Every row is back on the recommended choice.');
-  });
-
   on(document.getElementById('reset'), 'click', function () {
     selects.forEach(function (sel) { sel.value = sel.getAttribute('data-rec'); });
     if (search) search.value = '';
@@ -822,39 +929,93 @@ function script () {
     say('Reset. Filters cleared and every row is back on the recommended choice.');
   });
 
-  on(document.getElementById('copy'), 'click', function () {
-    if (!jsonBox) return;
+  /* copy: every .copy-decisions button copies the same JSON, then shows a check for a moment */
+  var copyButtons = Array.prototype.slice.call(document.querySelectorAll('.copy-decisions'));
+  var ICON_COPY = ${JSON.stringify(ICON_COPY)};
+  var ICON_CHECK = ${JSON.stringify(ICON_CHECK)};
+  function flash (btn, ok) {
+    var label = btn.querySelector('.copylabel');
+    var ico = btn.querySelector('.ico');
+    if (ok) {
+      btn.classList.add('copied');
+      if (ico) ico.outerHTML = ICON_CHECK;
+      if (label) label.textContent = 'Copied';
+      setTimeout(function () {
+        btn.classList.remove('copied');
+        var i2 = btn.querySelector('.ico');
+        if (i2) i2.outerHTML = ICON_COPY;
+        if (label) label.textContent = 'Copy';
+      }, 2200);
+    }
+  }
+  function copyText (text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).then(function () { return true; }, function () { return legacyCopy(); });
+    }
+    return Promise.resolve(legacyCopy());
+  }
+  function legacyCopy () {
+    if (!jsonBox) return false;
     jsonBox.focus();
     jsonBox.select();
-    var done = false;
-    try { done = document.execCommand('copy'); } catch (e) { done = false; }
-    if (done) { say('Copied. Paste it into a file called decisions.json.'); return; }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(jsonBox.value).then(
-        function () { say('Copied. Paste it into a file called decisions.json.'); },
-        function () { say('Copying is blocked here. The text is selected, so copy it with your keyboard.'); }
-      );
-      return;
-    }
-    say('Copying is blocked here. The text is selected, so copy it with your keyboard.');
+    try { return document.execCommand('copy'); } catch (e) { return false; }
+  }
+  copyButtons.forEach(function (btn) {
+    on(btn, 'click', function () {
+      if (!jsonBox) return;
+      copyText(jsonBox.value).then(function (ok) {
+        flash(btn, ok);
+        if (ok) say('Copied. Paste it into your next message to the agent and add: proceed with these decisions.');
+        else { if (jsonBox) { jsonBox.focus(); jsonBox.select(); } say('Copying is blocked in this viewer. The text is selected: copy it with your keyboard, then paste it into your next message.'); }
+      });
+    });
   });
 
-  on(document.getElementById('download'), 'click', function () {
-    if (!jsonBox) return;
-    try {
-      var blob = new Blob([jsonBox.value], { type: 'application/json' });
-      var url = URL.createObjectURL(blob);
-      var a = document.createElement('a');
-      a.href = url;
-      a.download = 'decisions.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(function () { URL.revokeObjectURL(url); }, 3000);
-      say('If no file appeared, this viewer blocks saving. Use Copy JSON instead.');
-    } catch (e) {
-      say('Saving is blocked here. Use Copy JSON instead.');
+  /* detail rows: click a name to open the full description, path and reasoning */
+  function detailRow (i) {
+    var s = skills[i] || {};
+    var rec = s.recommendation || {};
+    var tr = document.createElement('tr');
+    tr.className = 'detail';
+    var td = document.createElement('td');
+    td.colSpan = 9;
+    var dl = document.createElement('dl');
+    dl.className = 'dgrid';
+    function add (k, v, cls) {
+      var dt = document.createElement('dt'); dt.textContent = k;
+      var dd = document.createElement('dd'); dd.textContent = v; if (cls) dd.className = cls;
+      dl.appendChild(dt); dl.appendChild(dd);
     }
+    add('Description', s.description || '(none)', 'desc');
+    add('Length', (s.descriptionChars || 0) + ' characters, about ' + (s.descriptionTokens || 0) + ' tokens in every message');
+    add('Where', s.path || s.realPath || '');
+    if (s.sourcePath) add('Source copy', s.sourcePath);
+    add('Used', (s.calls || 0) + ' times: ' + (s.passiveCalls || 0) + ' picked by the agent, ' + (s.activeCalls || 0) + ' typed by you' + (s.lastSeen ? ', last on ' + s.lastSeen : ''));
+    add('Why', rec.reason || '');
+    var plain = { 'never-called': 'never used', 'summoned-only': 'only you type it', 'heavy-description': 'long description',
+      'thin-description': 'very short description', 'capped': 'cut off by the client', 'unroutable': 'out of reach',
+      'dormant-active': 'gated and never used', 'not-editable': 'plugin cache copy', 'stale': 'not edited in months' };
+    if ((rec.flags || []).length) add('Flags', rec.flags.map(function (f) { return plain[f] || f; }).join(', '));
+    td.appendChild(dl);
+    tr.appendChild(td);
+    return tr;
+  }
+  Array.prototype.slice.call(document.querySelectorAll('button[data-detail]')).forEach(function (btn) {
+    on(btn, 'click', function () {
+      var i = Number(btn.getAttribute('data-detail'));
+      var tr = rows[i];
+      if (!tr) return;
+      if (openDetail[i]) {
+        openDetail[i].parentNode.removeChild(openDetail[i]);
+        delete openDetail[i];
+        btn.setAttribute('aria-expanded', 'false');
+        return;
+      }
+      var d = detailRow(i);
+      tr.parentNode.insertBefore(d, tr.nextSibling);
+      openDetail[i] = d;
+      btn.setAttribute('aria-expanded', 'true');
+    });
   });
 
   function say (text) { if (note) note.textContent = text; }

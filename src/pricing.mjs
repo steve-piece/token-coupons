@@ -18,6 +18,8 @@ import { readJson } from './lib/util.mjs'
 
 /** A price list older than this is called stale and the report says so. */
 export const STALE_DAYS = 60
+/** 52 weeks over 12 months. Used for the per month figures. */
+export const WEEKS_PER_MONTH = 52 / 12
 
 /** Order the report lists models in when the transcripts do not decide it. */
 export const TIER_ORDER = { frontier: 0, mid: 1, small: 2 }
@@ -157,6 +159,7 @@ export function costModel ({ wastedTokens = 0, listingTokens = 0, stats = null, 
         perChat,
         perDay: perChat * sessionsPerDay,
         perWeek: perChat * sessionsPerWeek,
+        perMonth: perChat * sessionsPerWeek * WEEKS_PER_MONTH,
       }
     }
     const uncachedPerChat = wasted * input * calls / per
@@ -173,7 +176,7 @@ export function costModel ({ wastedTokens = 0, listingTokens = 0, stats = null, 
       source: m.source || null,
       listing: spread(listing),
       wasted: spread(wasted),
-      uncached: { wastedPerChat: uncachedPerChat, wastedPerWeek: uncachedPerChat * sessionsPerWeek },
+      uncached: { wastedPerChat: uncachedPerChat, wastedPerWeek: uncachedPerChat * sessionsPerWeek, wastedPerMonth: uncachedPerChat * sessionsPerWeek * WEEKS_PER_MONTH },
       _seenCalls: seen.get(key) || 0,
       _index: index,
     }
@@ -193,6 +196,8 @@ export function costModel ({ wastedTokens = 0, listingTokens = 0, stats = null, 
 
   const listingTokensPerWeek = listing * calls * sessionsPerWeek
   const wastedTokensPerWeek = wasted * calls * sessionsPerWeek
+  const listingTokensPerMonth = listingTokensPerWeek * WEEKS_PER_MONTH
+  const wastedTokensPerMonth = wastedTokensPerWeek * WEEKS_PER_MONTH
   const inputTokensPerWeek = Math.max(0, Number(s.inputTokensPerWeek) || 0)
 
   const ageDays = p.ageDays !== undefined ? p.ageDays : ageInDays(p.verifiedOn, today)
@@ -211,6 +216,8 @@ export function costModel ({ wastedTokens = 0, listingTokens = 0, stats = null, 
     volume: {
       listingTokensPerWeek,
       wastedTokensPerWeek,
+      listingTokensPerMonth,
+      wastedTokensPerMonth,
       inputTokensPerWeek,
       listingShareOfInput: share(listingTokensPerWeek, inputTokensPerWeek),
       wastedShareOfInput: share(wastedTokensPerWeek, inputTokensPerWeek),

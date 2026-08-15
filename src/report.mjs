@@ -213,7 +213,7 @@ function buildSummary ({ rows, economics, stats, pricing, cost, counts, notLoade
     const key = normalizeModelId(yours.id)
     const priced = (cost.perModel || []).find((m) => normalizeModelId(m.id) === key)
     if (priced && priced.wasted && typeof priced.wasted.perWeek === 'number') {
-      wastedPerWeekOnYourModel = { model: priced.label || priced.id, dollars: round(priced.wasted.perWeek) }
+      wastedPerWeekOnYourModel = { model: priced.label || priced.id, dollars: round(priced.wasted.perWeek), dollarsPerMonth: round(priced.wasted.perMonth) }
     }
   }
   const actions = Object.assign({ active: 0, delete: 0, optimize: 0, review: 0, keep: 0, passive: 0 }, counts || {})

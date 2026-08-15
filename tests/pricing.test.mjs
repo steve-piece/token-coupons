@@ -289,3 +289,17 @@ test('it works on a real sessionStats object built from sessions', () => {
   assert.equal(yourModel(stats, PRICING).id, 'fixture-mid')
   assert.equal(cost.volume.wastedTokensPerWeek, 500 * stats.apiCallsPerSessionMedian * stats.sessionsPerWeek)
 })
+
+test('per month figures are per week times 52/12, for dollars and for tokens', async () => {
+  const { costModel, WEEKS_PER_MONTH } = await import('../src/pricing.mjs')
+  const pricing = { currency: 'USD', per: 1000000, verifiedOn: '2026-08-15', models: [{ id: 'm', label: 'M', input: 10, cachedInput: 1, cacheWrite: 20, output: 50, tier: 'frontier' }] }
+  const stats = { measured: true, apiCallsPerSessionMedian: 10, sessionsPerDay: 1, sessionsPerWeek: 7, inputTokensPerWeek: 1e9, modelsSeen: [] }
+  const c = costModel({ wastedTokens: 1000, listingTokens: 2000, stats, pricing, today: '2026-08-15' })
+  const m = c.perModel[0]
+  const near = (a, b) => Math.abs(a - b) < 1e-9
+  assert.ok(near(m.wasted.perMonth, m.wasted.perWeek * WEEKS_PER_MONTH))
+  assert.ok(near(m.listing.perMonth, m.listing.perWeek * WEEKS_PER_MONTH))
+  assert.ok(near(m.uncached.wastedPerMonth, m.uncached.wastedPerWeek * WEEKS_PER_MONTH))
+  assert.ok(near(c.volume.wastedTokensPerMonth, c.volume.wastedTokensPerWeek * WEEKS_PER_MONTH))
+  assert.equal(c.volume.wastedTokensPerWeek, 1000 * 10 * 7)
+})

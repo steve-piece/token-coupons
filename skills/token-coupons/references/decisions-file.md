@@ -11,7 +11,9 @@ related: [report-anatomy, description-rewrite, listing-budget, cost-model]
 
 ## Shape
 
-The page exports this. A person can also write it by hand.
+The page's Copy button puts this on the clipboard, and the person pastes it into their next chat
+message (the page tells them to add "proceed with these decisions"). Save what they pasted verbatim to
+a file, or pipe it to `token-coupons apply -`. A person can also write it by hand.
 
 ```json
 {

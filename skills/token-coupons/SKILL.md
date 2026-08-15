@@ -72,20 +72,26 @@ lines. No table yet.
 Say this, near enough word for word:
 
 > Every row is already set to what I recommend. Change any row you disagree with, using Keep,
-> Passive, Active, Optimize, or Delete. Then press Accept all recommendations, press Copy JSON, and
-> paste it back here. Say "here is my decisions.json, proceed" and I will carry it out. Nothing has
-> changed on disk yet, and nothing will until you say so.
+> Passive, Active, Optimize, or Delete. Click a skill name if you want to see its full description.
+> When you are done, press Copy on the decisions box at the bottom (or the Copy button at the top if
+> you are happy with everything) and paste the JSON into your next message with the words "proceed
+> with these decisions". Nothing has changed on disk yet, and nothing will until you say so.
 
 Stop. Do not run `apply`, do not edit a SKILL.md, do not delete anything while you wait.
 
 ## Step 5. On return, plan first, then apply
 
-1. Save what they pasted to `$HOME/.token-coupons/decisions.json`. Shape and every action are in
-   [references/decisions-file.md](references/decisions-file.md).
+1. Take the JSON they pasted (it starts with `{"version": 1`) and save it verbatim to
+   `$HOME/.token-coupons/decisions.json`. Do not retype or reformat it. Shape and every action are
+   in [references/decisions-file.md](references/decisions-file.md). If they pasted nothing but said
+   "proceed with the recommendations", regenerate the default file from the report instead:
+   `node -e` over `report.json` collecting every skill whose `recommendation.action` is not `keep`
+   or `review`, in the same shape.
 2. Dry run. Without `--yes` nothing is written:
    ```bash
    TC apply "$HOME/.token-coupons/decisions.json"
    ```
+   (`TC apply -` reads the same JSON from stdin if you would rather pipe it than write a file.)
 3. Show the plan back to them, grouped by action, one line per skill. Call out every entry under
    `refused` and why. Say plainly that Delete moves the folder to a trash directory and can be put
    back, and that Optimize changes no file yet.

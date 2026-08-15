@@ -15,7 +15,7 @@
     },
     {
       "id": "apply-the-decisions",
-      "prompt": "here is my decisions.json, proceed",
+      "prompt": "proceed with these decisions",
       "expected_output": "The agent saves the pasted JSON, runs apply without --yes first so nothing is written, and shows the plan grouped by action with every refused item and its reason (plugin cache deletes, unknown skills, frontmatter it cannot safely edit). It waits for a yes, runs apply --yes, and keeps each printed undo line in the reply. It then rewrites every optimize description to roughly 350 characters, keeping the trigger phrases and the boundary while cutting the how, re-runs the report, and closes with three lines: tokens per API call before and after, dollars per week before and after, and whether the listing now fits the budget.",
       "files": []
     }
