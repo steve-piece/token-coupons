@@ -2,6 +2,7 @@
 // whole thing at a fixture by setting TOKEN_COUPONS_HOME.
 
 import { homedir } from 'node:os'
+import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
 
 export function homeDir () {
@@ -20,8 +21,18 @@ export function trashDir () {
   return process.env.TOKEN_COUPONS_TRASH || join(homeDir(), '.token-coupons', 'trash')
 }
 
-/** Replace the home prefix with ~ for display. */
+/**
+ * Replace the home prefix with ~ for display. Real paths are matched too, so
+ * a home that sits behind a symlink (macOS /var to /private/var, for one)
+ * still collapses to ~.
+ */
 export function tildify (p) {
+  const s = String(p || '')
   const h = homeDir()
-  return String(p || '').startsWith(h) ? '~' + String(p).slice(h.length) : String(p || '')
+  let real = h
+  try { real = realpathSync(h) } catch { /* home may not exist yet */ }
+  for (const prefix of [h, real]) {
+    if (prefix && (s === prefix || s.startsWith(prefix + '/'))) return '~' + s.slice(prefix.length)
+  }
+  return s
 }

@@ -1,13 +1,22 @@
 // Discovery: every skill the machine can see, what its frontmatter declares,
-// and where it lives. A skill is a directory with SKILL.md; the invocable name
-// is the directory name, prefixed with plugin: when it lives inside a plugin.
-// Deduplicated by real path so a symlinked skill is one row with aliases.
+// where it lives, and whether Claude Code actually puts it in the listing.
+//
+// A skill is a directory with SKILL.md; the invocable name is the directory
+// name, prefixed with plugin: when it lives inside a plugin. Rows are
+// deduplicated by real path so a symlinked skill is one row with aliases.
+//
+// "Loaded" follows the documented rules (code.claude.com/docs/en/skills):
+// Claude Code reads ~/.claude/skills, the .claude/skills of the project you
+// are working in (and its parents), and the skills of ENABLED plugins from
+// the plugin cache. Everything else on disk (marketplace checkouts, plugin
+// source repos, ~/.agents/skills, ~/.cursor/skills, other projects) is not in
+// the listing, so it costs nothing per message and must not be counted.
 
 import { existsSync, realpathSync, statSync } from 'node:fs'
-import { join, basename } from 'node:path'
+import { join, basename, sep } from 'node:path'
 
-import { listDir, isDir, isSymlink, parseFrontmatter, readText } from './lib/util.mjs'
-import { homeDir, claudeDir, pluginsDir } from './paths.mjs'
+import { listDir, isDir, isSymlink, parseFrontmatter, readText, readJson } from './lib/util.mjs'
+import { homeDir, claudeDir, pluginsDir, settingsFiles } from './paths.mjs'
 
 export function skillRoots () {
   const HOME = homeDir()
@@ -58,7 +67,8 @@ function walkDirs (dir, depth, base = dir, out = [], cur = 0) {
 /**
  * Where a skill lives decides what `apply` may do to it. Anything under the
  * plugin cache is overwritten on the next plugin update, so it is not editable
- * in place; the fix belongs in the plugin's source repo.
+ * in place; the fix belongs in the plugin's source repo (linked as sourcePath
+ * when that repo is on this machine).
  */
 export function classifyLocation (real, dir) {
   const HOME = homeDir()
@@ -68,11 +78,76 @@ export function classifyLocation (real, dir) {
   if (dir.startsWith(join(HOME, '.claude', 'skills'))) return { location: 'user', editable: true }
   if (dir.startsWith(join(HOME, '.agents', 'skills'))) return { location: 'agents-dir', editable: true }
   if (dir.startsWith(join(HOME, '.cursor', 'skills'))) return { location: 'cursor', editable: true }
-  if (dir.startsWith(join(HOME, 'Projects'))) return { location: 'project', editable: true }
+  if (dir.startsWith(join(HOME, 'Projects')) && /\/\.claude\/skills\/[^/]+$/.test(dir)) return { location: 'project', editable: true }
+  if (dir.startsWith(join(HOME, 'Projects'))) return { location: 'project-source', editable: true }
   return { location: 'other', editable: true }
 }
 
-export function discoverSkills () {
+/**
+ * What Claude Code has installed and enabled, read from the files it keeps
+ * itself. Missing files degrade to "everything in the cache counts", which is
+ * the older behaviour and the right fallback for a fixture.
+ */
+export function pluginState () {
+  const installed = readJson(join(pluginsDir(), 'installed_plugins.json'))
+  const enabled = {}
+  for (const file of settingsFiles()) {
+    const s = readJson(file)
+    if (s.ok && s.value && s.value.enabledPlugins) Object.assign(enabled, s.value.enabledPlugins)
+  }
+  const installPaths = new Map() // realpath of install dir -> plugin@mp
+  if (installed.ok && installed.value && installed.value.plugins) {
+    for (const [key, entries] of Object.entries(installed.value.plugins)) {
+      for (const e of Array.isArray(entries) ? entries : [entries]) {
+        if (!e || !e.installPath) continue
+        let real = e.installPath
+        try { real = realpathSync(e.installPath) } catch { /* keep as given */ }
+        installPaths.set(real, key)
+      }
+    }
+  }
+  return { hasRegistry: installed.ok, installPaths, enabled }
+}
+
+/**
+ * Marketplaces whose source is a directory on this machine, plus any repo under
+ * ~/Projects that carries a .claude-plugin/marketplace.json naming a known
+ * marketplace. Both are places where the SOURCE of a cached plugin skill lives.
+ */
+function marketplaceSources () {
+  const out = new Map() // marketplace name -> [source dirs]
+  const known = readJson(join(pluginsDir(), 'known_marketplaces.json'))
+  if (known.ok && known.value) {
+    for (const [name, v] of Object.entries(known.value)) {
+      const src = v && v.source
+      if (src && src.source === 'directory' && src.path) push(out, name, safeReal(src.path))
+    }
+  }
+  const projects = join(homeDir(), 'Projects')
+  for (const rel of walkDirs(projects, 3)) {
+    const mf = readJson(join(projects, rel, '.claude-plugin', 'marketplace.json'))
+    if (mf.ok && mf.value && mf.value.name) push(out, String(mf.value.name), safeReal(join(projects, rel)))
+  }
+  return out
+}
+
+function push (map, k, v) { if (!v) return; const a = map.get(k) || []; if (!a.includes(v)) a.push(v); map.set(k, a) }
+function safeReal (p) { try { return realpathSync(p) } catch { return null } }
+
+/**
+ * Discover every skill on disk. Each row carries `loaded` (true when Claude
+ * Code lists it right now, from this working directory), `loadedReason` in
+ * plain words, and, for loaded plugin-cache rows whose source repo is on this
+ * machine, `sourcePath` pointing at the editable copy. Source copies that were
+ * folded into a loaded row are dropped from the returned list and appear in
+ * that row's `copies`.
+ *
+ * @param cwd  the working directory Claude Code would be started from
+ */
+export function discoverSkills ({ cwd = process.cwd() } = {}) {
+  const HOME = homeDir()
+  const state = pluginState()
+  const sources = marketplaceSources()
   const byReal = new Map()
   for (const root of skillRoots()) {
     // some roots ARE the skill (single-skill plugin roots collected above)
@@ -89,18 +164,24 @@ export function discoverSkills () {
       const gate = fm.ok ? fm.data['disable-model-invocation'] : undefined
       const mode = String(gate).toLowerCase() === 'true' ? 'active' : 'passive'
       const description = fm.ok ? String(fm.data.description || '') : ''
+      const loc = classifyLocation(real, dir)
       const existing = byReal.get(real)
       if (existing) {
         if (!existing.aliases.includes(dir)) existing.aliases.push(dir)
         if (!existing.names.includes(invocable)) existing.names.push(invocable)
-        // a symlink alias in ~/.claude/skills makes the row user-editable and unlinkable
-        const loc = classifyLocation(real, dir)
         if (loc.location === 'user-symlink') existing.symlinks.push(dir)
+        // a symlink under ~/.claude/skills makes any target loaded
+        if (loc.location === 'user' || loc.location === 'user-symlink') {
+          existing.loaded = true
+          existing.loadedReason = 'linked from ~/.claude/skills'
+          existing.location = loc.location
+          existing.editable = true
+        }
         continue
       }
-      const loc = classifyLocation(real, dir)
       let modifiedOn = null
       try { modifiedOn = statSync(skillMd).mtime.toISOString().slice(0, 10) } catch { /* leave null */ }
+      const load = loadedState(loc.location, real, dir, { cwd, state, HOME })
       byReal.set(real, {
         name: basename(dir),
         names: [invocable, basename(dir)].filter((v, i, a) => a.indexOf(v) === i),
@@ -110,8 +191,14 @@ export function discoverSkills () {
         aliases: [dir],
         symlinks: loc.location === 'user-symlink' ? [dir] : [],
         plugin: plugin || null,
+        marketplace: marketplaceOf(real),
+        installKey: load.installKey,
         location: loc.location,
         editable: loc.editable,
+        loaded: load.loaded,
+        loadedReason: load.reason,
+        sourcePath: null,
+        copies: [],
         mode,
         gateDeclared: gate !== undefined,
         gateValue: gate === undefined ? null : String(gate),
@@ -121,7 +208,77 @@ export function discoverSkills () {
       })
     }
   }
-  return [...byReal.values()]
+  return linkCopies([...byReal.values()], sources)
+}
+
+/** Which marketplace a cache or checkout path belongs to, or null. */
+function marketplaceOf (real) {
+  const m = real.match(/\/\.claude\/plugins\/(?:cache|marketplaces)\/([^/]+)\//)
+  return m ? m[1] : null
+}
+
+function loadedState (location, real, dir, { cwd, state, HOME }) {
+  if (location === 'user' || location === 'user-symlink') return { loaded: true, reason: 'in ~/.claude/skills', installKey: null }
+  if (location === 'project') {
+    const projectRoot = dir.replace(/\/\.claude\/skills\/[^/]+$/, '')
+    let realCwd = cwd
+    try { realCwd = realpathSync(cwd) } catch { /* keep */ }
+    const inside = realCwd === projectRoot || realCwd.startsWith(projectRoot + sep) || dir.startsWith(realCwd + sep)
+    return inside
+      ? { loaded: true, reason: 'project skill, and you are working in that project', installKey: null }
+      : { loaded: false, reason: 'project skill; loads only when you work in ' + projectRoot.replace(HOME, '~'), installKey: null }
+  }
+  if (location === 'plugin-cache') {
+    // .../cache/<mp>/<plugin>/<version>/(.claude/)?skills/<skill>
+    const installDir = real.replace(/\/(?:\.claude\/)?skills\/[^/]+$/, '')
+    const key = state.installPaths.get(installDir) || null
+    if (!state.hasRegistry) return { loaded: state.enabled[guessKey(real)] !== false, reason: 'plugin in the cache', installKey: guessKey(real) }
+    if (!key) return { loaded: false, reason: 'an older version left in the plugin cache; not the installed one', installKey: null }
+    if (state.enabled[key] === false) return { loaded: false, reason: 'plugin ' + key + ' is installed but disabled', installKey: key }
+    return { loaded: true, reason: 'enabled plugin ' + key, installKey: key }
+  }
+  if (location === 'marketplace') return { loaded: false, reason: 'marketplace checkout; the installed copy lives in the plugin cache', installKey: null }
+  if (location === 'project-source') return { loaded: false, reason: 'source repo; not installed from here', installKey: null }
+  if (location === 'agents-dir') return { loaded: false, reason: '~/.agents/skills is read by other tools, not by Claude Code', installKey: null }
+  if (location === 'cursor') return { loaded: false, reason: '~/.cursor/skills is read by Cursor, not by Claude Code', installKey: null }
+  return { loaded: false, reason: 'outside every folder Claude Code reads', installKey: null }
+}
+
+function guessKey (real) {
+  const m = real.match(/\/plugins\/cache\/([^/]+)\/([^/]+)\//)
+  return m ? m[2] + '@' + m[1] : null
+}
+
+/**
+ * Fold source copies into the loaded row they are the source of, so a plugin
+ * skill counts once and gains an editable path. Two rows are the same skill
+ * when they share the skill directory name and either the same marketplace
+ * (checkout versus cache) or a marketplace whose source directory contains
+ * the copy (a repo under ~/Projects, or a directory-sourced marketplace).
+ */
+export function linkCopies (rows, sources = new Map()) {
+  const loaded = rows.filter((r) => r.loaded)
+  const keep = []
+  for (const r of rows) {
+    if (r.loaded) { keep.push(r); continue }
+    let target = null
+    if (r.location === 'marketplace' && r.marketplace) {
+      target = loaded.find((l) => l.location === 'plugin-cache' && l.marketplace === r.marketplace && l.name === r.name)
+    } else if (r.location === 'project-source' || r.location === 'project' || r.location === 'other') {
+      for (const [mp, dirs] of sources) {
+        if (!dirs.some((d) => r.realPath === d || r.realPath.startsWith(d + sep))) continue
+        target = loaded.find((l) => l.location === 'plugin-cache' && l.marketplace === mp && l.name === r.name)
+        if (target) break
+      }
+    }
+    if (!target) { keep.push(r); continue }
+    // A repo under ~/Projects is the place to edit; a marketplace checkout is
+    // only the fallback source when no repo copy exists.
+    const current = target.copies.find((c) => c.path === target.sourcePath)
+    if (!target.sourcePath || (current && current.location === 'marketplace' && r.location !== 'marketplace')) target.sourcePath = r.realPath
+    target.copies.push({ path: r.realPath, location: r.location, sameDescription: r.description === target.description })
+  }
+  return keep
 }
 
 /** If this skill sits inside a plugin tree, return the plugin name for name:skill attribution. */
@@ -146,3 +303,4 @@ function manifestName (root) {
   }
   return null
 }
+

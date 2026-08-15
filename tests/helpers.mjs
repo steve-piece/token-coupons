@@ -12,12 +12,26 @@ import { tmpdir } from 'node:os'
  *   settings: { model: 'opus[1m]' },
  * }) -> { home, cleanup, skillPath(name) }
  */
-export function makeFixtureHome ({ skills = [], transcripts = [], settings = { model: 'opus[1m]' } } = {}) {
+export function makeFixtureHome ({ skills = [], transcripts = [], settings = { model: 'opus[1m]' }, installed = null, knownMarketplaces = null } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'token-coupons-'))
   const paths = {}
   mkdirSync(join(home, '.claude', 'skills'), { recursive: true })
   mkdirSync(join(home, '.claude', 'projects', 'fixture'), { recursive: true })
   if (settings) writeFileSync(join(home, '.claude', 'settings.json'), JSON.stringify(settings, null, 2))
+  // installed: [{ key: 'plug@mp', marketplace, plugin, version }] writes the registry Claude Code keeps
+  if (installed) {
+    mkdirSync(join(home, '.claude', 'plugins'), { recursive: true })
+    const plugins = {}
+    for (const i of installed) {
+      const installPath = join(home, '.claude', 'plugins', 'cache', i.marketplace || 'mp', i.plugin || 'plug', i.version || '1.0.0')
+      plugins[i.key] = [{ scope: 'user', installPath, version: i.version || '1.0.0' }]
+    }
+    writeFileSync(join(home, '.claude', 'plugins', 'installed_plugins.json'), JSON.stringify({ version: 2, plugins }, null, 2))
+  }
+  if (knownMarketplaces) {
+    mkdirSync(join(home, '.claude', 'plugins'), { recursive: true })
+    writeFileSync(join(home, '.claude', 'plugins', 'known_marketplaces.json'), JSON.stringify(knownMarketplaces, null, 2))
+  }
 
   for (const s of skills) {
     const dir = skillDir(home, s)

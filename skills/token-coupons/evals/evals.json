@@ -1,0 +1,23 @@
+{
+  "skill_name": "token-coupons",
+  "evals": [
+    {
+      "id": "audit-what-skills-cost",
+      "prompt": "how much are my skills costing me",
+      "expected_output": "The agent runs the report command (npx token-coupons@latest report, writing the HTML and the JSON under ~/.token-coupons), reads only the summary block out of the JSON, and opens with a single verdict line picked by the ladder in references/report-anatomy.md: skills that cannot be routed to first, then dollars per week naming the model its transcripts actually show, then wasted tokens per API call. It explains in plain words that the skill list is re-sent on every API call, says which numbers were measured and which were assumed, and does not paste the full report JSON or a row per skill into the reply.",
+      "files": []
+    },
+    {
+      "id": "present-the-report",
+      "prompt": "run token-coupons and show me what to cut",
+      "expected_output": "The agent runs the report, then puts the interactive HTML page in front of the person: published with the Artifact tool when one exists, otherwise opened locally with the absolute path given in the reply. It leads with the verdict, names the biggest few savings, and tells the person to set each row to Keep, Passive, Active, Optimize, or Delete, press Accept all recommendations, and paste the exported JSON back. It then stops: no apply run, no SKILL.md edited, and nothing deleted before the person returns with decisions.",
+      "files": []
+    },
+    {
+      "id": "apply-the-decisions",
+      "prompt": "here is my decisions.json, proceed",
+      "expected_output": "The agent saves the pasted JSON, runs apply without --yes first so nothing is written, and shows the plan grouped by action with every refused item and its reason (plugin cache deletes, unknown skills, frontmatter it cannot safely edit). It waits for a yes, runs apply --yes, and keeps each printed undo line in the reply. It then rewrites every optimize description to roughly 350 characters, keeping the trigger phrases and the boundary while cutting the how, re-runs the report, and closes with three lines: tokens per API call before and after, dollars per week before and after, and whether the listing now fits the budget.",
+      "files": []
+    }
+  ]
+}
