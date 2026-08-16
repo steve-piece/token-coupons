@@ -16,12 +16,14 @@ const LONG = 'Use this whenever someone wants the alpha treatment for a file, a 
 function fixture () {
   return makeFixtureHome({
     skills: [
-      { name: 'alpha', description: LONG },
+      // Ages are set on purpose: a skill installed in the last 14 days reads as
+      // "too new to judge", which would mask the rule each of these exercises.
+      { name: 'alpha', description: LONG, mtimeDaysAgo: 30 },
       { name: 'beta', description: 'Beta does something nobody has asked for in a long while, and it is a user skill.', mtimeDaysAgo: 200 },
-      { name: 'gamma', description: 'Gamma lives inside a plugin cache and has never been used by anyone.', where: 'plugin-cache', plugin: 'plug' },
-      { name: 'delta', description: 'Delta is already gated and dormant.', gate: 'true' },
-      { name: 'eps', description: 'Eps is only ever summoned by the person typing its name, never routed to.' },
-      { name: 'zeta', description: 'Zeta.' },
+      { name: 'gamma', description: 'Gamma lives inside a plugin cache and has never been used by anyone.', where: 'plugin-cache', plugin: 'plug', mtimeDaysAgo: 30 },
+      { name: 'delta', description: 'Delta is already gated and dormant.', gate: 'true', mtimeDaysAgo: 30 },
+      { name: 'eps', description: 'Eps is only ever summoned by the person typing its name, never routed to.', mtimeDaysAgo: 30 },
+      { name: 'zeta', description: 'Zeta.', mtimeDaysAgo: 30 },
     ],
     transcripts: [
       {

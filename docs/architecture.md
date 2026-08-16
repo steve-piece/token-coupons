@@ -133,7 +133,7 @@ Row plus:
 recommendation: {
   action: 'keep' | 'active' | 'passive' | 'optimize' | 'delete' | 'review',
   reason: 'short, numbers first, at most two sentences (see the style rule below)',
-  flags: ['never-called', 'summoned-only', 'heavy-description', 'thin-description', 'capped', 'unroutable', 'dormant-active', 'not-editable', 'stale'],
+  flags: ['never-called', 'summoned-only', 'heavy-description', 'thin-description', 'capped', 'unroutable', 'dormant-active', 'not-editable', 'stale', 'too-new'],
   impactTokensPerCall: 118,      // tokens saved per API call if the action is taken (0 for keep)
   rank: 1,                       // 1 = most impactful
 }
@@ -143,11 +143,12 @@ Rules, in priority order (first match wins; flags accumulate regardless):
 
 1. `mode === 'active'` and `calls === 0`: action `review`, flag `dormant-active`. Costs one line; nothing to save; the person decides whether it still exists for a reason.
 2. `mode === 'passive'`, `calls === 0`, `descriptionChars < thresholds.thinChars`: action `optimize`, flags `never-called`, `thin-description`. The description may be too thin to route to; rewrite before deciding anything else. (The thin flag is only meaningful when the invocation count is zero. A thin description that gets routed to is fine.)
-3. `mode === 'passive'`, `calls === 0`, `location` in `user`, `user-symlink`, `project`, and `modifiedOn` older than `thresholds.staleDays`: action `delete`, flags `never-called`, `stale`. Alternative offered in the UI: `active`.
-4. `mode === 'passive'`, `calls === 0`: action `active`, flag `never-called`.
-5. `mode === 'passive'`, `calls > 0`, `passiveCalls === 0`: action `active`, flag `summoned-only`.
-6. `mode === 'passive'`, `passiveCalls > 0`, (`descriptionChars > thresholds.heavyChars` or `capped`): action `optimize`, flag `heavy-description` (and `capped` when over the per-entry cap).
-7. otherwise `keep`.
+3. `mode === 'passive'`, `calls === 0`, and `modifiedOn` within `thresholds.newSkillDays`: action `keep`, flag `too-new`. A skill installed days ago has had no chance to be chosen, so a zero call count is not evidence. It outranks the stale and never-called rules; a thin description still wins over it, because that is worth fixing on day one.
+4. `mode === 'passive'`, `calls === 0`, `location` in `user`, `user-symlink`, `project`, and `modifiedOn` older than `thresholds.staleDays`: action `delete`, flags `never-called`, `stale`. Alternative offered in the UI: `active`.
+5. `mode === 'passive'`, `calls === 0`: action `active`, flag `never-called`.
+6. `mode === 'passive'`, `calls > 0`, `passiveCalls === 0`: action `active`, flag `summoned-only`.
+7. `mode === 'passive'`, `passiveCalls > 0`, (`descriptionChars > thresholds.heavyChars` or `capped`): action `optimize`, flag `heavy-description` (and `capped` when over the per-entry cap).
+8. otherwise `keep`.
 
 Extra flags: `unroutable` if the name is in `economics.overflowUnroutable.names`; `not-editable` if `editable === false`.
 
@@ -161,7 +162,8 @@ change belongs in the plugin's own repository.
 `impactTokensPerCall`: for `active` and `delete`, `listingTokens - ceil(nameLineChars/4)`; for `optimize`, `max(0, listingTokens - ceil((thresholds.optimizeTargetChars + nameLineChars)/4))`; for `review` and `keep`, 0. Sort by impact desc, then descriptionTokens desc, then name.
 
 Default thresholds (exported, overridable): `thinChars: 60`, `heavyChars: 600`,
-`optimizeTargetChars: 350`, `staleDays: 90`, `heaviestListSize: 15`.
+`optimizeTargetChars: 350`, `staleDays: 90`, `newSkillDays: 14`,
+`heaviestListSize: 15`.
 
 `heaviest`: top `heaviestListSize` passive rows by `descriptionChars`, each with
 `calls` shown, regardless of recommendation. `thin`: every row carrying

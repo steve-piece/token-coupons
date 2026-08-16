@@ -83,6 +83,7 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 | `capped` | past the per entry limit, so part of it is already cut off |
 | `unroutable` | name is listed, description was dropped, cannot be chosen |
 | `dormant-active` | slash only and never used; costs one line, saves nothing to change |
+| `too-new` | installed inside the last 14 days and not used yet, which is expected; it is left alone and no saving is claimed |
 | `not-editable` | lives in a plugin cache; edit its source copy when one is on this machine, or the next update wipes the change |
 | `stale` | the file has not been touched in a long time |
 

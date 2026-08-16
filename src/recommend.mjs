@@ -19,6 +19,9 @@ export const DEFAULT_THRESHOLDS = {
   heavyChars: 600,
   optimizeTargetChars: 350,
   staleDays: 90,
+  // A skill installed days ago has had no chance to be chosen yet, so "never
+  // used" says nothing about it. Below this age a zero-call skill is left alone.
+  newSkillDays: 14,
   heaviestListSize: 15,
 }
 
@@ -28,7 +31,7 @@ const DELETABLE_LOCATIONS = new Set(['user', 'user-symlink', 'project'])
 /** The order flags are reported in, so output is stable for tests and the page. */
 const FLAG_ORDER = [
   'never-called', 'summoned-only', 'heavy-description', 'thin-description',
-  'capped', 'unroutable', 'dormant-active', 'not-editable', 'stale',
+  'capped', 'unroutable', 'dormant-active', 'not-editable', 'stale', 'too-new',
 ]
 
 /**
@@ -93,6 +96,8 @@ function decide (row, { thresholds, cap, now, unroutable }) {
   // Age only says something worth acting on when the skill was never used, the
   // same way a short description only matters when nothing routes to it.
   const stale = calls === 0 && ageDays !== null && ageDays > thresholds.staleDays
+  // Freshly installed and never used is not evidence of anything yet.
+  const tooNew = calls === 0 && ageDays !== null && ageDays <= thresholds.newSkillDays
   const heavy = mode === 'passive' && descriptionChars > thresholds.heavyChars
   const thin = mode === 'passive' && calls === 0 && descriptionChars < thresholds.thinChars
   const capped = mode === 'passive' && out.capped === true
@@ -110,6 +115,7 @@ function decide (row, { thresholds, cap, now, unroutable }) {
   if (mode === 'active' && calls === 0) flagSet.add('dormant-active')
   if (notEditable) flagSet.add('not-editable')
   if (stale) flagSet.add('stale')
+  if (tooNew) flagSet.add('too-new')
   const flags = FLAG_ORDER.filter((f) => flagSet.has(f))
 
   let action = 'keep'
@@ -118,6 +124,8 @@ function decide (row, { thresholds, cap, now, unroutable }) {
     action = 'review'; rule = 'dormant-active'
   } else if (mode === 'passive' && calls === 0 && descriptionChars < thresholds.thinChars) {
     action = 'optimize'; rule = 'thin'
+  } else if (mode === 'passive' && tooNew) {
+    action = 'keep'; rule = 'too-new'
   } else if (mode === 'passive' && calls === 0 && DELETABLE_LOCATIONS.has(out.location) && ageDays !== null && ageDays > thresholds.staleDays) {
     action = 'delete'; rule = 'stale'
   } else if (mode === 'passive' && calls === 0) {
@@ -171,6 +179,9 @@ function reasonFor (rule, c) {
     base = fmt(c.descriptionChars) + ' chars, past the ' + fmt(c.cap) + ' char cap, so the tail is thrown away unread. Cutting to ' + target + ' loses nothing and ' + gain
   } else if (rule === 'heavy') {
     base = 'The agent picks it on its own (' + fmt(c.passiveCalls) + ' of ' + uses + '), but ' + desc + ' costs ' + cost + '. Cutting to ' + target + ' ' + gain
+  } else if (rule === 'too-new') {
+    base = 'Installed ' + (c.ageDays === 0 ? 'today' : c.ageDays === 1 ? 'yesterday' : fmt(c.ageDays) + ' days ago') +
+      ' and not used yet, which is expected. Its ' + desc + ' description costs ' + cost + '. Check back in a couple of weeks'
   } else if (c.mode === 'active') {
     base = 'Used ' + uses + ' and already waits for its name, so it costs ' + fmt(c.nameTokens) + ' tokens a message. Leave it'
   } else {

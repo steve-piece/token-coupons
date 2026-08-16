@@ -26,7 +26,9 @@ function row (over = {}) {
     gateValue: null,
     description: 'x'.repeat(chars),
     descriptionChars: chars,
-    modifiedOn: daysAgo(1),
+    // 60 days: past the new-skill window (14) and short of stale (90), so a row
+    // only trips those rules when a test asks for it by passing modifiedOn.
+    modifiedOn: daysAgo(60),
     calls: 0,
     activeCalls: 0,
     passiveCalls: 0,
@@ -296,7 +298,7 @@ describe('recommend: ordering and lists', () => {
 describe('recommend: thresholds', () => {
   test('defaults are exported and returned', () => {
     assert.deepEqual(DEFAULT_THRESHOLDS, {
-      thinChars: 60, heavyChars: 600, optimizeTargetChars: 350, staleDays: 90, heaviestListSize: 15,
+      thinChars: 60, heavyChars: 600, optimizeTargetChars: 350, staleDays: 90, newSkillDays: 14, heaviestListSize: 15,
     })
     assert.deepEqual(run([]).thresholds, DEFAULT_THRESHOLDS)
   })
@@ -305,7 +307,9 @@ describe('recommend: thresholds', () => {
     const rows = [
       row({ name: 'aaa', calls: 4, passiveCalls: 4, descriptionChars: 200 }),
       row({ name: 'bbb', calls: 0, descriptionChars: 200 }),
-      row({ name: 'ccc', calls: 0, descriptionChars: 200, modifiedOn: daysAgo(10) }),
+      // 30 days: old enough that a lowered staleDays can reach it, and past the
+      // new-skill window, so "too new to judge" does not shadow the stale rule.
+      row({ name: 'ccc', calls: 0, descriptionChars: 200, modifiedOn: daysAgo(30) }),
     ]
     const loose = run(rows, { thresholds: { heavyChars: 100 } })
     assert.equal(byName(loose).aaa.recommendation.action, 'optimize', 'a lower heavyChars catches more')
@@ -315,6 +319,12 @@ describe('recommend: thresholds', () => {
 
     const impatient = run(rows, { thresholds: { staleDays: 5 } })
     assert.equal(byName(impatient).ccc.recommendation.action, 'delete', 'a lower staleDays ages skills faster')
+
+    // too new outranks stale: nobody should be told to delete something they
+    // installed last week, however low staleDays is set.
+    const fresh = run([row({ name: 'ddd', calls: 0, descriptionChars: 200, modifiedOn: daysAgo(3) })], { thresholds: { staleDays: 1 } })
+    assert.equal(fresh.rows[0].recommendation.action, 'keep')
+    assert.ok(fresh.rows[0].recommendation.flags.includes('too-new'))
 
     const res = run(rows, { thresholds: { staleDays: 5 } })
     assert.equal(res.thresholds.staleDays, 5)
@@ -369,3 +379,33 @@ describe('recommend: inputs', () => {
 function byName (res) {
   return Object.fromEntries(res.rows.map((r) => [r.name, r]))
 }
+
+describe('recommend: a freshly installed skill is not dead weight', () => {
+  test('never used but installed days ago is left alone, and says so', () => {
+    const rec = only(run([row({ name: 'archify', calls: 0, descriptionChars: 375, modifiedOn: daysAgo(1) })]))
+    assert.equal(rec.action, 'keep', 'one day old with no calls proves nothing')
+    assert.ok(rec.flags.includes('too-new'))
+    assert.ok(rec.flags.includes('never-called'))
+    assert.equal(rec.impactTokensPerCall, 0, 'nothing to claim as a saving')
+    assert.match(rec.reason, /yesterday/)
+    assert.ok(short(rec.reason), 'short: ' + rec.reason)
+  })
+
+  test('past the new-skill window the never-called rule takes over again', () => {
+    const rec = only(run([row({ name: 'archify', calls: 0, descriptionChars: 375, modifiedOn: daysAgo(20) })]))
+    assert.equal(rec.action, 'active')
+    assert.ok(!rec.flags.includes('too-new'))
+  })
+
+  test('too new never hides a description too thin to route to', () => {
+    const rec = only(run([row({ name: 'x', calls: 0, descriptionChars: 30, modifiedOn: daysAgo(2) })]))
+    assert.equal(rec.action, 'optimize', 'a thin description is worth fixing on day one')
+    assert.ok(rec.flags.includes('thin-description'))
+  })
+
+  test('newSkillDays is overridable', () => {
+    const rows = [row({ name: 'x', calls: 0, descriptionChars: 375, modifiedOn: daysAgo(20) })]
+    assert.equal(only(run(rows, { thresholds: { newSkillDays: 30 } })).action, 'keep')
+    assert.equal(only(run(rows, { thresholds: { newSkillDays: 3 } })).action, 'active')
+  })
+})
