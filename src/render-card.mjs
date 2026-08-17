@@ -261,7 +261,7 @@ export function renderCardPage (report, { listHref = null, listCount = 0 } = {})
     '<head>',
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    '<title>Skill Listing Scorecard</title>',
+    '<title>Saved With Token Coupons</title>',
     '<style>' + pageStyles() + '</style>',
     '</head>',
     '<body>',
