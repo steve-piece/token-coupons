@@ -14,7 +14,7 @@ import { fmt, money } from './lib/util.mjs'
 import { scoreReport } from './score.mjs'
 
 export const CARD_WIDTH = 1200
-export const CARD_HEIGHT = 1540
+export const CARD_HEIGHT = 1300
 
 export const INK = {
   ink: '#070A12',
@@ -110,12 +110,12 @@ export function renderCardSvg (report) {
   }
   const legendY = bt + bh + 40
   out.push(dot(P + 5, legendY - 6, IN.rose))
-  out.push(text(`${fmt(wasted)} buy nothing`, P + 22, legendY, { size: 21, fill: IN.text }))
-  out.push(text(`${Math.round(wastedShare * 100)}% of every message`, P + 22, legendY + 28, { size: 18, fill: IN.muted }))
+  out.push(text(`${fmt(wasted)} tokens, ${Math.round(wastedShare * 100)}% of the list`, P + 22, legendY, { size: 21, fill: IN.text }))
+  out.push(text('on skills the agent has never picked', P + 22, legendY + 28, { size: 18, fill: IN.muted }))
   const rightCol = P + Math.round(CW / 2) + 40
   out.push(dot(rightCol + 5, legendY - 6, IN.emerald))
-  out.push(text(`${fmt(earning)} earn it`, rightCol + 22, legendY, { size: 21, fill: IN.text }))
-  out.push(text('read by the agent at least once', rightCol + 22, legendY + 28, { size: 18, fill: IN.muted }))
+  out.push(text(`${fmt(earning)} tokens, ${100 - Math.round(wastedShare * 100)}%`, rightCol + 22, legendY, { size: 21, fill: IN.text }))
+  out.push(text('on skills it actually uses', rightCol + 22, legendY + 28, { size: 18, fill: IN.muted }))
 
   /* -------------------------------------------------------- stat tiles */
   const tiles = [
@@ -138,51 +138,28 @@ export function renderCardSvg (report) {
 
   /* ------------------------------------------------------------- money */
   const mY = 946
-  out.push(`<rect x="${P}" y="${mY}" width="${CW}" height="170" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
-  out.push(`<rect x="${P}" y="${mY}" width="5" height="170" rx="2.5" fill="${IN.rose}" filter="url(#soft)"/>`)
-  out.push(text('THE BILL FOR SKILLS NOBODY USED', P + 34, mY + 44, { size: 16, fill: IN.muted, spacing: 3.4 }))
+  const mH = 140
+  out.push(`<rect x="${P}" y="${mY}" width="${CW}" height="${mH}" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
+  out.push(`<rect x="${P}" y="${mY}" width="5" height="${mH}" rx="2.5" fill="${IN.rose}" filter="url(#soft)"/>`)
+  out.push(text('SKILLS NOBODY USED, AT API PRICES', P + 34, mY + 42, { size: 16, fill: IN.muted, spacing: 3.4 }))
   if (perMonth !== null) {
-    out.push(`<text x="${P + 34}" y="${mY + 116}" font-family="${MONO}" font-size="66" font-weight="700" fill="${IN.rose}" filter="url(#soft)">${esc(money(perMonth))}</text>`)
-    out.push(text('a month', P + 34 + w(money(perMonth), 66) + 18, mY + 116, { size: 26, fill: IN.muted }))
-    const detail = perWeek !== null ? `${money(perWeek)} a week${modelName ? ' on ' + modelName : ''}, at cached prices` : 'at cached prices'
-    out.push(text(detail, P + 34, mY + 148, { size: 19, fill: IN.muted }))
+    out.push(`<text x="${P + 34}" y="${mY + 110}" font-family="${MONO}" font-size="66" font-weight="700" fill="${IN.rose}" filter="url(#soft)">${esc(money(perMonth))}</text>`)
+    out.push(text('a month', P + 34 + w(money(perMonth), 66) + 18, mY + 110, { size: 26, fill: IN.muted }))
   } else {
-    out.push(`<text x="${P + 34}" y="${mY + 112}" font-family="${MONO}" font-size="46" font-weight="700" fill="${IN.rose}">${fmt(vol.wastedTokensPerMonth || 0)}</text>`)
-    out.push(text('wasted tokens a month', P + 34, mY + 148, { size: 19, fill: IN.muted }))
+    out.push(`<text x="${P + 34}" y="${mY + 110}" font-family="${MONO}" font-size="52" font-weight="700" fill="${IN.rose}">${fmt(vol.wastedTokensPerMonth || 0)}</text>`)
+    out.push(text('wasted tokens a month', P + 34 + w(fmt(vol.wastedTokensPerMonth || 0), 52) + 18, mY + 110, { size: 26, fill: IN.muted }))
   }
   if (vol.wastedTokensPerWeek) {
-    out.push(text(`${bigNum(vol.wastedTokensPerWeek)} tokens a week`, CARD_WIDTH - P - 34, mY + 116, { size: 26, fill: IN.muted, anchor: 'end' }))
-  }
-
-  /* ------------------------------------------------------------ saving */
-  const gY = 1146
-  const saved = Number(s.savedTokensPerCallIfApplied) || 0
-  out.push(`<rect x="${P}" y="${gY}" width="${CW}" height="170" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
-  out.push(`<rect x="${P}" y="${gY}" width="5" height="170" rx="2.5" fill="${IN.emerald}" filter="url(#soft)"/>`)
-  out.push(text('WHAT ONE PASS GIVES BACK', P + 34, gY + 44, { size: 16, fill: IN.muted, spacing: 3.4 }))
-  const savedMoney = s.savedOnYourModel && typeof s.savedOnYourModel.dollarsPerMonth === 'number'
-    ? money(s.savedOnYourModel.dollarsPerMonth) : null
-  if (savedMoney) {
-    out.push(`<text x="${P + 34}" y="${gY + 116}" font-family="${MONO}" font-size="66" font-weight="700" fill="${IN.emerald}" filter="url(#soft)">${esc(savedMoney)}</text>`)
-    out.push(text('a month, back', P + 34 + w(savedMoney, 66) + 18, gY + 116, { size: 26, fill: IN.muted }))
-  } else {
-    out.push(`<text x="${P + 34}" y="${gY + 116}" font-family="${MONO}" font-size="66" font-weight="700" fill="${IN.emerald}" filter="url(#soft)">${fmt(saved)}</text>`)
-    out.push(text('tokens a message, back', P + 34 + w(fmt(saved), 66) + 18, gY + 116, { size: 26, fill: IN.muted }))
-  }
-  const acts = s.recommendedActions || {}
-  const counts = `gate ${fmt(acts.active || 0)}  ·  delete ${fmt(acts.delete || 0)}  ·  shorten ${fmt(acts.optimize || 0)}  ·  keep ${fmt(acts.keep || 0)}`
-  out.push(text(savedMoney ? `${counts}  ·  ${fmt(saved)} tokens a message` : counts, P + 34, gY + 148, { size: 19, fill: IN.muted }))
-  if (s.fitsAfter) {
-    out.push(text('back inside the allowance', CARD_WIDTH - P - 34, gY + 116, { size: 22, fill: IN.emerald, anchor: 'end' }))
+    out.push(text(`${bigNum(vol.wastedTokensPerWeek)} tokens a week`, CARD_WIDTH - P - 34, mY + 110, { size: 26, fill: IN.muted, anchor: 'end' }))
   }
 
   /* ------------------------------------------------------------ footer */
-  out.push(rule(P, 1392, CW))
+  out.push(rule(P, 1148, CW))
   const cmd = 'npx token-coupons'
   const pw = Math.round(w(cmd, 22)) + 44
-  out.push(`<rect x="${P}" y="1430" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
-  out.push(text(cmd, P + 22, 1462, { size: 22, fill: IN.cyan }))
-  out.push(text('measure your own', CARD_WIDTH - P, 1462, { size: 19, fill: IN.muted, anchor: 'end' }))
+  out.push(`<rect x="${P}" y="1186" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
+  out.push(text(cmd, P + 22, 1218, { size: 22, fill: IN.cyan }))
+  out.push(text('measure your own', CARD_WIDTH - P, 1218, { size: 19, fill: IN.muted, anchor: 'end' }))
 
   out.push('</svg>')
   return out.join('\n')

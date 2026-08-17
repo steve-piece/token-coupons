@@ -57,7 +57,7 @@ export function renderList (report, { cardHref = null } = {}) {
     '<div class="wrap">',
     header(r, s, cardHref),
     modes(),
-    figures(s),
+    figures(s, r.cost),
     table(skills, r),
     notListed(r),
     exportFooter(r, skills),
@@ -116,10 +116,14 @@ function modes () {
 
 /* --------------------------------------------------------------- figures */
 
-function figures (s) {
+function figures (s, cost) {
   const wasted = s.wastedPerWeekOnYourModel
   const saved = s.savedOnYourModel
   const model = (saved && saved.model) || (wasted && wasted.model) || null
+  const share = ((cost || {}).volume || {}).wastedShareOfInput
+  const shareText = (typeof share === 'number' && share > 0)
+    ? (share < 0.001 ? 'under 0.1 percent' : (share * 100).toFixed(1) + ' percent')
+    : null
   const cells = []
   // Green on what you get back, red on the count that causes it. The wasted
   // figure sits between them and needs no colour of its own.
@@ -127,11 +131,23 @@ function figures (s) {
   if (wasted) cells.push(fig(money(wasted.dollarsPerMonth), 'a month, wasted', 'plain'))
   cells.push(fig(fmt(s.neverCalledPassive || 0), 'skills never used', 'bad'))
   if (!cells.length) return ''
+  // Two things a reader will otherwise get wrong: why the two dollar figures
+  // differ, and whether a flat plan actually bills any of this.
+  const residue = (wasted && saved && typeof wasted.dollarsPerMonth === 'number' && typeof saved.dollarsPerMonth === 'number')
+    ? wasted.dollarsPerMonth - saved.dollarsPerMonth : null
+  const notes = []
+  notes.push('<p class="note">' + (model ? 'At ' + esc(model) + ' API prices. ' : '') +
+    'On a flat plan this is not a bill you will see: it is what the waste is worth, and it comes out of your usage allowance ' +
+    'instead' + (shareText ? ', where it is ' + esc(shareText) + ' of everything you send' : '') + '.</p>')
+  if (residue !== null && residue > 0.005) {
+    notes.push('<p class="note">The two figures do not match, and cannot: gating a skill removes its description but leaves its ' +
+      '<strong>name</strong> in the list. Those name lines are the last ' + esc(money(residue)) + ' a month, and no decision here ' +
+      'removes them.</p>')
+  }
   return [
     '<section class="section" id="figures">',
     '<div class="figs">' + cells.join('') + '</div>',
-    '<p class="note">' + (model ? 'Priced on ' + esc(model) + ', the model your sessions actually ran on, at cached prices. ' : '') +
-      'Every row below carries its own share of that.</p>',
+    notes.join(''),
     '</section>',
   ].join('\n')
 }

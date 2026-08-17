@@ -82,6 +82,8 @@ describe('card', () => {
     assert.ok(svg.includes('7,777'), 'wasted tokens')
     assert.ok(svg.includes('10,832'), 'listing tokens')
     assert.ok(svg.includes('$38.88'), 'the monthly bill')
+    assert.ok(svg.includes('AT API PRICES'), 'the basis, since a flat plan is not billed this')
+    assert.equal(svg.includes('WHAT ONE PASS GIVES BACK'), false, 'the saving is its own card now')
     assert.ok(svg.includes('token-coupons'), 'the wordmark')
   })
 

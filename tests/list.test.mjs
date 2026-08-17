@@ -82,3 +82,16 @@ describe('the decision list', () => {
     assert.equal(out.includes('NaN'), false)
   })
 })
+
+describe('the two questions a reader asks about the money', () => {
+  test('says the figures are API prices, and what a flat plan actually pays', () => {
+    assert.ok(html.includes('API prices'))
+    assert.match(html, /not a bill you will see/)
+    assert.match(html, /usage allowance/)
+  })
+
+  test('explains why the wasted and recovered figures cannot match', () => {
+    assert.match(html, /do not match, and cannot/)
+    assert.match(html, /leaves its <strong>name<\/strong> in the list/)
+  })
+})
