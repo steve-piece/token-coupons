@@ -101,9 +101,19 @@ describe('card', () => {
     assert.ok(widths[1] < widths[0], 'after is shorter than before')
   })
 
-  test('the repo is printed so a card that travels can be traced back', () => {
+  test('the repo is printed with its mark, so a card that travels is traceable', () => {
     assert.ok(REPO.startsWith('https://github.com/'))
     assert.ok(svg.includes(REPO.replace(/^https?:\/\//, '')))
+    assert.ok(svg.includes('View on GitHub'))
+    assert.match(svg, /<g transform="translate\([\d.]+ [\d.]+\) scale\([\d.]+\)"/, 'the mark is drawn, not fetched')
+  })
+
+  test('the tiles name what changed, in the words the card owner chose', () => {
+    assert.ok(svg.includes('skills set to passive'))
+    assert.ok(svg.includes('unused skills removed'))
+    assert.ok(svg.includes('descriptions optimized'))
+    // removed is the only count drawn in the warning colour
+    assert.match(svg, /fill="#FF6B8A">\d+<\/text>/)
   })
 
   test('the page ships both save paths, and no banned character reaches it', () => {
@@ -175,21 +185,13 @@ describe('headline', () => {
 describe('the card page', () => {
   const r = report({ listing: 10832, wasted: 7777, over: 1.08, unroutable: 3 })
 
-  test('leads the controls with the next action, then the image actions', () => {
-    const page = renderCardPage(r, { listHref: 'list.html', listCount: 94 })
-    const bar = page.slice(page.indexOf('<div class="bar">'), page.indexOf('</div>', page.indexOf('<div class="bar">')))
-    const order = ['See suggestions', 'Save image', 'Copy image'].map((label) => bar.indexOf(label))
-    assert.ok(order.every((i) => i > -1), 'all three controls are present')
-    assert.deepEqual(order, [...order].sort((a, b) => a - b), 'and in that order')
-    assert.ok(bar.includes('href="list.html"'))
-    assert.ok(bar.includes('(94)'))
-    assert.ok(bar.includes('class="arrow"'), 'the next action is signposted')
-  })
-
-  test('omits the suggestions control when there is no list to open', () => {
+  test('offers the two image actions, each with its own glyph', () => {
     const page = renderCardPage(r)
+    const bar = page.slice(page.indexOf('<div class="bar">'), page.indexOf('</div>', page.indexOf('<div class="bar">')))
+    assert.ok(bar.indexOf('Save image') < bar.indexOf('Copy image'), 'save first')
+    assert.equal((bar.match(/class="ico"/g) || []).length, 2, 'one glyph each')
+    // the card is the end of the loop, so it does not send anyone back to the list
     assert.equal(page.includes('See suggestions'), false)
-    assert.ok(page.includes('Save image'), 'the image actions still stand alone')
   })
 
   test('scales the card to the viewport, so the whole thing reads on one screen', () => {

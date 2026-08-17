@@ -162,10 +162,7 @@ export async function runReport (flags, io) {
 
   const notes = []
   if (flags.card) {
-    // When both pages are written, the card links to the list, so a reader can
-    // go from the headline number to the row that produced it.
-    const listHref = flags.html ? relativeHref(flags.card, flags.html) : null
-    const full = writeFile(flags.card, renderCardPage(report, { listHref, listCount: report.summary.skills }))
+    const full = writeFile(flags.card, renderCardPage(report))
     notes.push('wrote the share card to ' + tildify(full))
     if (flags.open && !flags.html) openFile(full)
   }

@@ -13,7 +13,7 @@
 import { fmt, money } from './lib/util.mjs'
 
 export const CARD_WIDTH = 1200
-export const CARD_HEIGHT = 1210
+export const CARD_HEIGHT = 1050
 
 /** Printed bottom right, so a card that travels can be traced back. */
 export const REPO = 'https://github.com/steve-piece/token-coupons'
@@ -103,9 +103,9 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
 
   /* -------------------------------------------------------- what moved */
   const tiles = [
-    { n: fmt(acts.active || 0), k: 'set to name only', c: IN.emerald },
-    { n: fmt(acts.delete || 0), k: 'removed', c: IN.emerald },
-    { n: fmt(acts.optimize || 0), k: 'descriptions cut', c: IN.emerald },
+    { n: fmt(acts.active || 0), k: 'skills set to passive', c: IN.emerald },
+    { n: fmt(acts.delete || 0), k: 'unused skills removed', c: IN.rose },
+    { n: fmt(acts.optimize || 0), k: 'descriptions optimized', c: IN.text },
   ]
   const tileY = 720
   const gap = 22
@@ -117,35 +117,16 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
     out.push(text(t.k, x + 26, tileY + 108, { size: 19, fill: IN.muted }))
   })
 
-  /* ------------------------------------------------------------- share */
-  const sY = 894
-  out.push(`<rect x="${P}" y="${sY}" width="${CW}" height="118" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
-  out.push(`<rect x="${P}" y="${sY}" width="5" height="118" rx="2.5" fill="${IN.emerald}" filter="url(#soft)"/>`)
-  // The hero already says what came back, so this line earns its place only by
-  // saying what the bill was and what is left, which nothing else on the card does.
-  const wastedMonth = (s.wastedPerWeekOnYourModel && typeof s.wastedPerWeekOnYourModel.dollarsPerMonth === 'number')
-    ? s.wastedPerWeekOnYourModel.dollarsPerMonth : null
-  out.push(text('WHAT THE UNUSED SKILLS WERE COSTING', P + 34, sY + 40, { size: 15, fill: IN.muted, spacing: 3 }))
-  if (wastedMonth !== null && savedMonth !== null) {
-    const left = Math.max(0, wastedMonth - savedMonth)
-    const before = money(wastedMonth) + ' a month'
-    out.push(text(before, P + 34, sY + 84, { size: 30, fill: IN.muted }))
-    const arrowX = P + 34 + w(before, 30) + 22
-    out.push(text('\u2192', arrowX, sY + 84, { size: 30, fill: IN.muted }))
-    out.push(text(money(left), arrowX + 44, sY + 84, { size: 30, fill: IN.text, weight: 700 }))
-    out.push(text('left, the name lines that stay whatever you do', CARD_WIDTH - P - 34, sY + 84, { size: 18, fill: IN.muted, anchor: 'end' }))
-  } else if (vol.wastedTokensPerMonth) {
-    out.push(text(`${bigNum(vol.wastedTokensPerMonth)} tokens a month`, P + 34, sY + 84, { size: 30, fill: IN.text }))
-  }
-
   /* ------------------------------------------------------------ footer */
-  out.push(rule(P, 1058, CW))
+  out.push(rule(P, 902, CW))
   const cmd = 'npx token-coupons'
   const pw = Math.round(w(cmd, 22)) + 44
-  out.push(`<rect x="${P}" y="1096" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
-  out.push(text(cmd, P + 22, 1128, { size: 22, fill: IN.cyan }))
-  out.push(text('View on GitHub', CARD_WIDTH - P, 1112, { size: 20, fill: IN.text, anchor: 'end' }))
-  out.push(text(esc(repoUrl.replace(/^https?:\/\//, '')), CARD_WIDTH - P, 1138, { size: 16, fill: IN.muted, anchor: 'end' }))
+  out.push(`<rect x="${P}" y="940" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
+  out.push(text(cmd, P + 22, 972, { size: 22, fill: IN.cyan }))
+  const label = 'View on GitHub'
+  out.push(text(label, CARD_WIDTH - P, 958, { size: 20, fill: IN.text, anchor: 'end' }))
+  out.push(text(repoUrl.replace(/^https?:\/\//, ''), CARD_WIDTH - P, 984, { size: 16, fill: IN.muted, anchor: 'end' }))
+  out.push(githubMark(CARD_WIDTH - P - Math.round(w(label, 20)) - 34, 942, 22, IN.text))
 
   out.push('</svg>')
   return out.join('\n')
@@ -176,6 +157,23 @@ function defs (gradeColor) {
   </filter>
 </defs>`
 }
+
+/**
+ * The GitHub mark, so the link at the bottom reads as a link rather than a
+ * sentence. The path is the Simple Icons glyph (CC0), authored on its own 24
+ * unit grid and scaled here, since an exported PNG cannot fetch an icon font.
+ */
+function githubMark (x, y, size, fill) {
+  return `<g transform="translate(${x} ${y}) scale(${size / 24})" aria-hidden="true"><path fill="${fill}" d="${GITHUB_PATH}"/></g>`
+}
+
+const GITHUB_PATH = 'M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12'
+
+/** Stroke glyphs for the controls. Inline, because the page fetches nothing. */
+const ICON_DOWNLOAD = '<svg class="ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+  '<path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"></path><path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"></path></svg>'
+const ICON_COPY = '<svg class="ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+  '<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"></path></svg>'
 
 function text (value, x, y, { size = 20, fill = IN.text, weight = 400, anchor = 'start', spacing = 0 } = {}) {
   const sp = spacing ? ` letter-spacing="${spacing}"` : ''
@@ -252,7 +250,7 @@ export { esc }
  * and the viewer confirms. Opened from disk there is no host, so it falls back
  * to an anchor. Either way the same bytes.
  */
-export function renderCardPage (report, { listHref = null, listCount = 0 } = {}) {
+export function renderCardPage (report) {
   const svg = renderCardSvg(report)
   const day = (report && report.generatedOn) || 'today'
   return [
@@ -268,12 +266,8 @@ export function renderCardPage (report, { listHref = null, listCount = 0 } = {})
     '<main class="stage">',
     '<div class="card" id="card">' + svg + '</div>',
     '<div class="bar">',
-    listHref
-      ? '<a class="go" href="' + esc(listHref) + '"><span class="arrow" aria-hidden="true">\u2192</span>See suggestions' +
-        (listCount ? ' (' + listCount + ')' : '') + '</a>'
-      : '',
-    '<button type="button" id="png" class="alt">Save image</button>',
-    '<button type="button" id="copy" class="alt">Copy image</button>',
+    '<button type="button" id="png" class="go">' + ICON_DOWNLOAD + 'Save image</button>',
+    '<button type="button" id="copy" class="alt">' + ICON_COPY + 'Copy image</button>',
     '</div>',
     '<p class="msg" id="msg" role="status" aria-live="polite"></p>',
     '<p class="fine">Measured on ' + esc(day) + ' from the skills and session transcripts already on this machine. ' +
@@ -304,15 +298,15 @@ body {
 .card { line-height: 0; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,.6), 0 0 0 1px ${IN.line}; max-width: 100%; }
 .card svg { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 214px); }
 .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; }
-.arrow { margin-right: 9px; font-size: 1.05em; line-height: 1; }
 button {
   font: inherit; font-size: 15px; cursor: pointer; border-radius: 12px; padding: 12px 20px; min-height: 46px;
+  display: inline-flex; align-items: center; gap: 9px;
   border: 1px solid ${IN.line}; background: ${IN.panelUp}; color: ${IN.text};
   transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
 }
-a.go, button.go { background: ${IN.cyan}; border-color: ${IN.cyan}; color: #04202B; font-weight: 700; }
-a.go:hover, button.go:hover { filter: brightness(1.08); }
-a.go { text-decoration: none; display: inline-flex; align-items: center; }
+button.go { background: ${IN.cyan}; border-color: ${IN.cyan}; color: #04202B; font-weight: 700; }
+button.go:hover { filter: brightness(1.08); }
+.ico { flex: 0 0 auto; }
 button.alt:hover { border-color: ${IN.cyan}; color: ${IN.cyan}; }
 button:disabled { opacity: .55; cursor: default; }
 
