@@ -57,6 +57,8 @@ src/pricing.mjs            loadPricing(path?, {today}?) -> Pricing, costModel({w
 src/report.mjs             buildReport(opts) -> Report   (joins everything above; opts.cwd is passed on to discover)
 src/render-text.mjs        renderText(report, {color, top}) -> string
 src/render-html.mjs        renderHtml(report) -> string  (self-contained, theme aware, interactive)
+src/score.mjs              scoreReport(report) -> {score, grade, verdict, parts, ratios, tokens}
+src/render-card.mjs        renderCardSvg(report) -> svg ; renderCardPage(report) -> the postable scorecard
 src/apply.mjs              planApply(decisions, {skills}) -> Plan ; applyPlan(plan, {yes, trashDir}) -> Result
 data/pricing.json          the price table (shape below)
 plugin.json                portable Agent Plugins 1.0.0 manifest at the repo root
@@ -398,3 +400,29 @@ report; apply exits 1 if any step errored.
   `description-rewrite.md`, `cost-model.md`, `listing-budget.md`. Each 40 to
   100 lines, plain language, no dashes.
 - `evals/evals.json` in the agentskills.io shape with three realistic prompts.
+
+## The share card (src/score.mjs, src/render-card.mjs)
+
+`--card=FILE` writes a second, much smaller page: one dark scorecard sized for
+posting, and a button that turns it into a PNG.
+
+The score is 0 to 100 over three weighted parts, defined in `score.mjs`:
+`earned` (70) is the share of listing tokens spent on skills the agent has
+chosen at least once, `fit` (20) is headroom against the allowance (full marks
+at or under it, none at twice over), `reach` (10) loses a tenth per unroutable
+skill. Grades start at 90 A, 75 B, 60 C, 45 D, and F below. The weighting is
+deliberately harsh on `earned`: a listing where most tokens buy no routing
+decision is failing at its only job.
+
+Three constraints shape the card and must not be broken casually:
+
+- It is authored as **one inline SVG**, not HTML, because an SVG can be
+  serialized, drawn on a canvas, and read back as a PNG with no library and no
+  network. Nothing that would taint that canvas or fail to rasterize may go in:
+  no external font, no `<foreignObject>`, no remote image. A test asserts this.
+- Saving takes **two paths**. Inside the claude.ai artifact viewer a page cannot
+  download on its own, so it asks the host through the `downloads` capability
+  (declare `capabilities: {downloads: true}` when publishing) and the viewer
+  confirms. Opened from disk there is no host, so it falls back to an anchor.
+- It commits to **one dark look**, with no light variant, because it is meant to
+  land in other people's apps where it cannot know the surrounding theme.

@@ -3,7 +3,7 @@
 // ones the agent never reads, and what to do about it.
 //
 //   token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]
-//                        [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--out=FILE] [--open] [--no-color] [--cwd=DIR]
+//                        [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--card=FILE] [--out=FILE] [--open] [--no-color] [--cwd=DIR]
 //   token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 //   token-coupons pricing [--pricing=FILE] [--json]
 //   token-coupons help
@@ -16,6 +16,7 @@ import { spawn } from 'node:child_process'
 import { buildReport } from '../src/report.mjs'
 import { renderText } from '../src/render-text.mjs'
 import { renderHtml } from '../src/render-html.mjs'
+import { renderCardPage } from '../src/render-card.mjs'
 import { discoverSkills } from '../src/discover.mjs'
 import { parseDecisions, planApply, applyPlan, summarizeApply } from '../src/apply.mjs'
 import { loadPricing } from '../src/pricing.mjs'
@@ -31,7 +32,7 @@ export function version () {
 
 /* ------------------------------------------------------------------ args */
 
-const VALUE_FLAGS = new Set(['since', 'window', 'fraction', 'budget', 'pricing', 'html', 'out', 'trash', 'today', 'top', 'cwd', 'cache-ttl'])
+const VALUE_FLAGS = new Set(['since', 'window', 'fraction', 'budget', 'pricing', 'html', 'out', 'trash', 'today', 'top', 'cwd', 'cache-ttl', 'card'])
 const BOOL_FLAGS = new Set(['uncached', 'json', 'open', 'no-color', 'color', 'yes', 'help', 'version', 'h', 'v'])
 
 /** Parse argv into { command, positional, flags }. Accepts --k=v and --k v. */
@@ -73,7 +74,8 @@ export function helpText () {
     '',
     'Usage',
     '  token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]',
-    '                       [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--out=FILE] [--open] [--no-color] [--cwd=DIR]',
+    '                       [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--card=FILE]',
+    '                       [--out=FILE] [--open] [--no-color] [--cwd=DIR]',
     '  token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]',
     '  token-coupons pricing [--pricing=FILE] [--json]',
     '  token-coupons help',
@@ -158,6 +160,11 @@ export async function runReport (flags, io) {
   })
 
   const notes = []
+  if (flags.card) {
+    const full = writeFile(flags.card, renderCardPage(report))
+    notes.push('wrote the share card to ' + tildify(full))
+    if (flags.open && !flags.html) openFile(full)
+  }
   if (flags.html) {
     const full = writeFile(flags.html, renderHtml(report))
     notes.push('wrote the interactive page to ' + tildify(full))

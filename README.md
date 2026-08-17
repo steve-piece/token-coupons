@@ -30,6 +30,12 @@ Write the interactive page and open it in your browser.
 npx token-coupons@latest report --html=report.html --open
 ```
 
+Or write the scorecard instead: one dark card sized for posting, with a button that saves it as a PNG.
+
+```bash
+npx token-coupons@latest report --card=scorecard.html --open
+```
+
 In the page, every row starts on the recommendation. Change the rows you disagree with, then press Copy on the decisions box at the bottom. If an agent is driving, paste that JSON into your next message and say "proceed with these decisions". By hand, save it as `decisions.json` and carry it out yourself: once without `--yes` to read the plan, then again with `--yes`.
 
 ```bash
@@ -179,8 +185,8 @@ The skill itself ships with `disable-model-invocation: true`, so it only ever ru
 
 ```text
 token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]
-                     [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--out=FILE]
-                     [--open] [--no-color] [--cwd=DIR]
+                     [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--card=FILE]
+                     [--out=FILE] [--open] [--no-color] [--cwd=DIR]
 token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
 token-coupons help
@@ -194,6 +200,7 @@ token-coupons help
   --uncached       price the worst case, where nothing is cached
   --json           print JSON instead of text
   --html=FILE      also write the interactive page
+  --card=FILE      also write the shareable scorecard, which exports itself as a PNG
   --out=FILE       also write the report JSON
   --open           open the HTML page in your browser after writing it
   --no-color       plain text without colors

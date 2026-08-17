@@ -39,8 +39,13 @@ Whichever one answered is `TC` for the rest of this file.
 
 ```bash
 mkdir -p "$HOME/.token-coupons"
-TC report --html="$HOME/.token-coupons/report.html" --out="$HOME/.token-coupons/report.json"
+TC report --html="$HOME/.token-coupons/report.html" --out="$HOME/.token-coupons/report.json" --card="$HOME/.token-coupons/scorecard.html"
 ```
+
+`--card` writes a second, much smaller page: one dark scorecard with a score out
+of 100 and a button that saves it as a PNG. Offer it whenever the person sounds
+like they want to show someone (a teammate, a post), and when you publish it as
+an artifact declare the `downloads` capability so the button can actually save.
 
 Run it from the folder they usually start Claude Code in: a project's own `.claude/skills` only
 count as listed from inside that project. Add `--since=YYYY-MM-DD` if the person only wants recent
