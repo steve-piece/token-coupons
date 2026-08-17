@@ -15,20 +15,24 @@
 
 export const WEIGHTS = { earned: 70, fit: 20, reach: 10 }
 
-/** Where each grade starts. Anything under the last one is an F. */
+/**
+ * Where each grade starts. Anything under the last one is an F. There is no
+ * sentence attached on purpose: the card states what is actually happening,
+ * built from the counts, rather than an adjective picked to match a band.
+ */
 export const GRADES = [
-  { grade: 'A', min: 90, verdict: 'Lean. Almost every token in the list is doing work.' },
-  { grade: 'B', min: 75, verdict: 'Healthy. A little rent, nothing structural.' },
-  { grade: 'C', min: 60, verdict: 'Padded. A real slice of every message buys nothing.' },
-  { grade: 'D', min: 45, verdict: 'Heavy. Most of the list is paid for and never read.' },
-  { grade: 'F', min: 0, verdict: 'Overloaded. The list is mostly rent, and skills are going dark.' },
+  { grade: 'A', min: 90 },
+  { grade: 'B', min: 75 },
+  { grade: 'C', min: 60 },
+  { grade: 'D', min: 45 },
+  { grade: 'F', min: 0 },
 ]
 
 const clamp01 = (n) => Math.max(0, Math.min(1, Number(n) || 0))
 
 /**
  * @param report a Report from report.mjs
- * @returns { score, grade, verdict, parts: {earned, fit, reach}, ratios: {...} }
+ * @returns { score, grade, parts: {earned, fit, reach}, ratios: {...}, tokens: {...} }
  */
 export function scoreReport (report) {
   const r = report || {}
@@ -59,7 +63,6 @@ export function scoreReport (report) {
   return {
     score,
     grade: band.grade,
-    verdict: band.verdict,
     parts,
     weights: WEIGHTS,
     ratios: {

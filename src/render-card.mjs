@@ -14,7 +14,7 @@ import { fmt, money } from './lib/util.mjs'
 import { scoreReport } from './score.mjs'
 
 export const CARD_WIDTH = 1200
-export const CARD_HEIGHT = 1500
+export const CARD_HEIGHT = 1540
 
 const IN = {
   ink: '#070A12',
@@ -73,28 +73,28 @@ export function renderCardSvg (report) {
   /* ---------------------------------------------------------- masthead */
   out.push(`<circle cx="${P + 6}" cy="82" r="6" fill="${IN.cyan}" filter="url(#soft)"/>`)
   out.push(text('token-coupons', P + 26, 90, { size: 25, weight: 700, fill: IN.text, spacing: 0.5 }))
-  out.push(text(`${r.generatedOn || ''}${modelName ? '  ' + modelName : ''}`, CARD_WIDTH - P, 90, { size: 19, fill: IN.muted, anchor: 'end' }))
+  out.push(text(r.generatedOn || '', CARD_WIDTH - P, 90, { size: 19, fill: IN.muted, anchor: 'end' }))
   out.push(rule(P, 126, CW))
 
   /* ------------------------------------------------------------- score */
-  out.push(text('SKILL LISTING SCORE', P, 196, { size: 17, fill: IN.muted, spacing: 4.2 }))
+  out.push(text('SKILL LISTING SCORE', P, 236, { size: 17, fill: IN.muted, spacing: 4.2 }))
 
-  out.push(`<text x="${P - 8}" y="356" font-family="${MONO}" font-size="196" font-weight="700" fill="${gradeColor}" filter="url(#bigglow)">${scored.score}</text>`)
+  out.push(`<text x="${P - 8}" y="396" font-family="${MONO}" font-size="196" font-weight="700" fill="${gradeColor}" filter="url(#bigglow)">${scored.score}</text>`)
   const scoreW = w(String(scored.score), 196)
-  out.push(text('/100', P - 8 + scoreW + 18, 356, { size: 46, fill: IN.muted, weight: 500 }))
+  out.push(text('/100', P - 8 + scoreW + 18, 396, { size: 46, fill: IN.muted, weight: 500 }))
 
   // grade chip, right aligned on the same optical line
   const chipW = 128
   const chipX = CARD_WIDTH - P - chipW
-  out.push(`<rect x="${chipX}" y="228" width="${chipW}" height="128" rx="26" fill="${IN.panelUp}" stroke="${gradeColor}" stroke-width="1.5" filter="url(#soft)"/>`)
-  out.push(`<text x="${chipX + chipW / 2}" y="330" text-anchor="middle" font-family="${MONO}" font-size="86" font-weight="700" fill="${gradeColor}">${scored.grade}</text>`)
+  out.push(`<rect x="${chipX}" y="268" width="${chipW}" height="128" rx="26" fill="${IN.panelUp}" stroke="${gradeColor}" stroke-width="1.5" filter="url(#soft)"/>`)
+  out.push(`<text x="${chipX + chipW / 2}" y="370" text-anchor="middle" font-family="${MONO}" font-size="86" font-weight="700" fill="${gradeColor}">${scored.grade}</text>`)
 
-  for (const [i, line] of wrap(scored.verdict, 64).entries()) {
-    out.push(text(line, P, 418 + i * 38, { size: 27, fill: IN.text }))
-  }
+  headline(s, eco, scored).forEach((line, i) => {
+    out.push(text(line, P, 458 + i * 38, { size: 27, fill: IN.text }))
+  })
 
   /* --------------------------------------------------------- split bar */
-  const barY = 522
+  const barY = 562
   out.push(text(`WHERE ${fmt(listing)} TOKENS GO, EVERY MESSAGE`, P, barY, { size: 16, fill: IN.muted, spacing: 3.6 }))
   const bh = 36
   const bt = barY + 26
@@ -121,7 +121,7 @@ export function renderCardSvg (report) {
     { n: fmt(s.neverCalledPassive || 0), k: 'never once used', sub: 'described on every message', c: IN.amber },
     { n: fmt(s.unroutable || 0), k: 'out of reach', sub: 'dropped, with no error', c: IN.rose },
   ]
-  const tileY = 700
+  const tileY = 740
   const gap = 22
   const tw = Math.round((CW - gap * 2) / 3)
   tiles.forEach((t, i) => {
@@ -135,7 +135,7 @@ export function renderCardSvg (report) {
   })
 
   /* ------------------------------------------------------------- money */
-  const mY = 906
+  const mY = 946
   out.push(`<rect x="${P}" y="${mY}" width="${CW}" height="170" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
   out.push(`<rect x="${P}" y="${mY}" width="5" height="170" rx="2.5" fill="${IN.rose}" filter="url(#soft)"/>`)
   out.push(text('THE BILL FOR SKILLS NOBODY USED', P + 34, mY + 44, { size: 16, fill: IN.muted, spacing: 3.4 }))
@@ -153,7 +153,7 @@ export function renderCardSvg (report) {
   }
 
   /* ------------------------------------------------------------ saving */
-  const gY = 1106
+  const gY = 1146
   const saved = Number(s.savedTokensPerCallIfApplied) || 0
   out.push(`<rect x="${P}" y="${gY}" width="${CW}" height="170" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
   out.push(`<rect x="${P}" y="${gY}" width="5" height="170" rx="2.5" fill="${IN.emerald}" filter="url(#soft)"/>`)
@@ -167,15 +167,38 @@ export function renderCardSvg (report) {
   }
 
   /* ------------------------------------------------------------ footer */
-  out.push(rule(P, 1352, CW))
+  out.push(rule(P, 1392, CW))
   const cmd = 'npx token-coupons'
   const pw = Math.round(w(cmd, 22)) + 44
-  out.push(`<rect x="${P}" y="1390" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
-  out.push(text(cmd, P + 22, 1422, { size: 22, fill: IN.cyan }))
-  out.push(text('measure your own', CARD_WIDTH - P, 1422, { size: 19, fill: IN.muted, anchor: 'end' }))
+  out.push(`<rect x="${P}" y="1430" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
+  out.push(text(cmd, P + 22, 1462, { size: 22, fill: IN.cyan }))
+  out.push(text('measure your own', CARD_WIDTH - P, 1462, { size: 19, fill: IN.muted, anchor: 'end' }))
 
   out.push('</svg>')
   return out.join('\n')
+}
+
+/**
+ * The line under the score. Not an adjective for the grade: the two facts a
+ * person would want, which skills are buying nothing and what they cost, taken
+ * straight from the counts. Two lines at 27px, each inside the 64 character
+ * column.
+ */
+export function headline (summary, economics, scored) {
+  const never = Number((economics.neverCalledPassive || {}).count) || 0
+  const summoned = Number((economics.summonedOnlyPassive || {}).count) || 0
+  const wasted = scored.tokens.wasted
+
+  if (wasted <= 0 || (never === 0 && summoned === 0)) {
+    return ['Every description in your listing has been read at least once.']
+  }
+  const first = []
+  if (never > 0) first.push(`${fmt(never)} skill${never === 1 ? ' has' : 's have'} never been used.`)
+  if (summoned > 0) first.push(`${fmt(summoned)} more you only type yourself.`)
+  return [
+    first.join(' '),
+    `Their descriptions cost ${fmt(wasted)} tokens in every message you send.`,
+  ]
 }
 
 /* ------------------------------------------------------------- pieces */
@@ -295,7 +318,7 @@ export function renderCardPage (report) {
     '<div class="bar">',
     '<button type="button" id="png" class="go">Save PNG</button>',
     '<button type="button" id="copy" class="alt">Copy image</button>',
-    '<span class="msg" id="msg" role="status" aria-live="polite">1200 by 1500, saved at 2x for a crisp post.</span>',
+    '<span class="msg" id="msg" role="status" aria-live="polite">' + CARD_WIDTH + ' by ' + CARD_HEIGHT + ', saved at 2x for a crisp post.</span>',
     '</div>',
     '<p class="fine">Measured from the skills and session transcripts already on this machine, on ' + esc(day) +
       '. Nothing left the machine to make it.</p>',

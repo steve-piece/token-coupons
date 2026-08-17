@@ -5,10 +5,10 @@ changes, change it here first, then in the code, then in the tests.
 
 ## What the tool does, in one paragraph
 
-Every session, the agent client puts a listing of every installed skill (name
+Every session, Claude Code puts a listing of every installed skill (name
 plus description) into the system prompt, and every API call re-sends it. The
-listing has a silent budget (Claude Code: 1 percent of the context window),
-and on overflow the client drops descriptions least-invoked first, so a skill
+listing has a silent budget (1 percent of the context window), and on overflow
+Claude Code drops descriptions least-invoked first, so a skill
 can be installed, correct, and unreachable with no error anywhere.
 `token-coupons` reads the skills on disk and the session transcripts already
 on disk, and reports: what the listing costs, which skills the agent has never
@@ -19,12 +19,14 @@ The HTML report lets a person mark decisions; `apply` carries them out.
 Listed versus on disk: not every skill folder on the machine is in that
 listing. Claude Code reads `~/.claude/skills`, the `.claude/skills` of the
 project you are working in, and the skills of enabled plugins out of the plugin
-cache. Marketplace checkouts, plugin source repos, other projects, disabled
-plugins, older versions left in the cache, `~/.agents/skills` and
-`~/.cursor/skills` sit on disk but never reach the listing, so they cost
-nothing per message. Every economic number, recommendation and dollar figure
-runs over listed skills only; everything else is reported separately as
-`notLoaded`, so nobody thinks it was missed.
+cache, and those are the only folders this tool opens. Marketplace checkouts,
+plugin source repos, other projects, disabled plugins and older versions left
+in the cache do get seen, sit on disk, and never reach the listing, so they
+cost nothing per message. Folders belonging to other tools are out of scope
+entirely: they are not scanned, so they are not rows in the report at all.
+Every economic number, recommendation and dollar figure runs over listed skills
+only; everything else is reported separately as `notLoaded`, so nobody thinks
+it was missed.
 
 ## House rules (non-negotiable)
 
@@ -49,17 +51,17 @@ src/paths.mjs              homeDir(), claudeDir(), projectsDir(), pluginsDir(), 
 src/lib/util.mjs           readText, readJson, listDir, isDir, isSymlink, safeReal, walk,
                            parseFrontmatter (block scalars ok), setFrontmatterKey, fmt, money
 src/budget.mjs             CHARS_PER_TOKEN=4, detectContextWindow, listingBudget, listingCost, nameLineChars, toTokens
-src/discover.mjs           discoverSkills({cwd}) -> Skill[]   (see shape below; cwd decides which project skills are listed)
-src/calls.mjs              scanTranscripts(since) -> {calls: Call[], sessions: Session[]}, sessionStats(sessions, {since, today})
+src/discover.mjs           discoverSkills({cwd}) -> Skill[]   (Claude Code folders only, see shape below; cwd decides which project skills are listed)
+src/calls.mjs              scanTranscripts(since, {cacheTtlMinutes}) -> {calls: Call[], sessions: Session[]}, sessionStats(sessions, {since, today, cacheTtlMinutes})
 src/economics.mjs          economics(rows, budget) -> Economics
 src/recommend.mjs          recommend(rows, {economics, budget, thresholds, today}) -> {rows: RankedRow[], heaviest, thin, thresholds, counts}
 src/pricing.mjs            loadPricing(path?, {today}?) -> Pricing, costModel({wastedTokens, listingTokens, stats, pricing, cached, today}) -> Cost
-src/report.mjs             buildReport(opts) -> Report   (joins everything above; opts.cwd is passed on to discover)
+src/report.mjs             buildReport(opts) -> Report   (joins everything above; opts.cwd reaches discover, opts.cacheTtlMinutes reaches calls)
 src/render-text.mjs        renderText(report, {color, top}) -> string
 src/render-html.mjs        renderHtml(report) -> string  (self-contained, theme aware, interactive)
-src/score.mjs              scoreReport(report) -> {score, grade, verdict, parts, ratios, tokens}
+src/score.mjs              scoreReport(report) -> {score, grade, parts, ratios, tokens}
 src/render-card.mjs        renderCardSvg(report) -> svg ; renderCardPage(report) -> the postable scorecard
-src/apply.mjs              planApply(decisions, {skills}) -> Plan ; applyPlan(plan, {yes, trashDir}) -> Result
+src/apply.mjs              planApply(decisions, {skills}) -> Plan ; applyPlan(plan, {yes, trashDir}) -> Result ; cacheNote(result) -> the re-send warning
 data/pricing.json          the price table (shape below)
 plugin.json                portable Agent Plugins 1.0.0 manifest at the repo root
 .claude-plugin/marketplace.json    the one plugin marketplace that points at this repo
@@ -98,15 +100,16 @@ tests/dash-scan.mjs        fails on any forbidden dash in the repo
 }
 ```
 
-`loaded` follows the client's documented rules
+`loaded` follows Claude Code's documented rules
 (code.claude.com/docs/en/skills). Loaded: `~/.claude/skills` (real folders and
 symlinks, and a symlink there makes its target loaded), the `.claude/skills` of
 the project `cwd` is inside, and the skills of enabled plugins read out of the
 plugin cache (`~/.claude/plugins/installed_plugins.json` plus `enabledPlugins`
 in settings). Not loaded: marketplace checkouts, plugin source repos under
-`~/Projects` (`project-source`), another project's `.claude/skills`,
-`~/.agents/skills`, `~/.cursor/skills`, disabled plugins, and older versions
-left behind in the cache. `loadedReason` says which of those it was.
+`~/Projects` (`project-source`), another project's `.claude/skills`, disabled
+plugins, and older versions left behind in the cache. `loadedReason` says which
+of those it was. Folders no Claude Code install reads are not scanned, so they
+produce no row either way.
 
 `linkCopies()` runs last and folds a source copy into the loaded row it is the
 source of: a marketplace checkout of a cached plugin skill, or a repo under
@@ -174,13 +177,22 @@ Default thresholds (exported, overridable): `thinChars: 60`, `heavyChars: 600`,
 ### Session and stats (from calls.mjs)
 
 ```js
-Session: { id, project, firstTs, lastTs, apiCalls, models: {model: n}, inputTokens, cacheReadTokens, cacheWriteTokens, uncachedInputTokens, outputTokens, skillCalls }
-Stats:   { measured, sessions, days, firstSession, sessionsPerDay, sessionsPerWeek, apiCallsPerSessionMedian, apiCallsPerSessionMean, apiCallsTotal, inputTokensTotal, inputTokensPerWeek, cacheReadShare, cacheWriteShare, modelsSeen: [{model, apiCalls}], note }
+Session: { id, project, firstTs, lastTs, apiCalls, models: {model: n}, inputTokens, cacheReadTokens, cacheWriteTokens, uncachedInputTokens, outputTokens, skillCalls, listingWrites, cacheBreaks: {firstOfSession, modelSwitch, effortSwitch, cacheExpired} }
+Stats:   { measured, sessions, days, firstSession, sessionsPerDay, sessionsPerWeek, apiCallsPerSessionMedian, apiCallsPerSessionMean, apiCallsTotal, inputTokensTotal, inputTokensPerWeek, cacheReadShare, cacheWriteShare, listingWritesPerSession, listingWritesPerSessionMedian, cacheBreaks, cacheBreaksTotal, cacheTtlMinutes, modelsSeen: [{model, apiCalls}], note }
 ```
 
 `apiCalls` counts distinct `requestId` per transcript (one response is stored
 as several lines). Synthetic messages are skipped. Subagent transcripts are not
 read; everything is a lower bound.
+
+`listingWrites` counts the requests that pay for the listing at the cache write
+rate rather than the read rate, one per break of the cached prefix. A break is
+claimed only when both signals agree: the usage shows more cache creation than
+cache read (the prefix did not match), and one of four causes is present
+(`firstOfSession`, `modelSwitch`, `effortSwitch`, `cacheExpired`, the last being
+a gap longer than `cacheTtlMinutes`, default 60). Either signal alone is noisy.
+`listingWritesPerSession` is the mean, because the mean is what reconstructs the
+real total; the median is carried alongside it for reference.
 
 ### Pricing (data/pricing.json)
 
@@ -222,7 +234,8 @@ of failing the report.
 
 ```js
 costModel({ wastedTokens, listingTokens, stats, pricing, cached = true }) -> {
-  assumptions: { apiCallsPerSession, sessionsPerDay, sessionsPerWeek, measured, cached, note },
+  assumptions: { apiCallsPerSession, cacheWritesPerSession, cacheBreaks, cacheTtlMinutes,
+                 sessionsPerDay, sessionsPerWeek, measured, cached, note },
   perModel: [{
     id, label, vendor, tier, source, seenInTranscripts: bool,   // source is the pricing page URL, or null
     listing: { perCall, perChat, perDay, perWeek, perMonth },   // dollars, listing as a whole (month = week * 52/12)
@@ -239,11 +252,14 @@ costModel({ wastedTokens, listingTokens, stats, pricing, cached = true }) -> {
 }
 ```
 
-Cached math per chat: `tokens * (cacheWrite * 1 + cachedInput * (calls - 1)) / 1e6`
-(the first call of a session writes the cache, every later call reads it).
-When `cacheWrite` is null use `input` for the first call. Uncached:
-`tokens * input * calls / 1e6`. Per day and per week multiply by measured
-sessions per day and per week.
+Cached math per chat:
+`tokens * (cacheWrite * writes + cachedInput * (calls - writes)) / 1e6`, where
+`writes` is `stats.listingWritesPerSession` clamped to at least 1 and at most
+`calls`. The listing sits at the front of the cached prefix, so every break of
+that prefix pays the write rate again; assuming exactly one write per chat
+understates the bill. When `cacheWrite` is null use `input` for the writes.
+Uncached: `tokens * input * calls / 1e6`. Per day and per week multiply by
+measured sessions per day and per week.
 
 ### Report (from report.mjs)
 
@@ -340,12 +356,18 @@ applyPlan(plan, {yes, trashDir, now}) -> {
 ## CLI surface
 
 ```
-token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]
-                     [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--out=FILE] [--open] [--no-color]
+token-coupons report [--since=YYYY-MM-DD] [--cwd=DIR] [--window=N] [--fraction=F] [--budget=CHARS]
+                     [--pricing=FILE] [--uncached] [--cache-ttl=MIN] [--json] [--html=FILE]
+                     [--card=FILE] [--out=FILE] [--open] [--no-color]
 token-coupons apply <decisions.json> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
 token-coupons help
 ```
+
+`--cache-ttl=MIN` is how long the saved prompt survives with no traffic, and it
+decides when a gap counts as a cache break. The default is 60 minutes, which is
+what a Claude subscription gets; a plain API key is 5 unless the one hour cache
+is turned on.
 
 `--version` and `-v` print the version. `--today=YYYY-MM-DD` fixes what the tool
 calls today, and `--top=N` sets how many ranked rows the text report prints;
@@ -413,6 +435,12 @@ at or under it, none at twice over), `reach` (10) loses a tenth per unroutable
 skill. Grades start at 90 A, 75 B, 60 C, 45 D, and F below. The weighting is
 deliberately harsh on `earned`: a listing where most tokens buy no routing
 decision is failing at its only job.
+
+The line under the score is computed by `headline()`, not chosen from a table of
+sentences per grade. It names how many skills have never been used, how many are
+only ever typed by hand, and what those descriptions cost per message. An
+adjective for the band would read as filler and would not tell anyone which
+skills are the problem.
 
 Three constraints shape the card and must not be broken casually:
 

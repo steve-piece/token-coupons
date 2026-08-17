@@ -2,7 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { scoreReport, GRADES, WEIGHTS } from '../src/score.mjs'
-import { renderCardSvg, renderCardPage, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT } from '../src/render-card.mjs'
+import { renderCardSvg, renderCardPage, headline, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT } from '../src/render-card.mjs'
 import { sampleReport } from './fixtures/sample-report.mjs'
 
 /** A report shaped like the real one, with only the fields the score reads. */
@@ -52,8 +52,10 @@ describe('score', () => {
     assert.equal(scoreReport(report({ listing: 100, wasted: 0, unroutable: 40 })).parts.reach, 0, 'never negative')
   })
 
-  test('every grade band has a verdict, and an empty report does not throw', () => {
-    for (const g of GRADES) assert.ok(g.verdict.length > 10)
+  test('the grade bands descend, and an empty report does not throw', () => {
+    const mins = GRADES.map((g) => g.min)
+    assert.deepEqual(mins, [...mins].sort((a, b) => b - a), 'bands are ordered high to low')
+    assert.equal(GRADES[GRADES.length - 1].min, 0, 'the last band catches everything')
     const s = scoreReport({})
     assert.ok(Number.isFinite(s.score))
     assert.ok(s.grade)
@@ -131,5 +133,31 @@ describe('card helpers', () => {
     assert.equal(bigNum(20518), '21K')
     assert.equal(bigNum(15732252), '15.7M')
     assert.equal(bigNum(2400000000), '2.4B')
+  })
+})
+
+describe('headline', () => {
+  test('names what is buying nothing and what it costs', () => {
+    const lines = headline({}, {
+      neverCalledPassive: { count: 65 },
+      summonedOnlyPassive: { count: 7 },
+    }, { tokens: { wasted: 7777 } })
+    assert.equal(lines.length, 2)
+    assert.equal(lines[0], '65 skills have never been used. 7 more you only type yourself.')
+    assert.equal(lines[1], 'Their descriptions cost 7,777 tokens in every message you send.')
+    for (const l of lines) assert.ok(l.length <= 64, 'fits the 64 character column: ' + l)
+  })
+
+  test('drops the clause it has no number for, and reads right at one', () => {
+    const only = headline({}, { neverCalledPassive: { count: 1 }, summonedOnlyPassive: { count: 0 } }, { tokens: { wasted: 300 } })
+    assert.equal(only[0], '1 skill has never been used.')
+    const summonedOnly = headline({}, { neverCalledPassive: { count: 0 }, summonedOnlyPassive: { count: 4 } }, { tokens: { wasted: 300 } })
+    assert.equal(summonedOnly[0], '4 more you only type yourself.')
+  })
+
+  test('says so plainly when nothing is wasted', () => {
+    const clean = headline({}, { neverCalledPassive: { count: 0 }, summonedOnlyPassive: { count: 0 } }, { tokens: { wasted: 0 } })
+    assert.equal(clean.length, 1)
+    assert.match(clean[0], /read at least once/)
   })
 })

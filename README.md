@@ -1,6 +1,6 @@
 # token-coupons
 
-Find out what your installed agent skills cost on every message, which ones the agent never reads, and what to do about it.
+Find out what your installed Claude Code skills cost on every message, which ones the agent never reads, and what to do about it.
 
 [![npm version](https://img.shields.io/npm/v/token-coupons.svg)](https://www.npmjs.com/package/token-coupons)
 [![license MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
@@ -8,9 +8,9 @@ Find out what your installed agent skills cost on every message, which ones the 
 
 ## The problem in 20 seconds
 
-Every skill you install carries a description. The agent client puts a listing of every installed skill, name plus description, into the system prompt, and re-sends it with every single API call. Install 200 skills and you are paying for 200 descriptions on every message of every chat, whether or not any of them get used.
+Every skill you install carries a description. Claude Code puts a listing of every installed skill, name plus description, into the system prompt, and re-sends it with every single API call. Install 200 skills and you are paying for 200 descriptions on every message of every chat, whether or not any of them get used.
 
-That listing has a budget you never see. Claude Code gives it about 1 percent of the context window. When the listing goes over, the client keeps every name but starts dropping descriptions, least-invoked first, until the rest fits. A skill with no description in the listing cannot be picked by the agent on its own. It is installed, it is correct, and it is unreachable, and nothing anywhere prints an error.
+That listing has a budget you never see. Claude Code gives it about 1 percent of the context window. When the listing goes over, Claude Code keeps every name but starts dropping descriptions, least-invoked first, until the rest fits. A skill with no description in the listing cannot be picked by the agent on its own. It is installed, it is correct, and it is unreachable, and nothing anywhere prints an error.
 
 `token-coupons` reads the skills on your disk and the session transcripts already on your disk, and tells you: what the listing costs per message, which skills have never once been chosen, which ones are being dropped right now, what the waste costs in dollars per week and per month on the model you actually use, and one recommended action per skill. It counts only what Claude Code actually lists from where you run it (your `~/.claude/skills`, the current project's `.claude/skills`, and enabled plugins); everything else on disk is shown separately and costs nothing.
 
@@ -58,7 +58,7 @@ WHAT THE LISTING COSTS
   Allowance for the list: 40,000 characters, about 10,000 tokens (1 percent of a 1,000,000 token window)
   The list right now:     42,910 characters of descriptions, about 10,728 tokens
   Sent with every message: about 10,728 tokens
-  Over the allowance by 2,910 characters (1.07x). Past that line the client drops descriptions
+  Over the allowance by 2,910 characters (1.07x). Past that line Claude Code drops descriptions
   quietly, least used first, so those skills cannot be found by the agent.
 
   66    never used, but described on every message  7,225 tokens per message
@@ -89,7 +89,7 @@ RECOMMENDED
        Never used in these sessions, yet its 1,143 chars description costs 290 tokens a message.
 ```
 
-Reading the arithmetic in that block: 7,225 plus 689 is what those 73 descriptions spend today, and gating a skill still leaves its name line in the listing, so the saving is 7,467 rather than the full 7,914. The 3 that cannot be reached are counted inside the 66, not on top of them. The 94 "on disk but not listed" are skills Claude Code does not load from this folder (other projects, plugin source repos, disabled plugins, folders other tools read), so they are listed at the bottom for completeness and cost nothing.
+Reading the arithmetic in that block: 7,225 plus 689 is what those 73 descriptions spend today, and gating a skill still leaves its name line in the listing, so the saving is 7,467 rather than the full 7,914. The 3 that cannot be reached are counted inside the 66, not on top of them. The 94 "on disk but not listed" are skills Claude Code does not load from this folder (other projects, marketplace checkouts, plugin source repos, disabled plugins, older versions left in the plugin cache), so they are listed at the bottom for completeness and cost nothing.
 
 The full report has these sections: what the listing costs, what it costs in dollars, recommended (every skill ranked by how much it saves, with one short reason each), heaviest descriptions, thin descriptions, never called, called (with uses split into agent picked and you typed), on disk but not listed, and calls in your transcripts that match nothing installed today.
 
@@ -134,14 +134,14 @@ sequenceDiagram
 
 **Never called** means the agent has not once chosen this skill in the sessions read, while its description still goes out with every message.
 
-**Cannot be reached (unroutable)** means the listing is over its allowance and this skill's description is one the client is dropping, so the agent cannot pick it at all until something shrinks.
+**Cannot be reached (unroutable)** means the listing is over its allowance and this skill's description is one Claude Code is dropping, so the agent cannot pick it at all until something shrinks.
 
 **Only ever started by you typing its name (summoned only)** means the skill does get used, but never by the agent's own choice, so its description in the listing buys nothing.
 
 ### The cost model
 
-- Prices assume caching by default, because that is how these clients run: the listing is stored once per chat and re-read on later messages.
-- The first message of a chat pays the cache write rate; every message after it pays the cache read rate. `--uncached` prices the worst case, where nothing is cached.
+- Prices assume caching by default, because that is how Claude Code runs: the listing rides at the very front of the saved prompt, so it is written into the cache and re-read cheaply on later messages.
+- That saved copy does not last a whole chat. Starting a chat, switching model, switching effort, and coming back after the saved copy has expired each throw it away, and the listing is then paid at the write rate (roughly twice input) instead of the read rate (a tenth of it). How often that happens is measured from your own transcripts, not assumed; `--cache-ttl=MIN` sets how long the saved copy survives (default 60) and `--uncached` still prices the worst case, where nothing is cached at all.
 - Messages per chat and chats per week are measured from your own transcripts. When no history is found, the report says the numbers were assumed instead.
 - On a subscription, dollars are the wrong unit, so the report also gives the listing as a share of everything you send.
 - Prices are a data file (`data/pricing.json`) with a verified-on date, never code, and the report says so when that date is more than 60 days old.
@@ -185,8 +185,8 @@ The skill itself ships with `disable-model-invocation: true`, so it only ever ru
 
 ```text
 token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]
-                     [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--card=FILE]
-                     [--out=FILE] [--open] [--no-color] [--cwd=DIR]
+                     [--pricing=FILE] [--uncached] [--cache-ttl=MIN] [--json] [--html=FILE]
+                     [--card=FILE] [--out=FILE] [--open] [--no-color] [--cwd=DIR]
 token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
 token-coupons help
@@ -198,6 +198,8 @@ token-coupons help
   --budget=CHARS   a fixed allowance in characters, which wins over --fraction
   --pricing=FILE   a price list to use instead of the bundled data/pricing.json
   --uncached       price the worst case, where nothing is cached
+  --cache-ttl=MIN  minutes the saved prompt survives with no messages (default 60, the Claude
+                   subscription behaviour; use 5 on a plain API key)
   --json           print JSON instead of text
   --html=FILE      also write the interactive page
   --card=FILE      also write the shareable scorecard, which exports itself as a PNG
@@ -212,7 +214,7 @@ token-coupons help
 
 ## Privacy and safety
 
-- Local files only. It reads your skill folders (`~/.claude/skills`, `~/.agents/skills`, `~/.cursor/skills`, plugin marketplaces and caches, and a shallow pass over `~/Projects`), your session transcripts under `~/.claude/projects`, and `~/.claude/settings.json` (plus `settings.local.json`) for the model you run.
+- Local files only, and only the ones Claude Code itself reads. It reads your skill folders (`~/.claude/skills`, a project's own `.claude/skills`, plugin marketplaces and caches, and a shallow pass over `~/Projects`), your session transcripts under `~/.claude/projects`, and `~/.claude/settings.json` (plus `settings.local.json`) for the model you run. Folders belonging to other tools are never opened.
 - No network access, ever. Prices ship as a data file with a date on them; refreshing them is a human action, not a fetch.
 - `report` writes nothing unless you pass `--html` or `--out`.
 - `apply` writes nothing without `--yes`, and nothing it does is unrecoverable: shortcuts under `~/.claude/skills` are unlinked rather than followed, folders are moved to `~/.token-coupons/trash/<timestamp>` rather than erased, and copies owned by the plugin cache are refused with the `claude plugin uninstall` command to run instead. Every step prints its own undo line.
