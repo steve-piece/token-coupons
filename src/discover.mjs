@@ -76,8 +76,6 @@ export function classifyLocation (real, dir) {
   if (real.includes('/.claude/plugins/marketplaces/')) return { location: 'marketplace', editable: true }
   if (dir.startsWith(join(HOME, '.claude', 'skills')) && isSymlink(dir)) return { location: 'user-symlink', editable: true }
   if (dir.startsWith(join(HOME, '.claude', 'skills'))) return { location: 'user', editable: true }
-  if (dir.startsWith(join(HOME, '.agents', 'skills'))) return { location: 'agents-dir', editable: true }
-  if (dir.startsWith(join(HOME, '.cursor', 'skills'))) return { location: 'cursor', editable: true }
   if (dir.startsWith(join(HOME, 'Projects')) && /\/\.claude\/skills\/[^/]+$/.test(dir)) return { location: 'project', editable: true }
   if (dir.startsWith(join(HOME, 'Projects'))) return { location: 'project-source', editable: true }
   return { location: 'other', editable: true }
@@ -239,8 +237,6 @@ function loadedState (location, real, dir, { cwd, state, HOME }) {
   }
   if (location === 'marketplace') return { loaded: false, reason: 'marketplace checkout; the installed copy lives in the plugin cache', installKey: null }
   if (location === 'project-source') return { loaded: false, reason: 'source repo; not installed from here', installKey: null }
-  if (location === 'agents-dir') return { loaded: false, reason: '~/.agents/skills is read by other tools, not by Claude Code', installKey: null }
-  if (location === 'cursor') return { loaded: false, reason: '~/.cursor/skills is read by Cursor, not by Claude Code', installKey: null }
   return { loaded: false, reason: 'outside every folder Claude Code reads', installKey: null }
 }
 

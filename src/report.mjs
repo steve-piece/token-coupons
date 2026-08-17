@@ -74,6 +74,14 @@ export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null
     today: today || null,
   })
 
+  // One rate, derived from the model the transcripts actually ran on, so a row
+  // and the headline figure can never disagree about what a token costs.
+  const rate = dollarsPerTokenPerMonth(cost, economics)
+  if (rate !== null) {
+    for (const row of ranked.rows) row.dollarsPerMonth = round(row.listingTokens * rate, 4)
+    cost.dollarsPerTokenPerMonth = rate
+  }
+
   const totals = buildTotals(rows, sessions, calls, notLoaded)
   const summary = buildSummary({ rows: ranked.rows, economics, stats, pricing, cost, counts: ranked.counts, notLoaded })
 
@@ -181,6 +189,20 @@ export function joinCalls (skills, calls, budget) {
   return { rows, unmatchedCalls }
 }
 
+/**
+ * What one listing token costs per month, from the priced waste. Null when no
+ * model in the price list matches the transcripts, in which case rows carry no
+ * dollar figure rather than a guessed one.
+ */
+function dollarsPerTokenPerMonth (cost, economics) {
+  const wastedTokens = Number(economics.wastedPerCall.tokens) || 0
+  if (wastedTokens <= 0) return null
+  const seen = (cost.perModel || []).find((m) => m.seenInTranscripts) || (cost.perModel || [])[0]
+  const perMonth = seen && seen.wasted && Number(seen.wasted.perMonth)
+  if (!perMonth || !isFinite(perMonth)) return null
+  return perMonth / wastedTokens
+}
+
 function buildTotals (rows, sessions, calls, notLoaded = []) {
   const active = rows.filter((r) => r.mode === 'active')
   const passive = rows.filter((r) => r.mode !== 'active')
@@ -209,11 +231,24 @@ function buildSummary ({ rows, economics, stats, pricing, cost, counts, notLoade
   const per = economics.perSession
   const yours = yourModel(stats, pricing)
   let wastedPerWeekOnYourModel = null
+  let savedOnYourModel = null
   if (yours) {
     const key = normalizeModelId(yours.id)
     const priced = (cost.perModel || []).find((m) => normalizeModelId(m.id) === key)
     if (priced && priced.wasted && typeof priced.wasted.perWeek === 'number') {
       wastedPerWeekOnYourModel = { model: priced.label || priced.id, dollars: round(priced.wasted.perWeek), dollarsPerMonth: round(priced.wasted.perMonth) }
+      // What taking the recommendations is worth in money. The saving is a
+      // share of the waste, because gating leaves the name line behind, so it
+      // never quite reaches the full wasted figure.
+      const wastedTokens = Number(economics.wastedPerCall.tokens) || 0
+      const savedTokens = Number(economics.ifGated.savedTokensPerSession) || 0
+      const share = wastedTokens > 0 ? Math.min(1, savedTokens / wastedTokens) : 0
+      savedOnYourModel = {
+        model: priced.label || priced.id,
+        dollars: round(priced.wasted.perWeek * share),
+        dollarsPerMonth: round(priced.wasted.perMonth * share),
+        tokens: savedTokens,
+      }
     }
   }
   const actions = Object.assign({ active: 0, delete: 0, optimize: 0, review: 0, keep: 0, passive: 0 }, counts || {})
@@ -229,13 +264,15 @@ function buildSummary ({ rows, economics, stats, pricing, cost, counts, notLoade
     savedTokensPerCallIfApplied: nullable(economics.ifGated.savedTokensPerSession),
     fitsAfter: typeof economics.ifGated.fitsBudgetAfter === 'boolean' ? economics.ifGated.fitsBudgetAfter : null,
     wastedPerWeekOnYourModel,
+    savedOnYourModel,
     recommendedActions: actions,
   }
 }
 
 const SUMMARY_KEYS = [
   'skills', 'notListed', 'listingTokensPerCall', 'overBudgetRatio', 'neverCalledPassive', 'unroutable', 'summonedOnly',
-  'wastedTokensPerCall', 'savedTokensPerCallIfApplied', 'fitsAfter', 'wastedPerWeekOnYourModel', 'recommendedActions',
+  'wastedTokensPerCall', 'savedTokensPerCallIfApplied', 'fitsAfter', 'wastedPerWeekOnYourModel', 'savedOnYourModel',
+  'recommendedActions',
 ]
 
 /**

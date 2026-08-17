@@ -31,7 +31,7 @@ const TERMS = {
   listing: 'the list of every installed skill, name and description, that rides along in every message you send',
   routed: 'the agent read the description and chose this skill on its own',
   summoned: 'you typed the name of this skill yourself',
-  cached: 'the usual case: the list is stored once at the start of a chat and re-read cheaply after that',
+  cached: 'the usual case: the list is saved into the cache and re-read cheaply until something throws the saved copy away',
   uncached: 'the worst case: full price on every single message, useful as an upper bound',
   unroutable: 'installed, but the agent cannot see enough about it to choose it, and nothing warns you',
   window: 'the context window is how much text the model can hold at once. The skill list gets a fixed slice of it, and anything past that slice loses its description',
@@ -83,7 +83,7 @@ function header (r, s, economics, cost) {
   const nums = [
     [fmt(s.skills || 0), 'skills in your listing', 'the skills Claude Code puts in the list from this folder: your ~/.claude/skills, this project, and enabled plugins' + (s.notListed ? '. Another ' + fmt(s.notListed) + ' sit on disk but are not listed; see the section near the bottom' : '')],
     [fmt(s.listingTokensPerCall || 0), 'tokens in every message', TERMS.listing],
-    [ratioText, 'against its allowance', 'the client gives the skill list a fixed slice of the space a model can hold at once. Past that line it starts dropping descriptions, quietly'],
+    [ratioText, 'against its allowance', 'Claude Code gives the skill list a fixed slice of the space a model can hold at once. Past that line it starts dropping descriptions, quietly'],
     [fmt(s.neverCalledPassive || 0), 'never once used', 'the agent has never chosen these, yet you pay for their descriptions in every message'],
     [fmt(s.unroutable || 0), 'cannot be reached', TERMS.unroutable],
   ]
@@ -103,7 +103,7 @@ function header (r, s, economics, cost) {
   if (r.since) meta.push('sessions since ' + esc(r.since))
   if (economics.budget && economics.budget.contextWindow) {
     meta.push('<span title="' + attr(TERMS.window) + '">allowance ' + fmt(economics.budget.chars) + ' characters out of a ' +
-      fmt(economics.budget.contextWindow) + ' token context window (' + esc(economics.budget.source || 'client default') + ')</span>')
+      fmt(economics.budget.contextWindow) + ' token context window (' + esc(economics.budget.source || 'Claude Code default') + ')</span>')
   }
   if (cost.assumptions && cost.assumptions.measured === false) meta.push('no session history found, so the rates below are assumed')
 
@@ -114,6 +114,7 @@ function header (r, s, economics, cost) {
     '<button type="button" id="theme-toggle" class="ghost" title="switch between the light and dark version of this page">Dark or light</button>',
     '</div>',
     '<p class="lede">Every message you send re-sends a list of every skill you have installed, name and description. ' +
+      'Claude Code builds that list and puts it at the front of every request. ' +
       'This page shows what that list costs, which skills have never been used, which ones cannot be reached at all, ' +
       'and lets you mark what to do about each of them. The cost is counted in tokens, which are the small chunks of ' +
       'text (about four characters each) that everything you send is billed by.</p>',
@@ -159,7 +160,7 @@ function howToRead () {
     '<dt>Tokens</dt><dd>Small chunks of text, about four characters each. Everything you send is billed by the token, and the skill list rides along in every message.</dd>',
     '<dt>Passive and active</dt><dd>A passive skill sends its whole description every message so the agent can pick it. An active skill sends only its name and runs when you type it. One line in the skill file decides which.</dd>',
     '<dt>Routed and summoned</dt><dd>Routed means the agent read the description and chose the skill on its own. Summoned means you typed its name.</dd>',
-    '<dt>Out of reach</dt><dd>The list has a size allowance. Past it, the client quietly drops descriptions, least used first. A skill with no description in the list cannot be picked by the agent, and nothing tells you.</dd>',
+    '<dt>Out of reach</dt><dd>The list has a size allowance. Past it, Claude Code quietly drops descriptions, least used first. A skill with no description in the list cannot be picked by the agent, and nothing tells you.</dd>',
     '<dt>Your decision</dt><dd>Keep, Passive, Active, Optimize (rewrite the description shorter), or Delete (moved to a trash folder, never erased). Nothing changes until you paste your choices to the agent.</dd>',
     '</dl>',
     '</details>',
@@ -309,7 +310,7 @@ function table (skills) {
     const where = [s.plugin ? 'from the ' + s.plugin + ' plugin' : '', locationLabel(s.location)].filter(Boolean).join(', ')
     const marks = []
     if (flags.includes('unroutable')) marks.push('<span class="badge danger" title="' + attr(TERMS.unroutable) + '">out of reach</span>')
-    if (flags.includes('capped')) marks.push('<span class="badge warn" title="its description is longer than the client will read, so the tail is thrown away">cut off</span>')
+    if (flags.includes('capped')) marks.push('<span class="badge warn" title="its description is longer than Claude Code will read, so the tail is thrown away">cut off</span>')
     if (s.sourcePath) marks.push('<span class="badge" title="' + attr('the editable source of this plugin skill is on this machine at ' + s.sourcePath + '; apply edits that copy, and the installed copy refreshes on the next plugin update') + '">source on disk</span>')
     return [
       '<tr data-index="' + i + '" data-flags="' + attr(flags.join(' ')) + '" data-changed="no">',
@@ -422,7 +423,7 @@ function heaviestSection (r) {
         '<span class="lm">' + fmt(s.calls || 0) + ' uses</span>' +
         (needs
           ? '<span class="badge warn" title="' + attr(flags.includes('capped')
-            ? 'this one is long enough that the client cuts it off, so the tail of it is never read at all'
+            ? 'this one is long enough that Claude Code cuts it off, so the tail of it is never read at all'
             : 'long enough to be worth a rewrite') + '">needs a rewrite</span>'
           : '') + '</li>'
     }).join(''),
@@ -455,7 +456,7 @@ function unroutableSection (economics) {
   return [
     '<section class="section" id="unroutable">',
     '<div class="sechead"><h2>Installed but out of reach</h2></div>',
-    '<p class="sub">The skill list is over its allowance, so the client keeps the names and throws away the descriptions, ' +
+    '<p class="sub">The skill list is over its allowance, so Claude Code keeps the names and throws away the descriptions, ' +
       'starting with the least used. Without a description the agent has nothing to go on, so these can never be chosen. ' +
       'No error message tells you this is happening. They still work if you type the name yourself.</p>',
     '<ul class="list">',
@@ -546,8 +547,6 @@ function locationLabel (loc) {
     project: 'this project',
     marketplace: 'marketplace',
     'plugin-cache': 'plugin cache',
-    'agents-dir': 'agents folder',
-    cursor: 'cursor folder',
     other: 'elsewhere',
   }[loc] || String(loc || 'elsewhere')
 }
@@ -1017,7 +1016,7 @@ function script () {
     add('Used', (s.calls || 0) + ' times: ' + (s.passiveCalls || 0) + ' picked by the agent, ' + (s.activeCalls || 0) + ' typed by you' + (s.lastSeen ? ', last on ' + s.lastSeen : ''));
     add('Why', rec.reason || '');
     var plain = { 'never-called': 'never used', 'summoned-only': 'only you type it', 'heavy-description': 'long description',
-      'thin-description': 'very short description', 'capped': 'cut off by the client', 'unroutable': 'out of reach',
+      'thin-description': 'very short description', 'capped': 'cut off by Claude Code', 'unroutable': 'out of reach',
       'dormant-active': 'gated and never used', 'not-editable': 'plugin cache copy', 'stale': 'not edited in months' };
     if ((rec.flags || []).length) add('Flags', rec.flags.map(function (f) { return plain[f] || f; }).join(', '));
     td.appendChild(dl);

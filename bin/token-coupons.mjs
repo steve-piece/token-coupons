@@ -10,7 +10,7 @@
 
 import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, relative, sep } from 'node:path'
 import { spawn } from 'node:child_process'
 
 import { buildReport } from '../src/report.mjs'
@@ -70,7 +70,7 @@ export function parseArgs (argv) {
 export function helpText () {
   return [
     'token-coupons v' + version(),
-    'Find out what your installed agent skills cost on every message, which ones the agent never reads, and what to do about it.',
+    'Find out what your installed Claude Code skills cost on every message, which ones the agent never reads, and what to do about it.',
     '',
     'Usage',
     '  token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]',
@@ -161,7 +161,10 @@ export async function runReport (flags, io) {
 
   const notes = []
   if (flags.card) {
-    const full = writeFile(flags.card, renderCardPage(report))
+    // When both pages are written, the card links to the list, so a reader can
+    // go from the headline number to the row that produced it.
+    const listHref = flags.html ? relativeHref(flags.card, flags.html) : null
+    const full = writeFile(flags.card, renderCardPage(report, { listHref, listCount: report.summary.skills }))
     notes.push('wrote the share card to ' + tildify(full))
     if (flags.open && !flags.html) openFile(full)
   }
@@ -187,6 +190,12 @@ export async function runReport (flags, io) {
     for (const n of notes) io.out(n + '\n')
   }
   return 0
+}
+
+/** The href that reaches `to` from the folder holding `from`. */
+export function relativeHref (from, to) {
+  const rel = relative(dirname(resolve(from)), resolve(to))
+  return rel.split(sep).map(encodeURIComponent).join('/')
 }
 
 export async function runApply (positional, flags, io) {

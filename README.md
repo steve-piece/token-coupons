@@ -50,46 +50,48 @@ npx token-coupons@latest apply decisions.json --yes   # makes the changes
 Real output from the author's machine, trimmed to fit here (`report --since=2026-06-01 --no-color`):
 
 ```text
-token-coupons v0.1.0 (generated 2026-08-15, sessions since 2026-06-01, 159 sessions read)
+token-coupons v0.1.0 (generated 2026-08-17, sessions since 2026-06-01, 167 sessions read)
 
 WHAT THE LISTING COSTS
-  Skills in your listing: 92 (92 let the agent pick them, 0 start only when you type their name)
-                          plus 94 on disk but not listed, see ON DISK, NOT LISTED
+  Skills in your listing: 94 (93 let the agent pick them, 1 start only when you type their name)
+                          plus 81 on disk but not listed, see ON DISK, NOT LISTED
   Allowance for the list: 40,000 characters, about 10,000 tokens (1 percent of a 1,000,000 token window)
-  The list right now:     42,910 characters of descriptions, about 10,728 tokens
-  Sent with every message: about 10,728 tokens
-  Over the allowance by 2,910 characters (1.07x). Past that line Claude Code drops descriptions
+  The list right now:     43,296 characters of descriptions, about 10,824 tokens, plus 8 tokens of name lines
+  Sent with every message: about 10,832 tokens
+  Over the allowance by 3,296 characters (1.08x). Past that line Claude Code drops descriptions
   quietly, least used first, so those skills cannot be found by the agent.
 
-  66    never used, but described on every message  7,225 tokens per message
+  65    never used, but described on every message  7,089 tokens per message
   3     cannot be reached (their description is being dropped to fit)
   7     only ever started by you typing their name  689 tokens per message
 
-  Set those 73 skills to start only when you type their name and you save about 7,467 tokens on
+  Set those 72 skills to start only when you type their name and you save about 7,338 tokens on
   every message, and the list fits its allowance again.
 
 WHAT IT COSTS IN DOLLARS
-  15,238,064 tokens wasted per week, 66,031,611 per month, from 7,913 unused tokens riding in every message.
+  15,748,425 tokens wasted per week, 68,243,175 per month, from 7,777 unused tokens in every message.
 
     model                     wasted/week  wasted/month  uncached/week  whole list/month
-  * Claude Opus 5                   $8.72        $37.80         $76.19            $51.29
-  * Claude Sonnet 5                 $3.49        $15.12         $30.48            $20.52
-    GPT-5.6 Sol                     $8.14        $35.28         $76.19            $47.87
+  * Claude Opus 5                  $12.04        $52.18         $78.74            $72.68
+  * Claude Sonnet 5                 $4.82        $20.87         $31.50            $29.07
+    GPT-5.6 Sol                     $9.85        $42.67         $78.74            $59.44
   * seen in your own sessions
-  Assumes 131 messages per chat and 14.7 chats per week, measured from your sessions.
-  Share of everything you send: the list is 1.99 percent of your input, the wasted part is 1.47 percent.
+  Assumes 135 messages per chat and 15 chats per week, measured from your sessions.
+  The saved copy is thrown away and rewritten 3.76 times per chat, measured: 127 chat starts,
+  396 gaps longer than 60 minutes, 91 model switches, 5 effort switches.
+  Share of everything you send: the list is 2.02 percent of your input, the wasted part is 1.45 percent.
 
 RECOMMENDED
-  48 to gate (active), 25 to delete, 8 to rewrite (optimize), 11 to keep
+  41 to gate (active), 25 to delete, 8 to rewrite (optimize), 20 to keep
 
    #  action    saves/msg  skill
    1  delete          384  typescript-e2e-testing
-       Never used, last edited 148 days ago, 2,327 chars sent every message.
+       Never used, last edited 150 days ago, 2,327 chars sent every message.
    2  active          286  app-review
        Never used in these sessions, yet its 1,143 chars description costs 290 tokens a message.
 ```
 
-Reading the arithmetic in that block: 7,225 plus 689 is what those 73 descriptions spend today, and gating a skill still leaves its name line in the listing, so the saving is 7,467 rather than the full 7,914. The 3 that cannot be reached are counted inside the 66, not on top of them. The 94 "on disk but not listed" are skills Claude Code does not load from this folder (other projects, marketplace checkouts, plugin source repos, disabled plugins, older versions left in the plugin cache), so they are listed at the bottom for completeness and cost nothing.
+Reading the arithmetic in that block: 7,089 plus 689 is what those 72 descriptions spend today, and gating a skill still leaves its name line in the list, so the saving is 7,338 rather than the full 7,778. The 3 that cannot be reached are counted inside the 65, not on top of them. The 81 on disk but not listed are skills Claude Code does not put in the list from this folder (other projects, marketplace checkouts, plugin source repos, disabled plugins, older versions left in the plugin cache), so they are listed at the bottom for completeness and cost nothing.
 
 The full report has these sections: what the listing costs, what it costs in dollars, recommended (every skill ranked by how much it saves, with one short reason each), heaviest descriptions, thin descriptions, never called, called (with uses split into agent picked and you typed), on disk but not listed, and calls in your transcripts that match nothing installed today.
 
@@ -141,7 +143,7 @@ sequenceDiagram
 ### The cost model
 
 - Prices assume caching by default, because that is how Claude Code runs: the listing rides at the very front of the saved prompt, so it is written into the cache and re-read cheaply on later messages.
-- That saved copy does not last a whole chat. Starting a chat, switching model, switching effort, and coming back after the saved copy has expired each throw it away, and the listing is then paid at the write rate (roughly twice input) instead of the read rate (a tenth of it). How often that happens is measured from your own transcripts, not assumed; `--cache-ttl=MIN` sets how long the saved copy survives (default 60) and `--uncached` still prices the worst case, where nothing is cached at all.
+- That saved copy does not last a whole chat: starting a chat, switching model, switching effort, and coming back after it has expired each throw it away, and the listing is then paid at the write rate (roughly twice input) rather than the read rate (a tenth of it). `/compact` is not one of those. How often it happens is measured from your own transcripts; `--cache-ttl=MIN` sets how long the saved copy survives (default 60, the Claude subscription behaviour) and `--uncached` still prices the worst case, where nothing is cached at all.
 - Messages per chat and chats per week are measured from your own transcripts. When no history is found, the report says the numbers were assumed instead.
 - On a subscription, dollars are the wrong unit, so the report also gives the listing as a share of everything you send.
 - Prices are a data file (`data/pricing.json`) with a verified-on date, never code, and the report says so when that date is more than 60 days old.

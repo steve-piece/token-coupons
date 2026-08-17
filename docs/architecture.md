@@ -19,11 +19,12 @@ The HTML report lets a person mark decisions; `apply` carries them out.
 Listed versus on disk: not every skill folder on the machine is in that
 listing. Claude Code reads `~/.claude/skills`, the `.claude/skills` of the
 project you are working in, and the skills of enabled plugins out of the plugin
-cache, and those are the only folders this tool opens. Marketplace checkouts,
-plugin source repos, other projects, disabled plugins and older versions left
-in the cache do get seen, sit on disk, and never reach the listing, so they
-cost nothing per message. Folders belonging to other tools are out of scope
-entirely: they are not scanned, so they are not rows in the report at all.
+cache, and those are the only folders this tool opens. Some of what it passes
+on the way is still not listed: marketplace checkouts, plugin source repos,
+other projects, disabled plugins and older versions left in the cache sit on
+disk without reaching the listing, so they cost nothing per message. Folders
+belonging to other tools are out of scope entirely. They are never scanned, so
+they are not rows in the report at all, not even unlisted ones.
 Every economic number, recommendation and dollar figure runs over listed skills
 only; everything else is reported separately as `notLoaded`, so nobody thinks
 it was missed.
@@ -63,7 +64,6 @@ src/score.mjs              scoreReport(report) -> {score, grade, parts, ratios, 
 src/render-card.mjs        renderCardSvg(report) -> svg ; renderCardPage(report) -> the postable scorecard
 src/apply.mjs              planApply(decisions, {skills}) -> Plan ; applyPlan(plan, {yes, trashDir}) -> Result ; cacheNote(result) -> the re-send warning
 data/pricing.json          the price table (shape below)
-plugin.json                portable Agent Plugins 1.0.0 manifest at the repo root
 .claude-plugin/marketplace.json    the one plugin marketplace that points at this repo
 skills/token-coupons/      the Agent Skill that drives the loop (SKILL.md, references/, evals/)
 tests/*.test.mjs           node:test, one file per module, fixture built under a temp TOKEN_COUPONS_HOME
@@ -87,7 +87,7 @@ tests/dash-scan.mjs        fails on any forbidden dash in the repo
   plugin: 'bytheslice' | null,
   marketplace: 'bytheslice' | null,     // the cache or checkout folder the row came out of
   installKey: 'bytheslice@steve-piece' | null,   // plugin@marketplace, from installed_plugins.json
-  location: 'user' | 'user-symlink' | 'project' | 'project-source' | 'marketplace' | 'plugin-cache' | 'agents-dir' | 'cursor' | 'other',
+  location: 'user' | 'user-symlink' | 'project' | 'project-source' | 'marketplace' | 'plugin-cache' | 'other',
   editable: true | false,               // false only for plugin-cache
   loaded: true | false,                 // true iff Claude Code lists it from the cwd this run was given
   loadedReason: 'enabled plugin x@y',   // one plain sentence, set either way
@@ -109,7 +109,9 @@ in settings). Not loaded: marketplace checkouts, plugin source repos under
 `~/Projects` (`project-source`), another project's `.claude/skills`, disabled
 plugins, and older versions left behind in the cache. `loadedReason` says which
 of those it was. Folders no Claude Code install reads are not scanned, so they
-produce no row either way.
+produce no row either way; `classifyLocation` still carries branches for other
+tools' skill folders, but no scanned root reaches them, so those values are dead
+and belong out of the code.
 
 `linkCopies()` runs last and folds a source copy into the loaded row it is the
 source of: a marketplace checkout of a cached plugin skill, or a repo under
@@ -276,7 +278,7 @@ measured sessions per day and per week.
   notLoaded: [{ name, path, location, reason, plugin, installKey, mode,
                 descriptionChars, calls, activeCalls, passiveCalls, lastSeen }],
   unmatchedCalls: [{skill, calls}],
-  summary: {                     // the twelve fields the agent reads first
+  summary: {                     // the thirteen fields the agent reads first
     skills, notListed, listingTokensPerCall, overBudgetRatio, neverCalledPassive, unroutable, summonedOnly,
     wastedTokensPerCall, savedTokensPerCallIfApplied, fitsAfter,
     wastedPerWeekOnYourModel: { model, dollars, dollarsPerMonth } | null,
@@ -293,8 +295,8 @@ nothing in it is scored or recommended on.
 
 Every listed skill carries a recommendation, ranks run 1 to N with no gaps,
 `impactTokensPerCall` never rises as rank rises, and the six counts in
-`recommendedActions` add up to `totals.skills`. `summary` has twelve keys, and
-`pickSummary(report)` returns all twelve with `null` for anything unknown.
+`recommendedActions` add up to `totals.skills`. `summary` has thirteen keys, and
+`pickSummary(report)` returns all thirteen with `null` for anything unknown.
 
 `totals` keeps the fields the old report had: `skills, declaredActive,
 declaredPassive, gateDeclaredAnywhere, transcriptsRead, callsTotal,

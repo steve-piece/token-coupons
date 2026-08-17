@@ -65,7 +65,7 @@ export function economics (rows, budget) {
       count: overflow.length,
       names: overflow.map((r) => r.names[0]),
       note: overflow.length
-        ? 'listed by name only: the client drops descriptions least-invoked first when the budget overflows, so these cannot be routed to and no error says so'
+        ? 'listed by name only: Claude Code drops descriptions least-invoked first when the budget overflows, so these cannot be routed to and no error says so'
         : 'the passive listing fits the budget, nothing is being dropped',
     },
     summonedOnlyPassive: {

@@ -72,7 +72,7 @@ const BASE = [
     gateDeclared: false, gateValue: null,
     description: 'Turn a finished design file into working front end code, and push finished code back into the design file so the two never drift apart. Use whenever someone shares a design link, asks to build a screen from a mockup, asks to implement a component from the design system, asks to update an existing design to match what shipped, or asks whether the code and the design still agree. Reads frames, layers, variables, text styles, color styles, spacing tokens, component variants, and the naming conventions the team already uses, then writes components that reuse the existing primitives rather than inventing new ones. Covers responsive behavior at every breakpoint the design declares, dark and light variants, hover, focus, disabled and loading states, empty states, error states, and the accessible names every control needs. Also covers the reverse direction: taking a page that already exists in the product and generating the design file for it, including auto layout, spacing tokens, and a component library the designers can edit. Use for phrases like build this screen, implement this mockup, code this design, match the design, sync design and code, push this page into the design file, generate a design from this component, audit the design system, or check whether the design and the build have drifted. Works with a single frame, a whole page, a flow of several screens, or an entire design system, and it always asks which existing components to reuse before it writes anything new.',
     action: 'optimize',
-    reason: 'The description is long enough that the client cuts it off, so part of it is never even read. It lives inside a plugin cache folder, so the rewrite belongs in the plugin source repository, not here.',
+    reason: 'The description is long enough that Claude Code cuts it off, so part of it is never even read. It lives inside a plugin cache folder, so the rewrite belongs in the plugin source repository, not here.',
     baseFlags: ['heavy-description', 'capped'],
   },
   {
@@ -213,7 +213,7 @@ const BASE = [
   {
     name: 'brand-voice',
     plugin: null,
-    location: 'agents-dir',
+    location: 'user',
     editable: true,
     mode: 'passive',
     calls: 3, activeCalls: 2, passiveCalls: 1,

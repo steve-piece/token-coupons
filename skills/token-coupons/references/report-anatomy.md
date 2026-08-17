@@ -11,7 +11,7 @@ related: [decisions-file, description-rewrite, cost-model, listing-budget]
 
 ## Read this much, no more
 
-`summary` is twelve fields. It is the only block that belongs in chat. Everything else exists so the
+`summary` is thirteen fields. It is the only block that belongs in chat. Everything else exists so the
 HTML page can render it and so `apply` can act on it. Reading `skills` into the conversation costs
 more than the waste being reported.
 
@@ -32,16 +32,16 @@ changes if the recommendations are taken, and whether the listing fits afterward
 If `summary.notListed` is large, give it one clause and move on: that many skills sit on disk without
 being in the listing, so they cost nothing per message. It is reassurance, never the lead.
 
-## The twelve summary fields
+## The thirteen summary fields
 
 | Field | Plain reading |
 |---|---|
 | `skills` | how many skills are in the listing from this folder, counted once each, symlinks and plugin source copies folded in |
 | `notListed` | how many more sit on disk outside the listing: other projects, marketplace checkouts, disabled plugins. They cost nothing per message and are scored nowhere |
 | `listingTokensPerCall` | what the whole name plus description listing costs on every API call |
-| `overBudgetRatio` | 1.0 means it exactly fills the space the client allows; 2.5 means two and a half times over |
+| `overBudgetRatio` | 1.0 means it exactly fills the space Claude Code allows; 2.5 means two and a half times over |
 | `neverCalledPassive` | open to the router, never once chosen by it |
-| `unroutable` | listed by name only, because the client dropped their descriptions to fit |
+| `unroutable` | listed by name only, because Claude Code dropped their descriptions to fit |
 | `summonedOnly` | only ever reached by typing a slash, yet still paying to sit in the router's list |
 | `wastedTokensPerCall` | never called plus summoned only, per API call |
 | `savedTokensPerCallIfApplied` | what the recommendations recover, per API call |
@@ -51,7 +51,7 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 
 ## The other blocks, and who they are for
 
-- `budget`: the space the client gives the listing, the context window it was derived from, and
+- `budget`: the space Claude Code gives the listing, the context window it was derived from, and
   where that window was read from. See [listing-budget](listing-budget.md).
 - `totals`: raw counts (skills, how many declare the gate, transcripts read, calls matched), plus
   `onDiskNotListed`, `notListedByReason` and `withSourceCopy`. Useful when someone doubts a number.
@@ -59,8 +59,7 @@ being in the listing, so they cost nothing per message. It is reassurance, never
   plain `note` sentence you can quote as is.
 - `stats`: sessions, API calls per session, models seen, input tokens per week, cache shares. This is
   the multiplier that turns a listing size into money.
-- `cost`: per model dollars per week and per month, cached and uncached, the wasted tokens per week and month in `cost.volume`, plus the share of input line. See
-  [cost-model](cost-model.md).
+- `cost`: per model dollars per week and per month, cached and uncached, the wasted tokens per week and month in `cost.volume`, plus the share of input line. `cost.assumptions` is where those dollars come from and is the block to quote when someone asks why: requests per chat, chats per week, whether it was `measured`, and `cacheWritesPerSession` with the `cacheBreaks` behind it (chat starts, model switches, effort switches, gaps past `cacheTtlMinutes`). See [cost-model](cost-model.md).
 - `skills`: every skill as a ranked row. The page renders this. Do not paste it.
 - `heaviest` and `thin`: the longest descriptions, and the ones too short to route to.
 - `notLoaded`: every skill on disk that Claude Code does not list from this folder, each with a plain

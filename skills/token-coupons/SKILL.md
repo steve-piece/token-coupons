@@ -106,6 +106,9 @@ Stop. Do not run `apply`, do not edit a SKILL.md, do not delete anything while y
    ```
 5. Keep the undo line each step prints in your reply. If the command exits 1, name the steps that
    failed instead of reporting success.
+6. `apply` ends with a note about the skill list having changed. Relay it: Claude Code picks the change
+   up inside a chat that is already running, so the next message in any chat still open re-sends its
+   whole conversation at full price once. Suggest `/clear` so that lands on an empty conversation.
 
 ## Step 6. Rewrite the Optimize descriptions
 

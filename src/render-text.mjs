@@ -46,7 +46,7 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   if (r.since) meta.push('sessions since ' + r.since)
   if (totals.transcriptsRead !== undefined) meta.push(fmt(totals.transcriptsRead) + ' sessions read')
   line(paint.bold('token-coupons') + ' ' + (r.tool && r.tool.version ? 'v' + r.tool.version + ' ' : '') + paint.dim('(' + meta.join(', ') + ')'))
-  line(paint.dim('Every message you send carries a list of every installed skill, name and description. This is what that list costs.'))
+  line(paint.dim('Claude Code carries a list of every installed skill, name and description, in every message you send. This is what that list costs.'))
   line(paint.dim('Cost is counted in tokens: small chunks of text, about four characters each, and everything you send is billed by the token.'))
 
   // WHAT THE LISTING COSTS
@@ -61,7 +61,7 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   line('  Sent with every message: about ' + fmt(per.totalListingTokens || 0) + ' tokens')
   if (per.fitsBudget === false) {
     line('  ' + paint.red('Over the allowance by ' + fmt(per.overBudgetBy || 0) + ' characters (' + trimNum(per.overBudgetRatio) + 'x).') +
-      ' Past that line the client drops descriptions quietly, least used first, so those skills cannot be found by the agent.')
+      ' Past that line Claude Code drops descriptions quietly, least used first, so those skills cannot be found by the agent.')
   } else if (per.fitsBudget === true) {
     line('  ' + paint.green('Fits inside the allowance.') + ' Nothing is being dropped.')
   }
@@ -210,7 +210,7 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   const un = Array.isArray(r.unmatchedCalls) ? r.unmatchedCalls : []
   if (!un.length) line('  every recorded skill call matched an installed skill')
   else {
-    line(paint.dim('  calls in the transcripts that match no skill on disk today: removed, renamed, a plugin no longer present, or a skill built into the client itself'))
+    line(paint.dim('  calls in the transcripts that match no skill on disk today: removed, renamed, a plugin no longer present, or a skill built into Claude Code itself'))
     for (const u of un) line('  ' + u.skill + paint.dim('  ' + uses(u.calls)))
   }
 
@@ -240,7 +240,7 @@ function painter (color) {
 }
 
 function describeBudget (b) {
-  if (!b || !b.contextWindow) return 'client default'
+  if (!b || !b.contextWindow) return 'Claude Code default'
   if (b.source === 'SLASH_COMMAND_TOOL_CHAR_BUDGET') return 'fixed by SLASH_COMMAND_TOOL_CHAR_BUDGET'
   return trimNum((b.fraction || 0) * 100) + ' percent of a ' + fmt(b.contextWindow) + ' token window, ' + (b.windowSource || 'detected')
 }

@@ -1,12 +1,14 @@
 {
   "name": "token-coupons",
   "version": "0.1.0",
-  "description": "Find out what your installed agent skills cost you every session, which ones the agent never reads, and what to do about it. Zero dependencies, reads local files only.",
+  "description": "Find out what your installed Claude Code skills cost on every message, which ones the agent never reads, and what to do about it. Zero dependencies, reads local files only.",
   "keywords": [
-    "agent-skills",
     "claude-code",
+    "claude",
+    "agent-skills",
     "skills",
     "context-window",
+    "prompt-cache",
     "tokens",
     "cost",
     "cli"
@@ -34,7 +36,6 @@
     "src",
     "data",
     "skills",
-    "plugin.json",
     ".claude-plugin",
     "README.md",
     "LICENSE"

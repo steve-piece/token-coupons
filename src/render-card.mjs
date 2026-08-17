@@ -16,7 +16,7 @@ import { scoreReport } from './score.mjs'
 export const CARD_WIDTH = 1200
 export const CARD_HEIGHT = 1540
 
-const IN = {
+export const INK = {
   ink: '#070A12',
   panel: '#0E1422',
   panelUp: '#131B2C',
@@ -29,9 +29,11 @@ const IN = {
   amber: '#FFC069',
 }
 
+const IN = INK
+
 const GRADE_COLOR = { A: IN.emerald, B: IN.emerald, C: IN.amber, D: IN.rose, F: IN.rose }
 
-const MONO = "'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
+export const MONO = "'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
 
 /** Monospace advance width, near enough for pill and bar geometry. */
 const w = (text, size) => String(text).length * size * 0.6
@@ -77,9 +79,9 @@ export function renderCardSvg (report) {
   out.push(rule(P, 126, CW))
 
   /* ------------------------------------------------------------- score */
-  out.push(text('SKILL LISTING SCORE', P, 236, { size: 17, fill: IN.muted, spacing: 4.2 }))
+  out.push(text('SKILL LISTING SCORE', P, 176, { size: 17, fill: IN.muted, spacing: 4.2 }))
 
-  out.push(`<text x="${P - 8}" y="396" font-family="${MONO}" font-size="196" font-weight="700" fill="${gradeColor}" filter="url(#bigglow)">${scored.score}</text>`)
+  out.push(`<text x="${P - 8}" y="396" font-family="${MONO}" font-size="196" font-weight="700" fill="${IN.text}" filter="url(#whiteglow)">${scored.score}</text>`)
   const scoreW = w(String(scored.score), 196)
   out.push(text('/100', P - 8 + scoreW + 18, 396, { size: 46, fill: IN.muted, weight: 500 }))
 
@@ -158,10 +160,18 @@ export function renderCardSvg (report) {
   out.push(`<rect x="${P}" y="${gY}" width="${CW}" height="170" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
   out.push(`<rect x="${P}" y="${gY}" width="5" height="170" rx="2.5" fill="${IN.emerald}" filter="url(#soft)"/>`)
   out.push(text('WHAT ONE PASS GIVES BACK', P + 34, gY + 44, { size: 16, fill: IN.muted, spacing: 3.4 }))
-  out.push(`<text x="${P + 34}" y="${gY + 116}" font-family="${MONO}" font-size="66" font-weight="700" fill="${IN.emerald}" filter="url(#soft)">${fmt(saved)}</text>`)
-  out.push(text('tokens a message', P + 34 + w(fmt(saved), 66) + 18, gY + 116, { size: 26, fill: IN.muted }))
+  const savedMoney = s.savedOnYourModel && typeof s.savedOnYourModel.dollarsPerMonth === 'number'
+    ? money(s.savedOnYourModel.dollarsPerMonth) : null
+  if (savedMoney) {
+    out.push(`<text x="${P + 34}" y="${gY + 116}" font-family="${MONO}" font-size="66" font-weight="700" fill="${IN.emerald}" filter="url(#soft)">${esc(savedMoney)}</text>`)
+    out.push(text('a month, back', P + 34 + w(savedMoney, 66) + 18, gY + 116, { size: 26, fill: IN.muted }))
+  } else {
+    out.push(`<text x="${P + 34}" y="${gY + 116}" font-family="${MONO}" font-size="66" font-weight="700" fill="${IN.emerald}" filter="url(#soft)">${fmt(saved)}</text>`)
+    out.push(text('tokens a message, back', P + 34 + w(fmt(saved), 66) + 18, gY + 116, { size: 26, fill: IN.muted }))
+  }
   const acts = s.recommendedActions || {}
-  out.push(text(`gate ${fmt(acts.active || 0)}  ·  delete ${fmt(acts.delete || 0)}  ·  shorten ${fmt(acts.optimize || 0)}  ·  keep ${fmt(acts.keep || 0)}`, P + 34, gY + 148, { size: 19, fill: IN.muted }))
+  const counts = `gate ${fmt(acts.active || 0)}  ·  delete ${fmt(acts.delete || 0)}  ·  shorten ${fmt(acts.optimize || 0)}  ·  keep ${fmt(acts.keep || 0)}`
+  out.push(text(savedMoney ? `${counts}  ·  ${fmt(saved)} tokens a message` : counts, P + 34, gY + 148, { size: 19, fill: IN.muted }))
   if (s.fitsAfter) {
     out.push(text('back inside the allowance', CARD_WIDTH - P - 34, gY + 116, { size: 22, fill: IN.emerald, anchor: 'end' }))
   }
@@ -212,6 +222,10 @@ function defs (gradeColor) {
     <stop offset="0%" stop-color="${gradeColor}" stop-opacity="0.16"/>
     <stop offset="100%" stop-color="${gradeColor}" stop-opacity="0"/>
   </radialGradient>
+  <filter id="whiteglow" x="-60%" y="-60%" width="220%" height="220%">
+    <feGaussianBlur stdDeviation="18" result="b"/>
+    <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
   <filter id="bigglow" x="-60%" y="-60%" width="220%" height="220%">
     <feGaussianBlur stdDeviation="22" result="b"/>
     <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
@@ -300,7 +314,7 @@ export { esc }
  * and the viewer confirms. Opened from disk there is no host, so it falls back
  * to an anchor. Either way the same bytes.
  */
-export function renderCardPage (report) {
+export function renderCardPage (report, { listHref = null, listCount = 0 } = {}) {
   const svg = renderCardSvg(report)
   const day = (report && report.generatedOn) || 'today'
   return [
@@ -318,10 +332,14 @@ export function renderCardPage (report) {
     '<div class="bar">',
     '<button type="button" id="png" class="go">Save PNG</button>',
     '<button type="button" id="copy" class="alt">Copy image</button>',
+    listHref
+      ? '<a class="alt link" href="' + esc(listHref) + '">Open the full list' + (listCount ? ' (' + listCount + ' skills)' : '') + '</a>'
+      : '',
     '<span class="msg" id="msg" role="status" aria-live="polite">' + CARD_WIDTH + ' by ' + CARD_HEIGHT + ', saved at 2x for a crisp post.</span>',
     '</div>',
     '<p class="fine">Measured from the skills and session transcripts already on this machine, on ' + esc(day) +
-      '. Nothing left the machine to make it.</p>',
+      '. Nothing left the machine to make it.' +
+      (listHref ? ' The full list is where you change any suggestion before applying it.' : '') + '</p>',
     '</main>',
     '<script>' + pageScript() + '</script>',
     '</body>',
@@ -353,6 +371,8 @@ button.go { background: ${IN.cyan}; border-color: ${IN.cyan}; color: #04202B; fo
 button.go:hover { filter: brightness(1.08); }
 button.alt:hover { border-color: ${IN.cyan}; color: ${IN.cyan}; }
 button:disabled { opacity: .55; cursor: default; }
+a.link { text-decoration: none; display: inline-flex; align-items: center; }
+a.link:hover { border-color: ${IN.emerald}; color: ${IN.emerald}; }
 button:focus-visible { outline: 2px solid ${IN.cyan}; outline-offset: 3px; }
 .msg { color: ${IN.muted}; font-size: 14px; }
 .fine { color: ${IN.muted}; font-size: 13.5px; margin: 18px 0 0; max-width: 70ch; }

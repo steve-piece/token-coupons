@@ -1,7 +1,7 @@
 ---
 domain: skill
 holds: "A description can lose half its length without losing a single trigger, because what makes it long is almost always the how, and the router never needed the how."
-applies-to: [token-coupons, claude-code, cursor, other-clients]
+applies-to: [token-coupons, claude-code]
 stability: stable
 verified-on: 2026-08-15
 related: [report-anatomy, decisions-file, listing-budget, cost-model]

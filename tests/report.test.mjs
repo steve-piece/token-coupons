@@ -250,7 +250,7 @@ describe('pickSummary', () => {
     assert.equal(s.skills, null)
     assert.equal(s.wastedPerWeekOnYourModel, null)
     assert.deepEqual(s.recommendedActions, { active: 0, delete: 0, optimize: 0, review: 0, keep: 0, passive: 0 })
-    assert.equal(Object.keys(s).length, 12)
+    assert.equal(Object.keys(s).length, 13)
   })
 })
 
