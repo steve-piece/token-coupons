@@ -375,3 +375,24 @@ describe('trashStamp', () => {
     assert.match(trashStamp(null), /^\d{8}-\d{6}$/)
   })
 })
+
+describe('the prompt cache warning', () => {
+  test('a plan that writes says the listing change costs one re-send, and a plan that does not stays quiet', async () => {
+    const { summarizeApply, cacheNote } = await import('../src/apply.mjs')
+    const writes = { dryRun: true, applied: 0, steps: [{ name: 'a', action: 'active', kind: 'set-gate', detail: 'd', undo: 'u' }], worklist: [], refused: [] }
+    assert.match(summarizeApply(writes), /re-send its whole conversation at full price/)
+    assert.match(summarizeApply(writes), /\/clear/)
+
+    const done = { dryRun: false, applied: 1, steps: writes.steps.map((s) => ({ ...s, done: true })), worklist: [], refused: [] }
+    assert.match(summarizeApply(done), /The skill list has changed/)
+
+    const nothing = { dryRun: true, applied: 0, steps: [{ name: 'a', action: 'keep', kind: 'noop', detail: 'd', undo: 'u' }], worklist: [], refused: [] }
+    assert.equal(cacheNote(nothing), '', 'a plan that changes no skill file has no cache cost')
+    assert.equal(cacheNote({ steps: [] }), '')
+
+    // a rewrite is a file edit too, but it is the agent that edits it later, so
+    // the warning belongs to the steps that actually touch a skill now
+    const worklistOnly = { dryRun: true, applied: 0, steps: [{ name: 'a', action: 'optimize', kind: 'worklist', detail: 'd', undo: 'u' }], worklist: [], refused: [] }
+    assert.equal(cacheNote(worklistOnly), '')
+  })
+})

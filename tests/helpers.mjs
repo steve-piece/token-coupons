@@ -60,22 +60,26 @@ export function makeFixtureHome ({ skills = [], transcripts = [], settings = { m
     mkdirSync(proj, { recursive: true })
     const lines = []
     let i = 0
+    let offsetMs = 0
     const base = t.date ? new Date(t.date) : new Date('2026-08-01T10:00:00Z')
     const model = t.model || 'claude-opus-5'
     for (const turn of t.turns) {
-      const ts = new Date(base.getTime() + (i++) * 60000).toISOString()
+      // gapMinutes pushes the clock forward before this turn, which is how a
+      // fixture reproduces coming back after the prompt cache has expired.
+      offsetMs += (Number(turn.gapMinutes) || 0) * 60000
+      const ts = new Date(base.getTime() + (i++) * 60000 + offsetMs).toISOString()
       if (turn.user !== undefined) {
         lines.push(JSON.stringify({ type: 'user', sessionId: t.session, timestamp: ts, message: { role: 'user', content: turn.user } }))
       } else if (turn.skill !== undefined) {
         lines.push(JSON.stringify({
-          type: 'assistant', sessionId: t.session, timestamp: ts, requestId: 'req_' + i,
+          type: 'assistant', sessionId: t.session, timestamp: ts, requestId: 'req_' + i, effort: turn.effort,
           message: { role: 'assistant', model: turn.model || model, id: 'msg_' + i, usage: usageOf(turn), content: [{ type: 'tool_use', id: 'tu_' + i, name: 'Skill', input: { skill: turn.skill } }] },
         }))
         lines.push(JSON.stringify({ type: 'user', sessionId: t.session, timestamp: ts, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'tu_' + i, content: 'ok' }] } }))
       } else if (turn.assistant !== undefined) {
         // one response may be stored as two lines sharing a requestId
         const req = 'req_' + i
-        lines.push(JSON.stringify({ type: 'assistant', sessionId: t.session, timestamp: ts, requestId: req, message: { role: 'assistant', model: turn.model || model, id: 'msg_' + i, usage: usageOf(turn), content: [{ type: 'text', text: turn.assistant }] } }))
+        lines.push(JSON.stringify({ type: 'assistant', sessionId: t.session, timestamp: ts, requestId: req, effort: turn.effort, message: { role: 'assistant', model: turn.model || model, id: 'msg_' + i, usage: usageOf(turn), content: [{ type: 'text', text: turn.assistant }] } }))
         if (turn.split) lines.push(JSON.stringify({ type: 'assistant', sessionId: t.session, timestamp: ts, requestId: req, message: { role: 'assistant', model: turn.model || model, id: 'msg_' + i, usage: usageOf(turn), content: [{ type: 'text', text: 'second block' }] } }))
       }
     }

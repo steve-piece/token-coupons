@@ -5,12 +5,16 @@
 // name, prefixed with plugin: when it lives inside a plugin. Rows are
 // deduplicated by real path so a symlinked skill is one row with aliases.
 //
-// "Loaded" follows the documented rules (code.claude.com/docs/en/skills):
-// Claude Code reads ~/.claude/skills, the .claude/skills of the project you
-// are working in (and its parents), and the skills of ENABLED plugins from
-// the plugin cache. Everything else on disk (marketplace checkouts, plugin
-// source repos, ~/.agents/skills, ~/.cursor/skills, other projects) is not in
-// the listing, so it costs nothing per message and must not be counted.
+// This tool is Claude Code only, so the folders it looks in are the ones
+// Claude Code reads (code.claude.com/docs/en/skills): ~/.claude/skills, the
+// .claude/skills of the project you are working in, and the skills of ENABLED
+// plugins from the plugin cache. Folders belonging to other tools are not
+// scanned at all; inventorying another client's skills would be noise here.
+//
+// Of the folders it does scan, not all are in the listing: marketplace
+// checkouts, plugin source repos, other projects, disabled plugins and stale
+// cache versions sit on disk without costing anything per message. Those are
+// reported separately as notLoaded rather than scored.
 
 import { existsSync, realpathSync, statSync } from 'node:fs'
 import { join, basename, sep } from 'node:path'
@@ -20,11 +24,7 @@ import { homeDir, claudeDir, pluginsDir, settingsFiles } from './paths.mjs'
 
 export function skillRoots () {
   const HOME = homeDir()
-  const roots = [
-    join(claudeDir(), 'skills'),
-    join(HOME, '.agents', 'skills'),
-    join(HOME, '.cursor', 'skills'),
-  ]
+  const roots = [join(claudeDir(), 'skills')]
   const marketplaces = join(pluginsDir(), 'marketplaces')
   for (const mp of listDir(marketplaces)) {
     roots.push(join(marketplaces, mp, 'skills'))

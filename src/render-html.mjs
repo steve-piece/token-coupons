@@ -217,6 +217,7 @@ function costStrip (cost, summary) {
   const assumeLine = 'Based on ' + (assumeBits.length ? assumeBits.join(' and ') : 'default rates') + ', ' +
     (a.measured === false ? 'assumed because no session history was found.' : 'measured from your own session history.') +
     (cost.pricingVerifiedOn ? ' Prices checked on ' + cost.pricingVerifiedOn + '.' : '')
+  const breakLine = cacheBreakLine(a)
 
   return [
     '<section class="section" id="cost">',
@@ -235,10 +236,33 @@ function costStrip (cost, summary) {
       ? '<p><button type="button" id="show-all-models" class="ghost">Show all ' + models.length + ' models</button></p>'
       : '',
     shareLine,
+    breakLine,
     '<p class="note' + (cost.pricingStale ? ' warn' : '') + '">' + esc(assumeLine) +
       (cost.pricingStale ? ' <strong>These prices are more than two months old, so treat the dollars as a rough guide.</strong>' : '') + '</p>',
     '</section>',
   ].join('\n')
+}
+
+/**
+ * Why the cached price is not simply one save per chat. The list lives in the
+ * part of the request that is saved first, so anything that invalidates the
+ * start of a request makes it get saved again at the higher save price.
+ */
+function cacheBreakLine (a) {
+  const br = a && a.cacheBreaks
+  const writes = Number(a && a.cacheWritesPerSession) || 1
+  if (a.cached === false || !br || writes <= 1) return ''
+  const bits = []
+  if (br.firstOfSession) bits.push(fmt(br.firstOfSession) + ' chat starts')
+  if (br.cacheExpired) bits.push(fmt(br.cacheExpired) + ' gaps longer than ' + fmt(a.cacheTtlMinutes || 60) + ' minutes')
+  if (br.modelSwitch) bits.push(fmt(br.modelSwitch) + ' model switches')
+  if (br.effortSwitch) bits.push(fmt(br.effortSwitch) + ' effort switches')
+  if (!bits.length) return ''
+  return '<p class="note" title="' + attr('the skill list rides at the front of every request, in the part Claude Code saves first. ' +
+    'Starting a chat, switching model or effort, and coming back after the saved copy has expired all throw that saved copy away, ' +
+    'so the list is paid at the higher save price again rather than the cheap re-read price') + '">' +
+    'Your chats throw the saved copy away and rewrite the list <strong>' + esc(trimNum(writes)) + ' times each</strong>, measured from ' +
+    esc(bits.join(', ')) + '. That is priced in above; assuming one save per chat would have understated it.</p>'
 }
 
 /** The bold token line: how many tokens the unused descriptions burn per week and per month, before any price is applied. */

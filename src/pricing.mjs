@@ -127,6 +127,13 @@ export function yourModel (stats, pricing) {
  * @param pricing       loadPricing() output, or any object of the same shape
  * @param cached        true prices the real caching behaviour, false prices the
  *                      upper bound where nothing is cached
+ *
+ * The listing sits in the system prompt, at the very front of the cached
+ * prefix, so it is paid at the WRITE price on every request that breaks the
+ * cache from the front and at the read price on all the others. How often that
+ * happens is measured per machine in calls.mjs (first request of a session,
+ * model switch, effort switch, cache expiry); it is not once per chat, which is
+ * what this model used to assume.
  */
 export function costModel ({ wastedTokens = 0, listingTokens = 0, stats = null, pricing = null, cached = true, today = null } = {}) {
   const s = stats || {}
@@ -135,6 +142,9 @@ export function costModel ({ wastedTokens = 0, listingTokens = 0, stats = null, 
   const models = Array.isArray(p.models) ? p.models : []
 
   const calls = Math.max(1, Math.round(Number(s.apiCallsPerSessionMedian) || Number(s.apiCallsPerSessionMean) || 1))
+  // The mean, not the median: a minority of sessions break the cache many
+  // times, and the mean is what reconstructs the real total number of writes.
+  const writes = Math.min(calls, Math.max(1, Number(s.listingWritesPerSession) || 1))
   const sessionsPerDay = Number(s.sessionsPerDay) || 0
   const sessionsPerWeek = Number(s.sessionsPerWeek) || 0
   const wasted = Math.max(0, Number(wastedTokens) || 0)
@@ -150,7 +160,7 @@ export function costModel ({ wastedTokens = 0, listingTokens = 0, stats = null, 
     const write = (m.cacheWrite === null || m.cacheWrite === undefined) ? input : Number(m.cacheWrite) || 0
 
     const perChatOf = (tokens) => cached
-      ? tokens * (write + cachedInput * (calls - 1)) / per
+      ? tokens * (write * writes + cachedInput * (calls - writes)) / per
       : tokens * input * calls / per
     const spread = (tokens) => {
       const perChat = perChatOf(tokens)
@@ -206,6 +216,9 @@ export function costModel ({ wastedTokens = 0, listingTokens = 0, stats = null, 
   return {
     assumptions: {
       apiCallsPerSession: calls,
+      cacheWritesPerSession: writes,
+      cacheBreaks: s.cacheBreaks || null,
+      cacheTtlMinutes: s.cacheTtlMinutes || null,
       sessionsPerDay,
       sessionsPerWeek,
       measured: !!s.measured,
@@ -238,8 +251,12 @@ function assumptionNote (stats, cached) {
   const how = stats && stats.note
     ? String(stats.note)
     : 'no chat history was found, so the number of chats per day is a guess'
+  const w = stats && Number(stats.listingWritesPerSession)
+  const writes = cached && w > 1
+    ? ' Your chats re-save it ' + (+w.toFixed(1)) + ' times each on average, measured, because starting a chat, switching model or effort, and coming back after an hour all throw the saved copy away.'
+    : ''
   const caching = cached
-    ? 'Prices assume the list is saved once at the start of a chat and re-read cheaply on every later message, which is what the agent does by default.'
+    ? 'Prices assume the list is saved into the cache and re-read cheaply on later messages, which is what Claude Code does by default.' + writes
     : 'Prices assume nothing is saved and reused, so the whole list is paid for at full price on every message. This is the highest the bill could be.'
   return how + '. ' + caching
 }

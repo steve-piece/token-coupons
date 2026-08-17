@@ -414,7 +414,33 @@ export function summarizeApply (result) {
     for (const f of refused) lines.push('  ' + f.name + ' (' + f.action + '): ' + f.reason)
   }
 
+  const note = cacheNote(r)
+  if (note) { lines.push(''); lines.push(note) }
+
   return lines.join('\n') + '\n'
+}
+
+/**
+ * Changing a skill changes the skill listing, and the listing sits in the
+ * system prompt at the very front of the saved prompt. Claude Code picks skill
+ * edits up inside a running session, so the next message in any session open on
+ * this machine re-sends its whole conversation at full price instead of the
+ * cheap cached price. Saying so is the difference between a tool that saves
+ * tokens and one that quietly spends them.
+ */
+export function cacheNote (result) {
+  const r = result || {}
+  const steps = (r.steps || []).filter((s) => s.kind === 'set-gate' || s.kind === 'unset-gate' || s.kind === 'unlink' || s.kind === 'trash')
+  if (!steps.length) return ''
+  if (r.dryRun) {
+    return 'One thing to know before you run this with --yes: changing a skill changes the list that rides at the front of\n' +
+      'every message, and Claude Code notices the change inside a running chat. The next message in any chat you have open\n' +
+      'will re-send its whole conversation at full price instead of the cheap saved price. It is a one-off, and the cheapest\n' +
+      'moment to take it is right after a /clear or at the end of a chat.'
+  }
+  return 'The skill list has changed. Any chat you have open on this machine pays one full re-send on its next message,\n' +
+    'because the list rides at the front of every message and Claude Code picked the change up. Run /clear (or start a\n' +
+    'fresh chat) to take that cost now on an empty conversation rather than a long one.'
 }
 
 function stateOf (step, result) {

@@ -303,3 +303,29 @@ test('per month figures are per week times 52/12, for dollars and for tokens', a
   assert.ok(near(c.volume.wastedTokensPerMonth, c.volume.wastedTokensPerWeek * WEEKS_PER_MONTH))
   assert.equal(c.volume.wastedTokensPerWeek, 1000 * 10 * 7)
 })
+
+test('the listing is priced at the save rate once per cache break, not once per chat', async () => {
+  const { costModel } = await import('../src/pricing.mjs')
+  const pricing = { currency: 'USD', per: 1000000, verifiedOn: '2026-08-15', models: [{ id: 'm', label: 'M', input: 10, cachedInput: 1, cacheWrite: 20, output: 50, tier: 'frontier' }] }
+  const base = { measured: true, apiCallsPerSessionMedian: 10, sessionsPerDay: 1, sessionsPerWeek: 7, inputTokensPerWeek: 1e9, modelsSeen: [] }
+  const once = costModel({ wastedTokens: 1000, listingTokens: 1000, stats: base, pricing, today: '2026-08-15' })
+  const four = costModel({ wastedTokens: 1000, listingTokens: 1000, stats: { ...base, listingWritesPerSession: 4 }, pricing, today: '2026-08-15' })
+  // one write plus nine reads, against four writes plus six reads
+  const near = (a, b) => Math.abs(a - b) < 1e-9
+  assert.ok(near(once.perModel[0].wasted.perChat, 1000 * (20 + 1 * 9) / 1e6))
+  assert.ok(near(four.perModel[0].wasted.perChat, 1000 * (20 * 4 + 1 * 6) / 1e6))
+  assert.ok(four.perModel[0].wasted.perWeek > once.perModel[0].wasted.perWeek, 'more breaks cost more')
+  assert.equal(four.assumptions.cacheWritesPerSession, 4)
+  assert.match(four.assumptions.note, /re-save it 4 times/)
+
+  // writes can never exceed the number of requests, and never fall below one
+  const silly = costModel({ wastedTokens: 1000, listingTokens: 1000, stats: { ...base, listingWritesPerSession: 999 }, pricing, today: '2026-08-15' })
+  assert.equal(silly.assumptions.cacheWritesPerSession, 10)
+  const zero = costModel({ wastedTokens: 1000, listingTokens: 1000, stats: { ...base, listingWritesPerSession: 0 }, pricing, today: '2026-08-15' })
+  assert.equal(zero.assumptions.cacheWritesPerSession, 1)
+
+  // the uncached upper bound does not use the cache at all, so it is unchanged
+  const u1 = costModel({ wastedTokens: 1000, listingTokens: 1000, stats: base, pricing, cached: false, today: '2026-08-15' })
+  const u4 = costModel({ wastedTokens: 1000, listingTokens: 1000, stats: { ...base, listingWritesPerSession: 4 }, pricing, cached: false, today: '2026-08-15' })
+  assert.equal(u1.perModel[0].wasted.perChat, u4.perModel[0].wasted.perChat)
+})

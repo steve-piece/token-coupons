@@ -112,8 +112,18 @@ export function renderText (report, { color = false, top = 15 } = {}) {
     const a = cost.assumptions || {}
     line(paint.dim('  Assumes ' + fmt(a.apiCallsPerSession || 0) + ' messages per chat and ' + trimNum(a.sessionsPerWeek || 0) + ' chats per week' +
       (a.measured ? ', measured from your sessions' : ', assumed because no session history was found') +
-      (a.cached === false ? '. Prices are the no caching upper bound.' : '. Prices assume the usual caching, where the list is stored once per chat and re-read cheaply.')))
+      (a.cached === false ? '. Prices are the no caching upper bound.' : '. Prices follow the real caching: the list is saved into the cache and re-read cheaply until something throws the saved copy away.')))
     line(paint.dim('  The uncached column is the same week with nothing stored and reused, so the whole list is paid at full price every message. It is the highest the bill could be.'))
+    const br = a.cacheBreaks
+    if (a.cached !== false && br && a.cacheWritesPerSession > 1) {
+      const bits = []
+      if (br.firstOfSession) bits.push(fmt(br.firstOfSession) + ' chat starts')
+      if (br.cacheExpired) bits.push(fmt(br.cacheExpired) + ' gaps longer than ' + fmt(a.cacheTtlMinutes || 60) + ' minutes')
+      if (br.modelSwitch) bits.push(fmt(br.modelSwitch) + ' model switches')
+      if (br.effortSwitch) bits.push(fmt(br.effortSwitch) + ' effort switches')
+      line(paint.dim('  The saved copy is thrown away and rewritten ' + trimNum(a.cacheWritesPerSession) + ' times per chat, measured: ' + bits.join(', ') +
+        '. Each rewrite pays the save price instead of the cheap re-read price, which is why this costs more than one save per chat would.'))
+    }
     if (vol.inputTokensPerWeek) {
       line(paint.dim('  Share of everything you send: the list is ' + pct(vol.listingShareOfInput) + ' of your input, the wasted part is ' + pct(vol.wastedShareOfInput) + '.'))
     }

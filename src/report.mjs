@@ -47,11 +47,11 @@ export function dayOf (value = null) {
  * @param thresholds   overrides for recommend.mjs DEFAULT_THRESHOLDS
  * @param today        fixes "today" so tests and staleness are reproducible
  */
-export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null, cached = true, thresholds = {}, today = null, cwd = process.cwd() } = {}) {
+export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null, cached = true, thresholds = {}, today = null, cwd = process.cwd(), cacheTtlMinutes = undefined } = {}) {
   const generatedOn = dayOf(today)
   const everything = discoverSkills({ cwd })
-  const { calls, sessions } = scanTranscripts(since || null)
-  const stats = sessionStats(sessions, { since: since || null, today: today || null })
+  const { calls, sessions } = scanTranscripts(since || null, { cacheTtlMinutes })
+  const stats = sessionStats(sessions, { since: since || null, today: today || null, cacheTtlMinutes })
   const budget = listingBudget(budgetOpts || {})
 
   // Calls attach to every row, listed or not, so a project skill used inside

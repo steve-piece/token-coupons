@@ -41,6 +41,25 @@ describe('discover', () => {
     } finally { fx.cleanup() }
   })
 
+  test('folders belonging to other tools are not scanned at all', async () => {
+    const fx = makeFixtureHome({
+      skills: [
+        { name: 'mine', description: 'In the Claude Code folder.' },
+        { name: 'cursors', description: 'Cursor keeps this one.', where: 'cursor' },
+        { name: 'agents', description: 'Another tool keeps this one.', where: 'agents-dir' },
+        { name: 'linked', description: 'Kept elsewhere, linked into Claude Code.', where: 'agents-dir', symlinkAs: 'linked' },
+      ],
+    })
+    try {
+      await withHome(fx.home, async () => {
+        const { discoverSkills } = await fresh()
+        const names = discoverSkills({ cwd: fx.home }).map((s) => s.name).sort()
+        // this tool is Claude Code only: another client's folder is not its business
+        assert.deepEqual(names, ['linked', 'mine'])
+      })
+    } finally { fx.cleanup() }
+  })
+
   test('a project skill is loaded when the working directory is inside that project', async () => {
     const fx = makeFixtureHome({ skills: [{ name: 'delta', description: 'Delta.', where: 'project', project: 'demo' }] })
     try {

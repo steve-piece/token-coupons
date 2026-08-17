@@ -31,7 +31,7 @@ export function version () {
 
 /* ------------------------------------------------------------------ args */
 
-const VALUE_FLAGS = new Set(['since', 'window', 'fraction', 'budget', 'pricing', 'html', 'out', 'trash', 'today', 'top', 'cwd'])
+const VALUE_FLAGS = new Set(['since', 'window', 'fraction', 'budget', 'pricing', 'html', 'out', 'trash', 'today', 'top', 'cwd', 'cache-ttl'])
 const BOOL_FLAGS = new Set(['uncached', 'json', 'open', 'no-color', 'color', 'yes', 'help', 'version', 'h', 'v'])
 
 /** Parse argv into { command, positional, flags }. Accepts --k=v and --k v. */
@@ -82,6 +82,8 @@ export function helpText () {
     'which skills have never been used, and one recommendation per skill. Nothing is changed.',
     '  --since=DATE     only read sessions on or after this day (YYYY-MM-DD)',
     '  --cwd=DIR        count project skills as listed from this folder (default: where you run it)',
+    '  --cache-ttl=MIN  minutes the saved prompt survives with no messages (default 60, the',
+    '                   Claude subscription behaviour; use 5 on a plain API key)',
     '  --window=N       size of the model context window in tokens, instead of reading it from your settings',
     '  --fraction=F     share of the window the skill list may use (default 0.01)',
     '  --budget=CHARS   a fixed allowance for the list in characters, which wins over --fraction',
@@ -152,6 +154,7 @@ export async function runReport (flags, io) {
     cached: !flags.uncached,
     today: flags.today || null,
     cwd: flags.cwd || process.cwd(),
+    cacheTtlMinutes: num(flags['cache-ttl']) || undefined,
   })
 
   const notes = []
