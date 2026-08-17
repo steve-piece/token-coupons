@@ -86,7 +86,10 @@ describe('card', () => {
   test('leads with what was saved, not with the score', () => {
     assert.ok(svg.includes('>I SAVED<'), 'the headline is the claim, nothing else')
     // the basis is a footnote, since a flat plan is not billed this
-    assert.match(svg, /Calculated at API prices for .*, the model most used on this machine\./)
+    assert.ok(svg.includes('Calculated at API prices for the model most'), 'the basis, wrapped to a left column')
+    assert.ok(svg.includes('used on this machine.'))
+    // the model is not named: the claim is the saving, not which model made it
+    assert.equal(svg.includes('Claude Opus 5'), false)
     assert.ok(svg.includes('10,832'), 'the before figure')
     assert.ok(svg.includes('token-coupons'), 'the wordmark')
     assert.ok(svg.includes('View on GitHub') && svg.includes('github.com/steve-piece/token-coupons'))
