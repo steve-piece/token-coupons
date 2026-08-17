@@ -123,10 +123,15 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
   const pw = Math.round(w(cmd, 22)) + 44
   out.push(`<rect x="${P}" y="940" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
   out.push(text(cmd, P + 22, 972, { size: 22, fill: IN.cyan }))
+  // The mark, the label and the URL are one target. An SVG anchor carries no
+  // styling of its own, so this changes nothing about how the footer looks, and
+  // it is inert once the card is a PNG.
   const label = 'View on GitHub'
+  out.push(`<a href="${attr(repoUrl)}" target="_blank" rel="noreferrer noopener">`)
+  out.push(githubMark(CARD_WIDTH - P - Math.round(w(label, 20)) - 34, 942, 22, IN.text))
   out.push(text(label, CARD_WIDTH - P, 958, { size: 20, fill: IN.text, anchor: 'end' }))
   out.push(text(repoUrl.replace(/^https?:\/\//, ''), CARD_WIDTH - P, 984, { size: 16, fill: IN.muted, anchor: 'end' }))
-  out.push(githubMark(CARD_WIDTH - P - Math.round(w(label, 20)) - 34, 942, 22, IN.text))
+  out.push('</a>')
 
   out.push('</svg>')
   return out.join('\n')
@@ -230,6 +235,8 @@ function cardAlt (savedMonth, savedTokens, touched, listing, after) {
   bits.push(`The skill list went from ${fmt(listing)} tokens a message to ${fmt(after)}.`)
   return bits.join(' ')
 }
+
+function attr (v) { return esc(v) }
 
 function esc (v) {
   return String(v === null || v === undefined ? '' : v)

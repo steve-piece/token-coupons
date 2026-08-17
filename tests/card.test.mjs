@@ -70,10 +70,15 @@ describe('card', () => {
   test('is one self contained svg with no external reference', () => {
     assert.equal((svg.match(/<svg /g) || []).length, 1)
     assert.match(svg, new RegExp('viewBox="0 0 ' + CARD_WIDTH + ' ' + CARD_HEIGHT + '"'))
-    // nothing that would taint the canvas or fail to rasterize. The xmlns is a
-    // namespace identifier, never fetched, so it is the one allowed http string.
-    assert.equal(/(?:src|href|url\()\s*=?\s*["']?https?:/.test(svg), false)
-    assert.equal(svg.replace('http://www.w3.org/2000/svg', '').includes('http'), false)
+    // Nothing that would taint the canvas or fail to rasterize: no fetched
+    // resource. A navigation anchor loads nothing, so it is allowed, and so is
+    // the xmlns, which is a namespace identifier rather than a URL.
+    assert.equal(/\bsrc\s*=|url\(\s*["']?https?:|xlink:href/.test(svg), false)
+    const navigable = svg
+      .replace('http://www.w3.org/2000/svg', '')
+      .replace(/<a href="[^"]*"[^>]*>/g, '')
+      .replace(/>[^<]*github\.com[^<]*</g, '><')
+    assert.equal(navigable.includes('http'), false, 'the only URLs left are the link and its label')
     assert.equal(svg.includes('foreignObject'), false)
     assert.equal(svg.includes('<image'), false)
   })
@@ -207,5 +212,23 @@ describe('the card page', () => {
     const page = renderCardPage(r)
     assert.match(page, /id="msg" role="status" aria-live="polite"><\/p>/)
     assert.equal(page.includes('crisp post'), false)
+  })
+})
+
+describe('the GitHub link', () => {
+  const svg = renderCardSvg(report({ listing: 10832, wasted: 7777, over: 1.08, unroutable: 3 }))
+
+  test('makes the mark, the label and the URL one target', () => {
+    const anchor = svg.slice(svg.indexOf('<a href='), svg.indexOf('</a>'))
+    assert.ok(anchor.includes(REPO), 'points at the repo')
+    assert.ok(anchor.includes('target="_blank"') && anchor.includes('rel="noreferrer noopener"'))
+    assert.ok(anchor.includes('<g transform='), 'the mark is inside it')
+    assert.ok(anchor.includes('View on GitHub'), 'and so is the label')
+    assert.ok(anchor.includes(REPO.replace(/^https?:\/\//, '')), 'and the URL line')
+  })
+
+  test('carries no styling of its own, so the footer looks unchanged', () => {
+    const anchor = svg.slice(svg.indexOf('<a href='), svg.indexOf('</a>'))
+    assert.equal(/text-decoration|class=|style=/.test(anchor), false)
   })
 })
