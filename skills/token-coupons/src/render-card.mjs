@@ -131,7 +131,7 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
   if (savedMonth !== null) {
     // Wrapped to a set column so it stays on the left and never runs under the
     // GitHub link on the right. SVG text does not wrap on its own.
-    wrap('Calculated at API prices for the model most used on this machine.', 46)
+    wrap('Savings estimates based on your most used models API pricing.', 46)
       .forEach((l, i) => out.push(text(l, P, 1018 + i * 20, { size: 15, fill: IN.muted })))
   }
   // The mark, the label and the URL are one target. An SVG anchor carries no
