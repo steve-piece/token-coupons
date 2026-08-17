@@ -341,10 +341,13 @@ function island (report) {
 
 /* ---------------------------------------------------------------- pieces */
 
+// Only the locations discover can actually produce. The folders other tools
+// keep their skills in are not scanned, so no row can carry one of them.
 function locationLabel (loc) {
   return {
-    user: 'your folder', 'user-symlink': 'linked in', project: 'this project', marketplace: 'marketplace',
-    'plugin-cache': 'plugin cache', 'agents-dir': 'agents folder', cursor: 'cursor folder', other: 'elsewhere',
+    user: 'your folder', 'user-symlink': 'linked in', project: 'this project',
+    'project-source': 'this project', marketplace: 'marketplace', 'plugin-cache': 'plugin cache',
+    other: 'elsewhere',
   }[loc] || String(loc || '')
 }
 
