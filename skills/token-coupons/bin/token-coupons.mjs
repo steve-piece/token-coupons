@@ -23,16 +23,17 @@ import { discoverSkills } from '../src/discover.mjs'
 import { parseDecisions, planApply, applyPlan, summarizeApply } from '../src/apply.mjs'
 import { parseEdits, planDescribe, applyDescribe, summarizeDescribe } from '../src/describe.mjs'
 import { loadPricing } from '../src/pricing.mjs'
+import { loadLastRun, saveRun, mergeFlags } from '../src/runs.mjs'
+import { runsDir, tildify } from '../src/paths.mjs'
 import { DEFAULT_THRESHOLDS } from '../src/recommend.mjs'
 import { fmt, money } from '../src/lib/util.mjs'
-import { tildify } from '../src/paths.mjs'
 
 export function version () { return VERSION }
 
 /* ------------------------------------------------------------------ args */
 
-const VALUE_FLAGS = new Set(['since', 'window', 'fraction', 'budget', 'pricing', 'html', 'out', 'trash', 'today', 'top', 'cwd', 'cache-ttl', 'card'])
-const BOOL_FLAGS = new Set(['uncached', 'json', 'open', 'no-color', 'color', 'yes', 'help', 'version', 'h', 'v'])
+const VALUE_FLAGS = new Set(['since', 'window', 'fraction', 'budget', 'pricing', 'html', 'out', 'trash', 'today', 'top', 'cwd', 'cache-ttl', 'card', 'runs'])
+const BOOL_FLAGS = new Set(['uncached', 'json', 'open', 'no-color', 'color', 'yes', 'help', 'version', 'h', 'v', 'fresh'])
 
 /** Parse argv into { command, positional, flags }. Accepts --k=v and --k v. */
 export function parseArgs (argv) {
@@ -97,6 +98,12 @@ export function helpText () {
     '  --open           open the HTML page in your browser after writing it',
     '  --no-color       plain text without colors',
     '',
+    'Every run leaves a record in ~/.token-coupons/runs, and the next one reads it. Any of the settings above that you',
+    'do not type again is carried forward from the last run, and the report says what moved since then, so two reports',
+    'a week apart are comparable instead of merely different.',
+    '  --fresh          ignore the last run: no settings carried forward, no comparison',
+    '  --runs=DIR       keep the run history somewhere else (default ~/.token-coupons/runs)',
+    '',
     'apply carries out the decisions you exported from the HTML page. Without --yes it only prints the plan.',
     '  --yes            actually make the changes (deletes go to a trash folder, never erased)',
     '  --trash=DIR      where deleted skill folders are moved (default ~/.token-coupons/trash)',
@@ -151,22 +158,39 @@ function num (v) {
 }
 
 export async function runReport (flags, io) {
+  // What the last run was told is carried forward unless it was typed again, so
+  // asking for a window or a folder once does not quietly stop applying. The
+  // report then says what moved, which is the other half of a steady number.
+  const runsPath = flags.runs || runsDir()
+  const previous = flags.fresh ? null : loadLastRun(runsPath)
+  const merged = mergeFlags(flags, previous)
+  const f = merged.flags
+
   const budgetOpts = {}
-  if (num(flags.window)) budgetOpts.contextWindow = num(flags.window)
-  if (num(flags.fraction)) budgetOpts.fraction = num(flags.fraction)
-  if (num(flags.budget)) budgetOpts.fixedChars = num(flags.budget)
+  if (num(f.window)) budgetOpts.contextWindow = num(f.window)
+  if (num(f.fraction)) budgetOpts.fraction = num(f.fraction)
+  if (num(f.budget)) budgetOpts.fixedChars = num(f.budget)
 
   const report = buildReport({
-    since: flags.since || null,
+    since: f.since || null,
     budgetOpts,
-    pricingPath: flags.pricing || null,
-    cached: !flags.uncached,
+    pricingPath: f.pricing || null,
+    cached: !f.uncached,
     today: flags.today || null,
-    cwd: flags.cwd || process.cwd(),
-    cacheTtlMinutes: num(flags['cache-ttl']) || undefined,
+    cwd: f.cwd || process.cwd(),
+    cacheTtlMinutes: num(f['cache-ttl']) || undefined,
+    previous,
+    runFlags: f,
   })
+  if (report.previous) report.previous.reused = merged.reused
 
   const notes = []
+  try {
+    saveRun(report.run, { dir: runsPath })
+  } catch (e) {
+    // History is a convenience. Losing it must never cost someone the report.
+    notes.push('could not write the run history to ' + tildify(runsPath) + ': ' + (e && e.message ? e.message : e))
+  }
   if (flags.card) {
     const full = writeFile(flags.card, renderCardPage(report))
     notes.push('wrote the share card to ' + tildify(full))

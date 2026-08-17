@@ -46,8 +46,19 @@ $TC report --html="$HOME/.token-coupons/report.html" --out="$HOME/.token-coupons
 
 Run it from the folder they usually start Claude Code in: a project's own `.claude/skills` only
 count as listed from inside that project. Add `--since=YYYY-MM-DD` if the person only wants recent
-history. Add `--uncached` if they want the list price upper bound instead of the cached price. The
-tool reads local files only and writes nothing outside the paths you give it.
+history. Add `--uncached` if they want the list price upper bound instead of the cached price.
+
+Every run leaves a record in `~/.token-coupons/runs`, and this one reads the last. Two things follow
+from that, and both belong in your reply:
+
+- **Any setting nobody typed again is carried forward.** If they asked for `--since=2026-06-01` last
+  month, this report reads the same stretch of history without being told. That is what stops two
+  reports a week apart from disagreeing for no reason. `--fresh` ignores the history entirely.
+- **A `SINCE YOUR LAST RUN` block appears when something moved:** a different folder, skills added or
+  gone, or a headline number up or down by more than a fifth. Read it before the summary and say what
+  it found. Silence there means the two runs measured the same thing.
+
+The tool reads local files only and writes nothing outside the paths you give it and that run record.
 
 No scorecard yet. The card is the picture of what changed, so it belongs at the end, after the
 changes are real.
@@ -64,6 +75,10 @@ conversation; the person reads that detail in the page, not in chat.
 Lead with one verdict line, picked by the ladder in [references/report-anatomy.md](references/report-anatomy.md):
 skills that cannot be routed to beat dollars, dollars beat tokens. Then at most three supporting
 lines. No table yet.
+
+If `report.previous` is set, its `drift` list comes first, in one line. A number that moved because
+the folder changed is not the same news as one that moved because they installed twelve skills, and
+saying which it was is the difference between a report they trust and one they argue with.
 
 ## Step 3. Put the report in front of them
 

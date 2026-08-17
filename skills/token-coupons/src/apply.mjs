@@ -12,7 +12,7 @@
 import { writeFileSync, mkdirSync, renameSync, cpSync, rmSync, unlinkSync, existsSync } from 'node:fs'
 import { join, basename, dirname, isAbsolute, resolve } from 'node:path'
 
-import { readText, safeReal, isSymlink, setFrontmatterKey } from './lib/util.mjs'
+import { readText, safeReal, isSymlink, setFrontmatterKey, timeStamp } from './lib/util.mjs'
 import { homeDir, trashDir as defaultTrashDir, tildify } from './paths.mjs'
 
 /** The actions a decisions file may ask for. `keep` means do nothing at all. */
@@ -291,12 +291,7 @@ export function matchSkill (d, index) {
 /* ------------------------------------------------------------------ */
 
 /** The dated folder name deleted skills are moved into: YYYYMMDD-HHMMSS, local time. */
-export function trashStamp (date) {
-  const d = (date instanceof Date && !Number.isNaN(date.getTime())) ? date : new Date()
-  const p = (n) => String(n).padStart(2, '0')
-  return String(d.getFullYear()) + p(d.getMonth() + 1) + p(d.getDate()) +
-    '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds())
-}
+export function trashStamp (date) { return timeStamp(date) }
 
 /**
  * Carry out a plan. With `yes` false nothing at all is written: the same plan

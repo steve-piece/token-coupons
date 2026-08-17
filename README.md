@@ -185,6 +185,15 @@ sequenceDiagram
 - On a subscription, dollars are the wrong unit, so the report also gives the listing as a share of everything you send.
 - Prices are a data file (`skills/token-coupons/data/pricing.json`) with a verified-on date, never code, and the report says so when that date is more than 60 days old.
 
+### Two runs a week apart should be comparable
+
+A report is only as steady as its inputs, and two of them change without you noticing: the folder you ran it from, which decides whose project skills count as listed, and how far back it read. So every run leaves a small record in `~/.token-coupons/runs`, and the next one reads it.
+
+- **Settings carry forward.** Ask for `--since=2026-06-01` once and every later report reads the same stretch of history without being told again. Anything you do type wins. Flags that only decide what gets written (`--html`, `--card`, `--out`) are deliberately not remembered.
+- **The report says what moved.** A `SINCE YOUR LAST RUN` block appears when the folder changed, skills came or went, or a headline number moved by more than a fifth. Nothing there means the two runs measured the same thing.
+
+`--fresh` skips both. History is thirty records deep, about 7 KB each, and it lives outside the skill folder on purpose: a plugin update replaces the plugin cache and `skills update` re-copies an installed skill, so history kept in there would be wiped by the very event it exists to survive.
+
 ## Conventions
 
 | Mode | In the skill's SKILL.md | What is sent every message |
@@ -237,6 +246,8 @@ token-coupons help
   --out=FILE       also write the report JSON
   --open           open the HTML page in your browser after writing it
   --no-color       plain text without colors
+  --fresh          report only: ignore the last run, carry nothing forward, compare nothing
+  --runs=DIR       report only: where run history is kept (default ~/.token-coupons/runs)
   --yes            apply and describe only: actually make the changes
   --trash=DIR      apply and describe only: where deleted folders and replaced files go
                    (default ~/.token-coupons/trash)

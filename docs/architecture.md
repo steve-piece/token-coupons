@@ -56,7 +56,7 @@ plugin manifests, and a private `package.json` that exists for `pnpm test`.
 ```
 bin/token-coupons.mjs      CLI: report (default) | apply | describe | pricing | help
 src/version.mjs            VERSION, the one place the number is written
-src/paths.mjs              homeDir(), claudeDir(), projectsDir(), pluginsDir(), trashDir(), tildify()
+src/paths.mjs              homeDir(), claudeDir(), projectsDir(), pluginsDir(), trashDir(), runsDir(), tildify()
 src/lib/util.mjs           readText, readJson, listDir, isDir, isSymlink, safeReal, walk,
                            parseFrontmatter (block scalars ok), setFrontmatterKey (one line values),
                            setFrontmatterText (paragraph values, writes a folded block), fmt, money
@@ -74,6 +74,8 @@ src/render-card.mjs        renderCardSvg(report, {repoUrl}) -> svg ; renderCardP
 src/apply.mjs              planApply(decisions, {skills}) -> Plan ; applyPlan(plan, {yes, trashDir}) -> Result ; cacheNote(result) -> the re-send warning
                            plus the shared skill lookup: buildIndex, matchSkill, firstName, editTarget, trashStamp
 src/describe.mjs           planDescribe(edits, {skills, cap}) -> Plan ; applyDescribe(plan, {yes, trashDir}) -> Result
+src/runs.mjs               runRecord(report, {flags, cwd}) -> Run ; saveRun/loadLastRun/listRuns/pruneRuns ;
+                           mergeFlags(typed, previous) -> {flags, reused} ; compareRuns(prev, curr) -> [note]
 data/pricing.json          the price table (shape below)
 SKILL.md                   the Agent Skill that drives the loop
 references/, evals/        the skill's own reading and its evals
@@ -374,7 +376,7 @@ applyPlan(plan, {yes, trashDir, now}) -> {
 ```
 token-coupons report [--since=YYYY-MM-DD] [--cwd=DIR] [--window=N] [--fraction=F] [--budget=CHARS]
                      [--pricing=FILE] [--uncached] [--cache-ttl=MIN] [--json] [--html=FILE]
-                     [--card=FILE] [--out=FILE] [--open] [--no-color]
+                     [--card=FILE] [--out=FILE] [--open] [--no-color] [--fresh] [--runs=DIR]
 token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
@@ -447,6 +449,44 @@ report; apply exits 1 if any step errored.
   `description-rewrite.md`, `cost-model.md`, `listing-budget.md`. Each 40 to
   100 lines, plain language, no dashes.
 - `evals/evals.json` in the agentskills.io shape with three realistic prompts.
+
+## Run history (src/runs.mjs)
+
+A report is only as steady as its inputs, and two of them change without anyone
+noticing: the folder the command ran in, which decides whose project skills
+count as listed, and the session window. The same machine can produce two
+answers that look nothing alike, with nothing anywhere saying why.
+
+So every `report` leaves a record and reads the last one. `report.run` is that
+record, built inside `buildReport` so that whatever is compared is exactly what
+gets saved. It is not the report: the summary, the action counts, the flags,
+the folder, and one line per skill (`{name, mode, chars, calls}`). About 7 KB
+against a report's 300 KB, which is what makes keeping thirty of them free.
+
+Two behaviours come out of it:
+
+- **Carrying forward.** `mergeFlags` takes what was typed this run and fills the
+  gaps from the last one, for the flags that change what is measured (`since`,
+  `window`, `fraction`, `budget`, `pricing`, `cache-ttl`, `cwd`, `uncached`).
+  Flags that only change what is written (`--html`, `--card`, `--out`, `--open`)
+  are deliberately not remembered: reusing them would write files nobody asked
+  for. `--fresh` skips the whole mechanism.
+- **Drift.** `compareRuns` returns plain sentences, worst first: the folder
+  changed, skills came or went, or a headline number moved by more than
+  `DEFAULT_DRIFT` (a fifth). Two runs that agree return an empty list, which is
+  the answer most of the time. A number missing on either side is silence, never
+  a change: the dollar figures are null when no price matches the model in use,
+  and reporting that as "down 100 percent" would be a lie.
+
+History lives in `~/.token-coupons/runs` (`TOKEN_COUPONS_RUNS` overrides,
+`--runs=DIR` per run), outside the skill folder on purpose. A plugin update
+replaces the plugin cache and `skills update` re-copies an installed skill, so
+history kept in there would be wiped by the very event it exists to survive.
+
+Nothing about it is load bearing. An unreadable file is skipped rather than
+thrown, a record written by a newer version is ignored, and a folder that cannot
+be written becomes a note on the report instead of a failure. Losing history
+must never cost someone the report.
 
 ## Why describe is a command and not an edit (src/describe.mjs)
 

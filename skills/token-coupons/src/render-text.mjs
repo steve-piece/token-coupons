@@ -49,6 +49,23 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   line(paint.dim('Claude Code carries a list of every installed skill, name and description, in every message you send. This is what that list costs.'))
   line(paint.dim('Cost is counted in tokens: small chunks of text, about four characters each, and everything you send is billed by the token.'))
 
+  // SINCE YOUR LAST RUN
+  // First, because it decides how much of the rest is news. Silence here means
+  // the two runs measured the same thing and the numbers can be compared.
+  const prev = r.previous
+  if (prev) {
+    head('SINCE YOUR LAST RUN')
+    line('  Last run ' + (prev.generatedOn || String(prev.ranAt || '').slice(0, 10)) +
+      (Array.isArray(prev.reused) && prev.reused.length
+        ? paint.dim(', and its ' + prev.reused.map((k) => '--' + k).join(' and ') + ' carried forward to this one')
+        : ''))
+    if (!prev.drift || !prev.drift.length) {
+      line(paint.dim('  Nothing moved enough to mention, so these numbers line up with last time.'))
+    } else {
+      for (const note of prev.drift) line('  ' + note)
+    }
+  }
+
   // WHAT THE LISTING COSTS
   head('WHAT THE LISTING COSTS')
   line('  Skills in your listing: ' + fmt(totals.skills || 0) +

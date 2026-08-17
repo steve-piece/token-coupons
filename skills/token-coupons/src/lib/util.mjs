@@ -191,6 +191,18 @@ export function walk (dir, out = [], base = dir) {
   return out
 }
 
+/**
+ * YYYYMMDD-HHMMSS in local time. Used to name anything kept in date order: the
+ * trash folder a delete lands in, and the run history files, which sort by
+ * name because this format sorts the same way time does.
+ */
+export function timeStamp (date) {
+  const d = (date instanceof Date && !Number.isNaN(date.getTime())) ? date : new Date()
+  const p = (n) => String(n).padStart(2, '0')
+  return String(d.getFullYear()) + p(d.getMonth() + 1) + p(d.getDate()) +
+    '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds())
+}
+
 /** Thousands separators. 12345 -> "12,345". */
 export function fmt (n) { return String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
 

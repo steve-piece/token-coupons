@@ -8,6 +8,7 @@
 // short summary block an agent reads before anything else.
 
 import { VERSION } from './version.mjs'
+import { runRecord, compareRuns } from './runs.mjs'
 import { discoverSkills } from './discover.mjs'
 import { scanTranscripts, sessionStats } from './calls.mjs'
 import { listingBudget, listingCost } from './budget.mjs'
@@ -37,7 +38,7 @@ export function dayOf (value = null) {
  * @param thresholds   overrides for recommend.mjs DEFAULT_THRESHOLDS
  * @param today        fixes "today" so tests and staleness are reproducible
  */
-export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null, cached = true, thresholds = {}, today = null, cwd = process.cwd(), cacheTtlMinutes = undefined } = {}) {
+export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null, cached = true, thresholds = {}, today = null, cwd = process.cwd(), cacheTtlMinutes = undefined, previous = null, runFlags = {}, ranAt = null } = {}) {
   const generatedOn = dayOf(today)
   const everything = discoverSkills({ cwd })
   const { calls, sessions } = scanTranscripts(since || null, { cacheTtlMinutes })
@@ -75,6 +76,11 @@ export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null
   const totals = buildTotals(rows, sessions, calls, notLoaded)
   const summary = buildSummary({ rows: ranked.rows, economics, stats, pricing, cost, counts: ranked.counts, notLoaded })
 
+  // The record this run leaves for the next one, and what moved since the last.
+  // `run` is built here rather than by the caller so that whatever is compared
+  // is exactly what gets saved, and a report read back off disk explains itself.
+  const run = runRecord({ generatedOn, summary, totals, skills: ranked.rows }, { flags: runFlags, cwd, ranAt })
+
   return {
     version: REPORT_VERSION,
     tool: { name: 'token-coupons', version: toolVersion() },
@@ -100,6 +106,17 @@ export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null
     notLoaded,
     unmatchedCalls,
     summary,
+    run,
+    previous: previous
+      ? {
+          ranAt: previous.ranAt || null,
+          generatedOn: previous.generatedOn || null,
+          cwd: previous.cwd || null,
+          flags: previous.flags || {},
+          summary: previous.summary || {},
+          drift: compareRuns(previous, run),
+        }
+      : null,
   }
 }
 

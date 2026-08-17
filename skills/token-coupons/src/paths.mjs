@@ -22,6 +22,19 @@ export function trashDir () {
 }
 
 /**
+ * Where each run leaves its record, so the next one can reuse the same settings
+ * and say what moved.
+ *
+ * Not inside the skill folder, on purpose. A plugin update replaces the plugin
+ * cache and `skills update` re-copies an installed skill, so history kept there
+ * would be wiped by the very event it exists to survive. One folder in the home
+ * directory also means one place to look, whichever way the skill was installed.
+ */
+export function runsDir () {
+  return process.env.TOKEN_COUPONS_RUNS || join(homeDir(), '.token-coupons', 'runs')
+}
+
+/**
  * Replace the home prefix with ~ for display. Real paths are matched too, so
  * a home that sits behind a symlink (macOS /var to /private/var, for one)
  * still collapses to ~.

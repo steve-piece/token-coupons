@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync, statSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, symlinkSync, statSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -143,6 +143,52 @@ describe('cli: report', () => {
       const report = JSON.parse(r.out)
       assert.equal(report.cost.perModel.length, 0)
       assert.equal(report.summary.wastedPerWeekOnYourModel, null)
+    } finally { fx.cleanup() }
+  })
+})
+
+describe('cli: run history', () => {
+  test('a settings flag carries forward, and the report says what moved', () => {
+    const fx = fixture()
+    try {
+      const runs = join(fx.home, 'runs')
+      const first = run(['report', '--since=2026-08-01', '--runs=' + runs], fx.home)
+      assert.equal(first.code, 0, first.err)
+      assert.equal(/SINCE YOUR LAST RUN/.test(first.out), false, 'nothing to compare on the first run')
+      assert.equal(readdirSync(runs).length, 1)
+
+      const second = run(['report', '--runs=' + runs], fx.home)
+      assert.match(second.out, /sessions since 2026-08-01/, '--since carried forward without being typed again')
+      assert.match(second.out, /SINCE YOUR LAST RUN/)
+      assert.match(second.out, /--since carried forward/)
+      assert.equal(readdirSync(runs).length, 2, 'every run leaves its own record')
+
+      const elsewhere = run(['report', '--runs=' + runs, '--cwd=' + fx.home], fx.home)
+      assert.match(elsewhere.out, /different folder this time/)
+    } finally { fx.cleanup() }
+  })
+
+  test('--fresh carries nothing forward and compares nothing', () => {
+    const fx = fixture()
+    try {
+      const runs = join(fx.home, 'runs')
+      run(['report', '--since=2026-08-01', '--runs=' + runs], fx.home)
+      const r = run(['report', '--fresh', '--runs=' + runs], fx.home)
+      assert.equal(/sessions since/.test(r.out), false)
+      assert.equal(/SINCE YOUR LAST RUN/.test(r.out), false)
+      assert.equal(readdirSync(runs).length, 2, 'it still leaves its own record for next time')
+    } finally { fx.cleanup() }
+  })
+
+  test('a history folder that cannot be written is a note, not a failure', () => {
+    const fx = fixture()
+    try {
+      const blocked = join(fx.home, 'blocked')
+      writeFileSync(blocked, 'this is a file, not a folder')
+      const r = run(['report', '--runs=' + blocked], fx.home)
+      assert.equal(r.code, 0, 'the report is still worth having')
+      assert.match(r.out, /WHAT THE LISTING COSTS/)
+      assert.match(r.out, /could not write the run history/)
     } finally { fx.cleanup() }
   })
 })
