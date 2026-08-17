@@ -122,9 +122,10 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
 
   /* ------------------------------------------------------------ footer */
   out.push(rule(P, 902, CW))
-  // The slash command, not an install line: there is no package to install any
-  // more, and the repo link opposite is where someone who wants it goes.
-  const cmd = '/token-coupons'
+  // The install line, not the slash command. A card is read by people who do
+  // not have this yet, and `/token-coupons` means nothing to them. Verified to
+  // resolve straight from GitHub, so it needs no registry entry to work.
+  const cmd = 'npx skills add steve-piece/token-coupons'
   const pw = Math.round(w(cmd, 22)) + 44
   out.push(`<rect x="${P}" y="940" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
   out.push(text(cmd, P + 22, 972, { size: 22, fill: IN.cyan }))

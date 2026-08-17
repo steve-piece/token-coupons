@@ -118,9 +118,11 @@ describe('card', () => {
     assert.match(svg, /<g transform="translate\([\d.]+ [\d.]+\) scale\([\d.]+\)"/, 'the mark is drawn, not fetched')
   })
 
-  test('the pill is the slash command, because there is no package to install', () => {
-    assert.ok(svg.includes('/token-coupons'))
-    assert.equal(/npx|npm install/.test(svg), false)
+  test('the pill is the one command a stranger can run, not the slash command', () => {
+    assert.ok(svg.includes('npx skills add steve-piece/token-coupons'))
+    // Never the package manager: there is no package, and a card that told
+    // someone to npm install this would send them nowhere.
+    assert.equal(/npm install|npx token-coupons/.test(svg), false)
   })
 
   test('the tiles name what changed, in the words the card owner chose', () => {
