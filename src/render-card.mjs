@@ -330,16 +330,16 @@ export function renderCardPage (report, { listHref = null, listCount = 0 } = {})
     '<main class="stage">',
     '<div class="card" id="card">' + svg + '</div>',
     '<div class="bar">',
-    '<button type="button" id="png" class="go">Save PNG</button>',
-    '<button type="button" id="copy" class="alt">Copy image</button>',
     listHref
-      ? '<a class="alt link" href="' + esc(listHref) + '">Open the full list' + (listCount ? ' (' + listCount + ' skills)' : '') + '</a>'
+      ? '<a class="go" href="' + esc(listHref) + '"><span class="arrow" aria-hidden="true">\u2192</span>See suggestions' +
+        (listCount ? ' (' + listCount + ')' : '') + '</a>'
       : '',
-    '<span class="msg" id="msg" role="status" aria-live="polite">' + CARD_WIDTH + ' by ' + CARD_HEIGHT + ', saved at 2x for a crisp post.</span>',
+    '<button type="button" id="png" class="alt">Save image</button>',
+    '<button type="button" id="copy" class="alt">Copy image</button>',
     '</div>',
-    '<p class="fine">Measured from the skills and session transcripts already on this machine, on ' + esc(day) +
-      '. Nothing left the machine to make it.' +
-      (listHref ? ' The full list is where you change any suggestion before applying it.' : '') + '</p>',
+    '<p class="msg" id="msg" role="status" aria-live="polite"></p>',
+    '<p class="fine">Measured on ' + esc(day) + ' from the skills and session transcripts already on this machine. ' +
+      'Nothing left the machine to make it.</p>',
     '</main>',
     '<script>' + pageScript() + '</script>',
     '</body>',
@@ -355,29 +355,34 @@ function pageStyles () {
 body {
   margin: 0; background: ${IN.ink}; color: ${IN.text};
   font: 15px/1.55 ${MONO};
-  display: flex; justify-content: center;
-  padding: 32px 20px 64px;
+  min-height: 100vh; padding: 24px 20px;
+  display: flex; align-items: center; justify-content: center;
 }
-.stage { width: 100%; max-width: 1200px; }
-.card { line-height: 0; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,.6), 0 0 0 1px ${IN.line}; }
-.card svg { width: 100%; height: auto; display: block; }
-.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 22px; }
+/* The card is portrait because that is what posts well, but it should still be
+   readable whole on a desktop, so it scales to whatever height is left after
+   the controls rather than forcing a scroll. The exported PNG is unaffected:
+   it is always drawn at the authored size. */
+.stage { display: flex; flex-direction: column; align-items: center; gap: 16px; max-width: 1200px; width: 100%; }
+.card { line-height: 0; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,.6), 0 0 0 1px ${IN.line}; max-width: 100%; }
+.card svg { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 214px); }
+.bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; }
+.arrow { margin-right: 9px; font-size: 1.05em; line-height: 1; }
 button {
   font: inherit; font-size: 15px; cursor: pointer; border-radius: 12px; padding: 12px 20px; min-height: 46px;
   border: 1px solid ${IN.line}; background: ${IN.panelUp}; color: ${IN.text};
   transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
 }
-button.go { background: ${IN.cyan}; border-color: ${IN.cyan}; color: #04202B; font-weight: 700; }
-button.go:hover { filter: brightness(1.08); }
+a.go, button.go { background: ${IN.cyan}; border-color: ${IN.cyan}; color: #04202B; font-weight: 700; }
+a.go:hover, button.go:hover { filter: brightness(1.08); }
+a.go { text-decoration: none; display: inline-flex; align-items: center; }
 button.alt:hover { border-color: ${IN.cyan}; color: ${IN.cyan}; }
 button:disabled { opacity: .55; cursor: default; }
-a.link { text-decoration: none; display: inline-flex; align-items: center; }
-a.link:hover { border-color: ${IN.emerald}; color: ${IN.emerald}; }
+
 button:focus-visible { outline: 2px solid ${IN.cyan}; outline-offset: 3px; }
-.msg { color: ${IN.muted}; font-size: 14px; }
-.fine { color: ${IN.muted}; font-size: 13.5px; margin: 18px 0 0; max-width: 70ch; }
+.msg { color: ${IN.muted}; font-size: 13.5px; margin: 0; min-height: 20px; text-align: center; }
+.fine { color: ${IN.muted}; font-size: 12.5px; margin: 0; max-width: 78ch; text-align: center; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-@media (max-width: 620px) { body { padding: 16px 12px 48px; } .bar { gap: 10px; } }
+@media (max-width: 620px) { body { padding: 16px 12px 32px; align-items: flex-start; } .card svg { max-height: none; } }
 `
 }
 

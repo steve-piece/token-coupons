@@ -103,6 +103,7 @@ describe('card', () => {
     assert.ok(page.includes('a.download'), 'the opened from disk path')
     assert.ok(page.includes('toBlob'), 'the rasterizer')
     assert.ok(page.includes('id="png"'))
+    assert.ok(page.includes('Save image') && page.includes('Copy image'))
     const DASHES = [0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2212].map((c) => String.fromCodePoint(c))
     assert.equal(DASHES.some((d) => page.includes(d)), false, 'no forbidden dash reaches the page')
   })
@@ -159,5 +160,41 @@ describe('headline', () => {
     const clean = headline({}, { neverCalledPassive: { count: 0 }, summonedOnlyPassive: { count: 0 } }, { tokens: { wasted: 0 } })
     assert.equal(clean.length, 1)
     assert.match(clean[0], /read at least once/)
+  })
+})
+
+describe('the card page', () => {
+  const r = report({ listing: 10832, wasted: 7777, over: 1.08, unroutable: 3 })
+
+  test('leads the controls with the next action, then the image actions', () => {
+    const page = renderCardPage(r, { listHref: 'list.html', listCount: 94 })
+    const bar = page.slice(page.indexOf('<div class="bar">'), page.indexOf('</div>', page.indexOf('<div class="bar">')))
+    const order = ['See suggestions', 'Save image', 'Copy image'].map((label) => bar.indexOf(label))
+    assert.ok(order.every((i) => i > -1), 'all three controls are present')
+    assert.deepEqual(order, [...order].sort((a, b) => a - b), 'and in that order')
+    assert.ok(bar.includes('href="list.html"'))
+    assert.ok(bar.includes('(94)'))
+    assert.ok(bar.includes('class="arrow"'), 'the next action is signposted')
+  })
+
+  test('omits the suggestions control when there is no list to open', () => {
+    const page = renderCardPage(r)
+    assert.equal(page.includes('See suggestions'), false)
+    assert.ok(page.includes('Save image'), 'the image actions still stand alone')
+  })
+
+  test('scales the card to the viewport, so the whole thing reads on one screen', () => {
+    const page = renderCardPage(r)
+    assert.match(page, /max-height: calc\(100vh - \d+px\)/, 'the card is bounded by the viewport')
+    assert.ok(page.includes('justify-content: center'), 'the controls sit centred under it')
+    // the export is unaffected by how it is displayed
+    assert.ok(page.includes('c.width = ' + CARD_WIDTH + ' * scale'))
+    assert.ok(page.includes('c.height = ' + CARD_HEIGHT + ' * scale'))
+  })
+
+  test('the status line starts empty rather than describing the file', () => {
+    const page = renderCardPage(r)
+    assert.match(page, /id="msg" role="status" aria-live="polite"><\/p>/)
+    assert.equal(page.includes('crisp post'), false)
   })
 })
