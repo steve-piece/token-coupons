@@ -133,10 +133,12 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
   // styling of its own, so this changes nothing about how the footer looks, and
   // it is inert once the card is a PNG.
   const label = 'View on GitHub'
+  // Dropped so its last line sits on the same baseline as the footnote opposite,
+  // which is what makes the two halves of the footer read as one row.
   out.push(`<a href="${attr(repoUrl)}" target="_blank" rel="noreferrer noopener">`)
-  out.push(githubMark(CARD_WIDTH - P - Math.round(w(label, 20)) - 34, 942, 22, IN.text))
-  out.push(text(label, CARD_WIDTH - P, 958, { size: 20, fill: IN.text, anchor: 'end' }))
-  out.push(text(repoUrl.replace(/^https?:\/\//, ''), CARD_WIDTH - P, 984, { size: 16, fill: IN.muted, anchor: 'end' }))
+  out.push(githubMark(CARD_WIDTH - P - Math.round(w(label, 20)) - 34, 996, 22, IN.text))
+  out.push(text(label, CARD_WIDTH - P, 1012, { size: 20, fill: IN.text, anchor: 'end' }))
+  out.push(text(repoUrl.replace(/^https?:\/\//, ''), CARD_WIDTH - P, 1038, { size: 16, fill: IN.muted, anchor: 'end' }))
   out.push('</a>')
 
   out.push('</svg>')
