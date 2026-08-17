@@ -13,7 +13,7 @@
 import { fmt, money } from './lib/util.mjs'
 
 export const CARD_WIDTH = 1200
-export const CARD_HEIGHT = 1050
+export const CARD_HEIGHT = 1064
 
 /** Printed bottom right, so a card that travels can be traced back. */
 export const REPO = 'https://github.com/steve-piece/token-coupons'
@@ -50,6 +50,7 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
 
   const saved = s.savedOnYourModel || null
   const savedMonth = saved && typeof saved.dollarsPerMonth === 'number' ? saved.dollarsPerMonth : null
+  const modelName = (saved && saved.model) || (s.wastedPerWeekOnYourModel && s.wastedPerWeekOnYourModel.model) || null
   const savedTokens = Number(s.savedTokensPerCallIfApplied) || 0
   const listing = Number(s.listingTokensPerCall) || 0
   const after = Math.max(0, listing - savedTokens)
@@ -74,7 +75,7 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
   out.push(rule(P, 126, CW))
 
   /* --------------------------------------------------------------- won */
-  out.push(text('I SAVED, AT API PRICES', P, 182, { size: 17, fill: IN.muted, spacing: 4.2 }))
+  out.push(text('I SAVED', P, 182, { size: 17, fill: IN.muted, spacing: 4.2 }))
 
   const hero = savedMonth !== null ? money(savedMonth) : fmt(savedTokens)
   const heroSize = hero.length > 7 ? 150 : 178
@@ -123,6 +124,12 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
   const pw = Math.round(w(cmd, 22)) + 44
   out.push(`<rect x="${P}" y="940" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
   out.push(text(cmd, P + 22, 972, { size: 22, fill: IN.cyan }))
+  if (savedMonth !== null) {
+    out.push(text(modelName
+      ? `Calculated at API prices for ${modelName}, the model most used on this machine.`
+      : 'Calculated at API prices for the model most used on this machine.',
+    P, 1026, { size: 15, fill: IN.muted }))
+  }
   // The mark, the label and the URL are one target. An SVG anchor carries no
   // styling of its own, so this changes nothing about how the footer looks, and
   // it is inert once the card is a PNG.
