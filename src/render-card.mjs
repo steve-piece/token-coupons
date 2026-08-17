@@ -74,12 +74,12 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
   out.push(rule(P, 126, CW))
 
   /* --------------------------------------------------------------- won */
-  out.push(text('SAVED, AT API PRICES', P, 182, { size: 17, fill: IN.muted, spacing: 4.2 }))
+  out.push(text('I SAVED, AT API PRICES', P, 182, { size: 17, fill: IN.muted, spacing: 4.2 }))
 
   const hero = savedMonth !== null ? money(savedMonth) : fmt(savedTokens)
   const heroSize = hero.length > 7 ? 150 : 178
   out.push(`<text x="${P - 6}" y="366" font-family="${MONO}" font-size="${heroSize}" font-weight="700" fill="${IN.emerald}" filter="url(#bigglow)">${esc(hero)}</text>`)
-  out.push(text(savedMonth !== null ? 'a month' : 'tokens a message', P - 6 + w(hero, heroSize) + 20, 366, { size: 42, fill: IN.muted, weight: 500 }))
+  out.push(text(savedMonth !== null ? '/ month' : 'tokens a message', P - 6 + w(hero, heroSize) + 20, 366, { size: 42, fill: IN.muted, weight: 500 }))
 
   const line = savedMonth !== null
     ? `${fmt(savedTokens)} tokens off every message you send, from ${fmt(touched)} skills.`
@@ -147,9 +147,10 @@ function defs (gradeColor) {
     <feGaussianBlur stdDeviation="18" result="b"/>
     <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>
-  <filter id="bigglow" x="-60%" y="-60%" width="220%" height="220%">
-    <feGaussianBlur stdDeviation="22" result="b"/>
-    <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+  <filter id="bigglow" x="-50%" y="-50%" width="200%" height="200%">
+    <feGaussianBlur stdDeviation="11" result="b"/>
+    <feComponentTransfer in="b" result="dim"><feFuncA type="linear" slope="0.55"/></feComponentTransfer>
+    <feMerge><feMergeNode in="dim"/><feMergeNode in="SourceGraphic"/></feMerge>
   </filter>
   <filter id="soft" x="-80%" y="-80%" width="260%" height="260%">
     <feGaussianBlur stdDeviation="7" result="b"/>
