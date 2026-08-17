@@ -9,7 +9,7 @@
     {
       "name": "token-coupons",
       "source": "./",
-      "description": "Audit what your installed skills cost on every message and which ones the agent never reads, put the interactive report in front of you, then carry out your decisions. Run it with /token-coupons.",
+      "description": "Audit what your installed skills cost on every message, decide what to change, then carry it out. Run it with /token-coupons.",
       "version": "0.1.0",
       "author": { "name": "Steven Light", "email": "steven@modernrefactor.com" },
       "category": "dev-workflow",

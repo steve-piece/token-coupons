@@ -12,7 +12,7 @@ related: [report-anatomy, description-rewrite, listing-budget, cost-model]
 ## Shape
 
 The page's Copy button puts this on the clipboard, and the person pastes it into their next message (the page
-tells them to add "proceed with these decisions"). Save it verbatim to a file, pipe it to `token-coupons apply -`, or write it by hand.
+tells them to add "proceed with these decisions"). Save it verbatim to a file, pipe it to `$TC apply -`, or write it by hand.
 
 ```json
 {
@@ -63,8 +63,8 @@ Refusals appear in `plan.refused` with a reason. Read every one of them out loud
 Without `--yes` nothing is written. The plan prints and stops, and that is what you show the person before asking for a go ahead.
 
 ```bash
-token-coupons apply "$HOME/.token-coupons/decisions.json"
-token-coupons apply "$HOME/.token-coupons/decisions.json" --yes
+$TC apply "$HOME/.token-coupons/decisions.json"
+$TC apply "$HOME/.token-coupons/decisions.json" --yes
 ```
 
 `--trash=DIR` moves deletes somewhere else. `--json` prints the plan or the result as data, which is the
@@ -97,3 +97,24 @@ Every step carries an `undo` string, and `--yes` prints it as the step runs. Kee
 
 `dryRun` true means this was the plan pass and disk was not touched. `done: false` with an `error` means that one step
 failed while others may have succeeded; the file is only ever rewritten whole, so a failed step leaves the original in place.
+
+## The second file: descriptions
+
+`optimize` is the one action `apply` cannot finish, because the missing piece is written English rather than an edit.
+It leaves the skill in `worklist` instead, carrying the name, the SKILL.md path, `currentDescription` and `targetChars`.
+
+Draft one replacement per row, then hand them back as a second file. It is the same two step run, and it refuses an
+empty description, one past the 1536 character cap, and any settings block it cannot edit safely.
+
+```json
+{ "version": 1, "descriptions": [{ "name": "some-skill", "description": "the new text" }] }
+```
+
+```bash
+$TC describe "$HOME/.token-coupons/descriptions.json"
+$TC describe "$HOME/.token-coupons/descriptions.json" --yes
+```
+
+A worklist row with a `description` added to it is accepted as is, so the block can go straight back without reshaping.
+Only the `description` key changes; every other line of the file is left byte for byte. The file as it stood is copied
+into the same trash folder first, which is what the `cp` undo line points at.

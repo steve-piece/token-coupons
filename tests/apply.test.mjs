@@ -4,8 +4,8 @@ import { readFileSync, readdirSync, readlinkSync, lstatSync, existsSync } from '
 import { join } from 'node:path'
 
 import { makeFixtureHome, withHome } from './helpers.mjs'
-import { parseDecisions, planApply, applyPlan, summarizeApply, trashStamp } from '../src/apply.mjs'
-import { discoverSkills } from '../src/discover.mjs'
+import { parseDecisions, planApply, applyPlan, summarizeApply, trashStamp } from '../skills/token-coupons/src/apply.mjs'
+import { discoverSkills } from '../skills/token-coupons/src/discover.mjs'
 
 // A fixed local time, so the trash folder name is the same on every machine.
 const NOW = new Date(2026, 7, 15, 12, 34, 56)
@@ -378,7 +378,7 @@ describe('trashStamp', () => {
 
 describe('the prompt cache warning', () => {
   test('a plan that writes says the listing change costs one re-send, and a plan that does not stays quiet', async () => {
-    const { summarizeApply, cacheNote } = await import('../src/apply.mjs')
+    const { summarizeApply, cacheNote } = await import('../skills/token-coupons/src/apply.mjs')
     const writes = { dryRun: true, applied: 0, steps: [{ name: 'a', action: 'active', kind: 'set-gate', detail: 'd', undo: 'u' }], worklist: [], refused: [] }
     assert.match(summarizeApply(writes), /re-send its whole conversation at full price/)
     assert.match(summarizeApply(writes), /\/clear/)

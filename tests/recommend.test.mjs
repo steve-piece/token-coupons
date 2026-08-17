@@ -1,8 +1,8 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { recommend, DEFAULT_THRESHOLDS } from '../src/recommend.mjs'
-import { listingCost, nameLineChars, toTokens } from '../src/budget.mjs'
+import { recommend, DEFAULT_THRESHOLDS } from '../skills/token-coupons/src/recommend.mjs'
+import { listingCost, nameLineChars, toTokens } from '../skills/token-coupons/src/budget.mjs'
 
 const TODAY = '2026-08-15'
 

@@ -1,56 +1,56 @@
 ---
 name: token-coupons
-description: >-
-  Audit what your installed skills cost on every message and which ones the agent never reads, put
-  the interactive report in front of you, then carry out your decisions. Run it with /token-coupons.
+description: Audit what your installed skills cost on every message, decide what to change, then carry it out. Run it with /token-coupons.
 disable-model-invocation: true
+model: opus
 ---
 
 # token-coupons
 
-Seven steps, in order. Stop where it says stop. Never delete or edit a skill this loop did not
+Eight steps, in order. Stop where it says stop. Never delete or edit a skill this loop did not
 produce a decision for.
+
+Two rules hold the whole way through:
+
+- **Write nothing by hand.** Every change to a skill file has a command. The only writing you do is
+  the text of a description, and even that is filed by a command rather than an edit.
+- **Show the command before you run it.** Nothing here is pre-approved, on purpose: this loop moves
+  folders and rewrites files, and the permission prompt is the last check before it does.
 
 **When NOT to use:** one skill did not fire and the person wants that one description fixed, or a
 skill is being written right now. That is a single file edit, not a full audit.
 
 ## Step 0. Find the tool
 
-Prefer the published package:
+The tool lives inside this skill directory. `SKILL_DIR` is the **real** folder this file sits in,
+with symlinks resolved, because `skills add` installs into `~/.agents/skills` and links from
+`~/.claude/skills`.
 
 ```bash
-npx --yes token-coupons@latest help
+SKILL_DIR="$(dirname "$(node -p "require('node:fs').realpathSync('$HOME/.claude/skills/token-coupons/SKILL.md')")")"
+TC="node $SKILL_DIR/bin/token-coupons.mjs"
+$TC help
 ```
 
-If that fails (offline, npx blocked), run the copy shipped beside this skill. `SKILL_DIR` is the
-**real** folder this file sits in, not the path you reached it through. Inside an installed plugin
-that is `${CLAUDE_PLUGIN_ROOT}/skills/token-coupons`. If this skill was installed with `ln -s` into
-`~/.claude/skills`, resolve the link first (`readlink` the SKILL.md path), because
-`~/.claude/skills/token-coupons/../../bin` does not exist and the command below fails with
-`MODULE_NOT_FOUND`.
+Installed as a plugin instead, `SKILL_DIR` is `${CLAUDE_PLUGIN_ROOT}/skills/token-coupons`. Working
+from a clone, it is `<repo>/skills/token-coupons`. `TC` means that command for the rest of this file.
 
-```bash
-node SKILL_DIR/../../bin/token-coupons.mjs help
-```
-
-Whichever one answered is `TC` for the rest of this file.
+It needs Node 20 or newer and nothing else: no install step, no dependencies, no network.
 
 ## Step 1. Run the report
 
 ```bash
 mkdir -p "$HOME/.token-coupons"
-TC report --html="$HOME/.token-coupons/report.html" --out="$HOME/.token-coupons/report.json" --card="$HOME/.token-coupons/scorecard.html"
+$TC report --html="$HOME/.token-coupons/report.html" --out="$HOME/.token-coupons/report.json"
 ```
-
-`--card` writes a second, much smaller page: one dark scorecard with a score out
-of 100 and a button that saves it as a PNG. Offer it whenever the person sounds
-like they want to show someone (a teammate, a post), and when you publish it as
-an artifact declare the `downloads` capability so the button can actually save.
 
 Run it from the folder they usually start Claude Code in: a project's own `.claude/skills` only
 count as listed from inside that project. Add `--since=YYYY-MM-DD` if the person only wants recent
 history. Add `--uncached` if they want the list price upper bound instead of the cached price. The
-tool reads local files only and writes nothing outside the two paths above.
+tool reads local files only and writes nothing outside the paths you give it.
+
+No scorecard yet. The card is the picture of what changed, so it belongs at the end, after the
+changes are real.
 
 ## Step 2. Read the summary, and only the summary
 
@@ -69,7 +69,7 @@ lines. No table yet.
 
 - If an Artifact tool is available, publish `$HOME/.token-coupons/report.html` with it and hand over
   the link. The page is one self contained file, so it works inside a sandboxed frame.
-- Otherwise open it locally (`TC report --open ...`, or `open <path>` on macOS, `xdg-open <path>` on
+- Otherwise open it locally (`$TC report --open ...`, or `open <path>` on macOS, `xdg-open <path>` on
   Linux) and give the absolute path in the reply as well, so they can find it again later.
 
 ## Step 4. Tell them what to do, then stop
@@ -94,15 +94,16 @@ Stop. Do not run `apply`, do not edit a SKILL.md, do not delete anything while y
    or `review`, in the same shape.
 2. Dry run. Without `--yes` nothing is written:
    ```bash
-   TC apply "$HOME/.token-coupons/decisions.json"
+   $TC apply "$HOME/.token-coupons/decisions.json" --json > "$HOME/.token-coupons/plan.json"
    ```
-   (`TC apply -` reads the same JSON from stdin if you would rather pipe it than write a file.)
+   (`$TC apply -` reads the same JSON from stdin if you would rather pipe it than write a file. Drop
+   `--json` for the same plan as plain text.)
 3. Show the plan back to them, grouped by action, one line per skill. Call out every entry under
    `refused` and why. Say plainly that Delete moves the folder to a trash directory and can be put
    back, and that Optimize changes no file yet.
 4. Wait for a yes. Then:
    ```bash
-   TC apply "$HOME/.token-coupons/decisions.json" --yes
+   $TC apply "$HOME/.token-coupons/decisions.json" --yes
    ```
 5. Keep the undo line each step prints in your reply. If the command exits 1, name the steps that
    failed instead of reporting success.
@@ -110,25 +111,54 @@ Stop. Do not run `apply`, do not edit a SKILL.md, do not delete anything while y
    up inside a chat that is already running, so the next message in any chat still open re-sends its
    whole conversation at full price once. Suggest `/clear` so that lands on an empty conversation.
 
-## Step 6. Rewrite the Optimize descriptions
+## Step 6. Rewrite the Optimize descriptions, then file them
 
-Every Optimize decision lands in the plan's `worklist` with the current description and a
-`targetChars`. For each one, edit only the `description` in that skill's SKILL.md, following
-[references/description-rewrite.md](references/description-rewrite.md): keep the trigger phrases and
-the boundary, cut the how, aim for about 350 characters, never go over 1536.
+This is the one step that needs you rather than a command, because it is writing. Everything around
+it is still a command.
 
-When a plugin skill's source repo is on this machine, the worklist `path` already points at that
-source copy, so edit it there and mention that the installed copy refreshes on the next plugin
-update. A `path` still under `.claude/plugins/cache/` means no source copy was found: skip it, say
-so, and say the fix belongs in that plugin's own repository.
+1. Read the `worklist` block out of the plan you saved in step 5. Each row carries the skill name,
+   the SKILL.md it belongs to, `currentDescription`, and a `targetChars`. That block is the whole
+   input: do not open the SKILL.md files to read their descriptions.
+   ```bash
+   node -e "console.log(JSON.stringify(JSON.parse(require('fs').readFileSync(process.env.HOME+'/.token-coupons/plan.json','utf8')).worklist,null,2))"
+   ```
+2. Draft one new description per row, following
+   [references/description-rewrite.md](references/description-rewrite.md): keep the trigger phrases
+   and the boundary, cut the how, aim for about 350 characters, never go over 1536.
+3. Write them to `$HOME/.token-coupons/descriptions.json`, one entry per row:
+   ```json
+   {"version": 1, "descriptions": [{"name": "some-skill", "description": "the new text"}]}
+   ```
+   Adding a `description` to each worklist row and sending the worklist back works too.
+4. Dry run, then write. `describe` replaces the `description` key and leaves every other line of the
+   file alone, so no SKILL.md is ever edited by hand:
+   ```bash
+   $TC describe "$HOME/.token-coupons/descriptions.json"
+   $TC describe "$HOME/.token-coupons/descriptions.json" --yes
+   ```
+   It copies each file into the trash folder before writing it, so every rewrite has a `cp` undo
+   line. It refuses an empty description, one past the 1536 character cap, and any file whose
+   settings block it cannot edit safely. Report those refusals rather than working around them.
 
-## Step 7. Re-run and hand over the receipt
+When a plugin skill's source repo is on this machine, `describe` writes to that source copy by
+itself and says so; mention that the installed copy refreshes on the next plugin update. A path
+still under `.claude/plugins/cache/` means no source copy was found: the write happens but the next
+plugin update overwrites it, so say the lasting fix belongs in that plugin's own repository.
+
+## Step 7. Re-run, render the scorecard, hand over the receipt
+
+Now the numbers describe a machine that has actually changed.
 
 ```bash
-TC report --out="$HOME/.token-coupons/report-after.json"
+$TC report --out="$HOME/.token-coupons/report-after.json" --card="$HOME/.token-coupons/scorecard.html"
 ```
 
-Read the new `summary` the same way as Step 2, then close with exactly three lines:
+The card is one dark page: what the pass saved, in dollars a month at API prices, over what the
+listing costs now. It carries its own Save image and Copy image buttons. Publish it as an artifact
+and declare the `downloads` capability, or the save button has nothing to save to. Hand over the
+link and say it is theirs to post.
+
+Read the new `summary` the same way as step 2, then close with exactly three lines:
 
 - **Tokens per API call:** before to after, for the whole skill listing.
 - **Dollars per week:** before to after, on the model their transcripts actually show. If nothing

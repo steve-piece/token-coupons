@@ -4,8 +4,8 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { makeFixtureHome, withHome } from './helpers.mjs'
-import { buildReport, pickSummary, joinCalls, toolVersion } from '../src/report.mjs'
-import { renderText } from '../src/render-text.mjs'
+import { buildReport, pickSummary, joinCalls, toolVersion } from '../skills/token-coupons/src/report.mjs'
+import { renderText } from '../skills/token-coupons/src/render-text.mjs'
 
 const FORBIDDEN = [0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2212].map((c) => String.fromCodePoint(c))
 const TODAY = '2026-08-15'

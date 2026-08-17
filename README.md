@@ -2,9 +2,9 @@
 
 Find out what your installed Claude Code skills cost on every message, which ones the agent never reads, and what to do about it.
 
-[![npm version](https://img.shields.io/npm/v/token-coupons.svg)](https://www.npmjs.com/package/token-coupons)
 [![license MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![dependencies 0](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
+[![dependencies 0](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](#install)
+[![node 20+](https://img.shields.io/badge/node-20%2B-brightgreen.svg)](#install)
 
 ## The problem in 20 seconds
 
@@ -14,36 +14,72 @@ That listing has a budget you never see. Claude Code gives it about 1 percent of
 
 `token-coupons` reads the skills on your disk and the session transcripts already on your disk, and tells you: what the listing costs per message, which skills have never once been chosen, which ones are being dropped right now, what the waste costs in dollars per week and per month on the model you actually use, and one recommended action per skill. It counts only what Claude Code actually lists from where you run it (your `~/.claude/skills`, the current project's `.claude/skills`, and enabled plugins); everything else on disk is shown separately and costs nothing.
 
-## Quick start
+## Install
+
+It is an Agent Skill, not a package. There is nothing to publish and nothing to keep up to date but the skill itself.
+
+```bash
+npx skills add steve-piece/token-coupons
+```
+
+Then say `/token-coupons` in Claude Code and let the agent drive the whole loop. Node 20 or newer is the only requirement: no dependencies, no install step, no network.
+
+Two other ways in, if you prefer them:
+
+```bash
+# Claude Code plugin: this repo is a marketplace with one plugin
+claude plugin marketplace add steve-piece/token-coupons
+claude plugin install token-coupons@token-coupons
+```
+
+```bash
+# from a clone, point your skills folder at the copy in this repo
+git clone https://github.com/steve-piece/token-coupons
+ln -s "$PWD/token-coupons/skills/token-coupons" ~/.claude/skills/token-coupons
+```
+
+## Driving it yourself
+
+Everything the skill runs is a command you can run. `TC` below is the tool inside the skill directory, wherever it landed:
+
+```bash
+TC="node $HOME/.claude/skills/token-coupons/bin/token-coupons.mjs"
+```
 
 Print the report. Nothing is changed on disk.
 
 ```bash
-npx token-coupons@latest report
+$TC report
 ```
-
-Working from a clone, or on a machine where `npx` cannot reach the registry? Use `node bin/token-coupons.mjs` in place of `npx token-coupons@latest` in every command below.
 
 Write the interactive page and open it in your browser.
 
 ```bash
-npx token-coupons@latest report --html=report.html --open
+$TC report --html=report.html --open
 ```
 
 Or write the share card: one dark card of what the changes saved, sized for posting, with a button that saves it as a PNG.
 
 ```bash
-npx token-coupons@latest report --card=scorecard.html --open
+$TC report --card=scorecard.html --open
 ```
 
 In the page, every row starts on the recommendation. Change the rows you disagree with, then press Copy on the decisions box at the bottom. If an agent is driving, paste that JSON into your next message and say "proceed with these decisions". By hand, save it as `decisions.json` and carry it out yourself: once without `--yes` to read the plan, then again with `--yes`.
 
 ```bash
-npx token-coupons@latest apply decisions.json         # prints the plan, writes nothing
-npx token-coupons@latest apply decisions.json --yes   # makes the changes
+$TC apply decisions.json         # prints the plan, writes nothing
+$TC apply decisions.json --yes   # makes the changes
 ```
 
-`apply -` reads the same JSON from stdin, so `pbpaste | npx token-coupons@latest apply -` works too.
+`apply -` reads the same JSON from stdin, so `pbpaste | $TC apply -` works too.
+
+`apply` never edits a description: rewriting one is writing, so it hands you a worklist instead. Once the new text exists, `describe` files it, replacing that one key and leaving every other line of the file alone.
+
+```bash
+echo '{"version": 1, "descriptions": [{"name": "some-skill", "description": "the new text"}]}' > descriptions.json
+$TC describe descriptions.json         # prints the plan, writes nothing
+$TC describe descriptions.json --yes   # writes them, keeping a copy of each file first
+```
 
 ## What you get
 
@@ -105,7 +141,7 @@ flowchart LR
   C --> E
   E --> R["recommend<br/>one action per skill"]
   R --> M["cost model"]
-  P[("data/pricing.json")] --> M
+  P[("skills/token-coupons/data/pricing.json")] --> M
   M --> O1["text report"]
   M --> O2["HTML page"]
   M --> O3["JSON"]
@@ -126,10 +162,11 @@ sequenceDiagram
   H-->>P: Copy (the decisions JSON)
   P->>A: paste it: "proceed with these decisions"
   A->>T: apply (plan first, then --yes)
-  T-->>A: steps, each with an undo line
-  A->>A: rewrite the optimize descriptions
-  A->>T: report again
-  T-->>P: before and after
+  T-->>A: steps with undo lines, plus a rewrite worklist
+  A->>A: draft the new descriptions
+  A->>T: describe (plan first, then --yes)
+  A->>T: report again, with the card
+  T-->>P: before and after, and the scorecard
 ```
 
 ## The three numbers
@@ -146,7 +183,7 @@ sequenceDiagram
 - That saved copy does not last a whole chat: starting a chat, switching model, switching effort, and coming back after it has expired each throw it away, and the listing is then paid at the write rate (roughly twice input) rather than the read rate (a tenth of it). `/compact` is not one of those. How often it happens is measured from your own transcripts; `--cache-ttl=MIN` sets how long the saved copy survives (default 60, the Claude subscription behaviour) and `--uncached` still prices the worst case, where nothing is cached at all.
 - Messages per chat and chats per week are measured from your own transcripts. When no history is found, the report says the numbers were assumed instead.
 - On a subscription, dollars are the wrong unit, so the report also gives the listing as a share of everything you send.
-- Prices are a data file (`data/pricing.json`) with a verified-on date, never code, and the report says so when that date is more than 60 days old.
+- Prices are a data file (`skills/token-coupons/data/pricing.json`) with a verified-on date, never code, and the report says so when that date is more than 60 days old.
 
 ## Conventions
 
@@ -160,28 +197,19 @@ sequenceDiagram
 | `keep` | it gets used and its description is a reasonable size | nothing, it is left out of the plan | nothing to undo |
 | `active` | never used, or only ever started by name | sets `disable-model-invocation: true` in SKILL.md | delete that line |
 | `passive` | you want the agent to be able to pick it again | removes that line | add the line back |
-| `optimize` | used, but the description is over 600 characters or past the per entry cap, or never used and too thin to route to | changes no file; puts the skill on a worklist with a target of about 350 characters | nothing to undo |
+| `optimize` | used, but the description is over 600 characters or past the per entry cap, or never used and too thin to route to | changes no file; puts the skill on a worklist with a target of about 350 characters, which `describe` then writes back | `cp` the copy `describe` kept back over the file |
 | `delete` | never used, in a folder you own, and not edited in 90 days | unlinks the shortcut under `~/.claude/skills`, or moves the folder into the trash folder | `ln -s` it back, or move the folder back |
 | `review` (report only) | already active, never used; costs one name line | not an action you send back: answer it with one of the five above | nothing |
 
-Plugin skills are a special case: the installed copy lives in the plugin cache and is overwritten on the next update. When the plugin's source repo is on your machine, `apply` edits that source copy instead and tells you to run `claude plugin update`; when it is not, the cache copy is edited with a warning.
+Plugin skills are a special case: the installed copy lives in the plugin cache and is overwritten on the next update. When the plugin's source repo is on your machine, `apply` and `describe` edit that source copy instead and tell you to run `claude plugin update`; when it is not, the cache copy is edited with a warning.
 
 ## Use it from your agent
 
-The repo ships an Agent Skill at `skills/token-coupons` that runs the whole loop above. Install it either way:
+Say `/token-coupons`. The agent runs the report, leads with one verdict line, hands you the HTML page, and stops. Nothing on disk changes while it waits. Mark your decisions in the page, press Copy, and paste the JSON into your next message with "proceed with these decisions". The agent runs `apply` without `--yes` first and shows you the plan, asks, then runs it, drafts new text for the descriptions marked `optimize` and files them with `describe`, then re-runs the report and hands you the scorecard of what the pass saved.
 
-```bash
-# Claude Code: this repo is a plugin marketplace with one plugin
-claude plugin marketplace add steve-piece/token-coupons
-claude plugin install token-coupons@token-coupons
+The skill ships with `disable-model-invocation: true`, so it only ever runs when you ask for it, and `model: opus`, because the one judgment call in the loop is rewriting a description well. It pre-approves no tools: this loop moves folders and rewrites files, so every command goes through the normal permission prompt.
 
-# or, from a clone, point your skills folder at the copy in this repo
-ln -s "$PWD/skills/token-coupons" ~/.claude/skills/token-coupons
-```
-
-Then say `/token-coupons`. The agent runs the report, leads with one verdict line, hands you the HTML page, and stops. Nothing on disk changes while it waits. Mark your decisions in the page, press Copy, and paste the JSON into your next message with "proceed with these decisions". The agent runs `apply` without `--yes` first and shows you the plan, asks, then runs it, rewrites the descriptions marked `optimize`, re-runs the report, and closes with before and after.
-
-The skill itself ships with `disable-model-invocation: true`, so it only ever runs when you ask for it.
+The whole tool lives inside `skills/token-coupons`. That is deliberate: `skills add` copies a skill directory, so anything sitting outside it would not come along.
 
 ## CLI reference
 
@@ -190,6 +218,7 @@ token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=
                      [--pricing=FILE] [--uncached] [--cache-ttl=MIN] [--json] [--html=FILE]
                      [--card=FILE] [--out=FILE] [--open] [--no-color] [--cwd=DIR]
 token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
+token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
 token-coupons help
 
@@ -208,18 +237,19 @@ token-coupons help
   --out=FILE       also write the report JSON
   --open           open the HTML page in your browser after writing it
   --no-color       plain text without colors
-  --yes            apply only: actually make the changes
-  --trash=DIR      apply only: where deleted folders go (default ~/.token-coupons/trash)
+  --yes            apply and describe only: actually make the changes
+  --trash=DIR      apply and describe only: where deleted folders and replaced files go
+                   (default ~/.token-coupons/trash)
 ```
 
-`report` exits 0 when it finishes. `apply` exits 1 if a step failed, 0 otherwise; refusals are not failures. An unknown flag or command exits 2.
+`report` exits 0 when it finishes. `apply` and `describe` exit 1 if a step failed, 0 otherwise; refusals are not failures. An unknown flag or command exits 2.
 
 ## Privacy and safety
 
 - Local files only, and only the ones Claude Code itself reads. It reads your skill folders (`~/.claude/skills`, a project's own `.claude/skills`, plugin marketplaces and caches, and a shallow pass over `~/Projects`), your session transcripts under `~/.claude/projects`, and `~/.claude/settings.json` (plus `settings.local.json`) for the model you run. Folders belonging to other tools are never opened.
 - No network access, ever. Prices ship as a data file with a date on them; refreshing them is a human action, not a fetch.
 - `report` writes nothing unless you pass `--html` or `--out`.
-- `apply` writes nothing without `--yes`, and nothing it does is unrecoverable: shortcuts under `~/.claude/skills` are unlinked rather than followed, folders are moved to `~/.token-coupons/trash/<timestamp>` rather than erased, and copies owned by the plugin cache are refused with the `claude plugin uninstall` command to run instead. Every step prints its own undo line.
+- `apply` and `describe` write nothing without `--yes`, and nothing they do is unrecoverable: shortcuts under `~/.claude/skills` are unlinked rather than followed, folders are moved to `~/.token-coupons/trash/<timestamp>` rather than erased, a file about to have its description replaced is copied into that same folder first, and copies owned by the plugin cache are refused with the `claude plugin uninstall` command to run instead. Every step prints its own undo line.
 - Set `TOKEN_COUPONS_HOME` to point the whole tool at a different home directory.
 
 ## Contributing
@@ -228,6 +258,8 @@ token-coupons help
 pnpm test                    # node --test, no dependencies to install
 node tests/dash-scan.mjs     # fails on any em dash or en dash in the repo
 ```
+
+The whole tool is `skills/token-coupons`, and `tests/` at the repo root reaches into it. Nothing the tool needs at runtime may live outside that directory: `skills add` copies it on its own, and anything left behind would simply be missing. The root `package.json` is private and exists for the test script.
 
 One rule that trips everyone up: no em dashes or en dashes anywhere in this repo, including code, comments, strings, docs, and the generated HTML. Use commas, colons, parentheses, or periods. Run the dash scan before you open a pull request.
 

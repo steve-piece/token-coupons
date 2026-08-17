@@ -27,8 +27,9 @@ export const TIER_ORDER = { frontier: 0, mid: 1, small: 2 }
 const DAY_MS = 86400000
 
 /**
- * The price list that ships inside the package, found relative to this file so
- * it still resolves when the tool is installed from npm and run from anywhere.
+ * The price list that ships inside the skill, found relative to this file so it
+ * resolves wherever the skill directory was copied to and whatever folder the
+ * command was run from.
  */
 export function bundledPricingPath () {
   return join(dirname(fileURLToPath(import.meta.url)), '..', 'data', 'pricing.json')

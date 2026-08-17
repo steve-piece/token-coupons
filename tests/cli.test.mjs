@@ -6,10 +6,15 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { makeFixtureHome } from './helpers.mjs'
+import { VERSION } from '../skills/token-coupons/src/version.mjs'
+import { parseFrontmatter } from '../skills/token-coupons/src/lib/util.mjs'
+import { DEFAULT_THRESHOLDS } from '../skills/token-coupons/src/recommend.mjs'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
-const BIN = join(ROOT, 'bin', 'token-coupons.mjs')
-const PKG_VERSION = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).version
+// The tool lives entirely inside its skill directory, because `skills add`
+// copies that directory and nothing else.
+const SKILL = join(ROOT, 'skills', 'token-coupons')
+const BIN = join(SKILL, 'bin', 'token-coupons.mjs')
 
 function run (args, home, extraEnv = {}) {
   const res = spawnSync(process.execPath, [BIN, ...args], {
@@ -49,12 +54,12 @@ describe('cli: help and version', () => {
     } finally { fx.cleanup() }
   })
 
-  test('--version prints the package.json version', () => {
+  test('--version prints the tool version', () => {
     const fx = fixture()
     try {
       const r = run(['--version'], fx.home)
       assert.equal(r.code, 0)
-      assert.equal(r.out.trim(), PKG_VERSION)
+      assert.equal(r.out.trim(), VERSION)
     } finally { fx.cleanup() }
   })
 
@@ -221,6 +226,99 @@ describe('cli: apply', () => {
   })
 })
 
+describe('cli: describe', () => {
+  test('without a file it explains and exits 1', () => {
+    const fx = fixture()
+    try {
+      const r = run(['describe'], fx.home)
+      assert.equal(r.code, 1)
+      assert.match(r.err, /new descriptions as JSON/)
+    } finally { fx.cleanup() }
+  })
+
+  test('reads the new text from stdin, plans first, then writes on --yes', () => {
+    const fx = fixture()
+    try {
+      const alphaMd = join(fx.skillPath('alpha'), 'SKILL.md')
+      const before = readFileSync(alphaMd, 'utf8')
+      const text = 'Alpha, rewritten: what it does, the words that reach for it, and where it stops.'
+      const json = JSON.stringify({ version: 1, descriptions: [{ name: 'alpha', description: text }] })
+
+      const dry = spawnSync(process.execPath, [BIN, 'describe', '-'], {
+        encoding: 'utf8', input: json,
+        env: Object.assign({}, process.env, { TOKEN_COUPONS_HOME: fx.home, NO_COLOR: '1' }),
+      })
+      assert.equal(dry.status, 0, dry.stderr)
+      assert.match(dry.stdout, /Plan only/)
+      assert.equal(readFileSync(alphaMd, 'utf8'), before, 'a plan writes nothing')
+
+      const f = join(fx.home, 'descriptions.json')
+      writeFileSync(f, json)
+      const trash = join(fx.home, 'my-trash')
+      const r = run(['describe', f, '--yes', '--trash=' + trash], fx.home)
+      assert.equal(r.code, 0, r.err)
+      assert.match(r.out, /Rewrote 1 of 1 description/)
+      assert.match(r.out, /undo: cp /)
+      assert.match(readFileSync(alphaMd, 'utf8'), /description: >-/)
+      assert.match(readFileSync(alphaMd, 'utf8'), /Alpha, rewritten/)
+      assert.ok(statSync(trash).isDirectory(), 'the copy it kept went where asked')
+    } finally { fx.cleanup() }
+  })
+
+  test('a description past the cap is refused and the file is left alone', () => {
+    const fx = fixture()
+    try {
+      const alphaMd = join(fx.skillPath('alpha'), 'SKILL.md')
+      const before = readFileSync(alphaMd, 'utf8')
+      const f = join(fx.home, 'descriptions.json')
+      writeFileSync(f, JSON.stringify({ version: 1, descriptions: [{ name: 'alpha', description: 'x'.repeat(2000) }] }))
+      const r = run(['describe', f, '--yes', '--json'], fx.home)
+      assert.equal(r.code, 0)
+      const result = JSON.parse(r.out)
+      assert.equal(result.applied, 0)
+      assert.equal(result.refused.length, 1)
+      assert.equal(readFileSync(alphaMd, 'utf8'), before)
+    } finally { fx.cleanup() }
+  })
+})
+
+describe('the skill this tool ships as', () => {
+  const skillMd = () => readFileSync(join(SKILL, 'SKILL.md'), 'utf8')
+
+  test('obeys its own advice: gated, one line, and pointed at the opus family', () => {
+    const fm = parseFrontmatter(skillMd())
+    assert.equal(fm.data.name, 'token-coupons')
+    assert.equal(fm.data['disable-model-invocation'], 'true')
+    assert.equal(fm.data.model, 'opus')
+    assert.equal(fm.data['allowed-tools'], undefined, 'this loop moves folders, so nothing is pre-approved')
+    // A gated skill never routes, so trigger phrases in its description would be
+    // paid for on every message and never read. Its own description-rewrite.md
+    // says one line, and the tool cannot contradict the tool.
+    const d = String(fm.data.description || '')
+    assert.ok(d.length > DEFAULT_THRESHOLDS.thinChars, 'still says what it is')
+    assert.ok(d.length < 200, 'one line, because it never routes: ' + d.length + ' characters')
+  })
+
+  test('names no package to install, because there is none', () => {
+    assert.equal(/npm install|npx token-coupons/.test(skillMd()), false)
+  })
+
+  test('renders the scorecard only after the changes land', () => {
+    const body = skillMd()
+    const card = body.indexOf('--card=')
+    const apply = body.indexOf('apply "$HOME/.token-coupons/decisions.json" --yes')
+    assert.ok(apply > 0 && card > apply, 'the card is written in the last step, not the first')
+  })
+
+  test('the version the plugin installer reads matches the one the tool prints', () => {
+    const plugin = JSON.parse(readFileSync(join(ROOT, '.claude-plugin', 'plugin.json'), 'utf8'))
+    assert.equal(plugin.version, VERSION)
+    const market = JSON.parse(readFileSync(join(ROOT, '.claude-plugin', 'marketplace.json'), 'utf8'))
+    assert.equal(market.metadata.version, VERSION)
+    assert.equal(market.plugins[0].version, VERSION)
+  })
+})
+
 describe('cli: pricing', () => {
   test('prints the price table with the verified date', () => {
     const fx = fixture()
@@ -261,12 +359,12 @@ describe('cli: entry point guard', () => {
       symlinkSync(BIN, link)
       const r = spawnSync(process.execPath, [link, '--version'], { encoding: 'utf8', env: Object.assign({}, process.env, { TOKEN_COUPONS_HOME: fx.home }) })
       assert.equal(r.status, 0)
-      assert.equal(r.stdout.trim(), PKG_VERSION)
+      assert.equal(r.stdout.trim(), VERSION)
     } finally { fx.cleanup() }
   })
 
   test('parseArgs accepts --k=v and --k v and treats a .json positional as the apply target', async () => {
-    const { parseArgs } = await import('../bin/token-coupons.mjs')
+    const { parseArgs } = await import('../skills/token-coupons/bin/token-coupons.mjs')
     const a = parseArgs(['report', '--since', '2026-01-01', '--json', '--html=x.html'])
     assert.equal(a.command, 'report')
     assert.equal(a.flags.since, '2026-01-01')

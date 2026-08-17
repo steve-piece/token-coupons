@@ -121,16 +121,7 @@ export function planApply (decisions, { skills = [], thresholds = {} } = {}) {
 
     const skill = match.skill
     const name = firstName(skill)
-    // A plugin-cache row edits its source copy when one is on this machine, so
-    // the change survives the next plugin update. Without a source copy the
-    // cache file itself is edited, with a warning that an update overwrites it.
-    const viaSource = skill.location === 'plugin-cache' && skill.sourcePath
-    const skillMd = viaSource
-      ? join(skill.sourcePath, 'SKILL.md')
-      : (skill.skillMd || join(skill.realPath || '', 'SKILL.md'))
-    const refreshNote = viaSource
-      ? ' Edits the source copy at ' + tildify(skill.sourcePath) + '; the installed copy picks it up on the next plugin update' + (skill.installKey ? ' (claude plugin update ' + skill.installKey + ')' : '') + '.'
-      : (skill.location === 'plugin-cache' ? ' This is the plugin cache copy: the next plugin update overwrites it, so make the same change in the plugin\'s repo too.' : '')
+    const { path: skillMd, refreshNote } = editTarget(skill)
 
     if (action === 'optimize') {
       const description = String(skill.description || '')
@@ -223,12 +214,30 @@ export function planApply (decisions, { skills = [], thresholds = {} } = {}) {
   return { steps, worklist, refused }
 }
 
-function firstName (skill) {
+export function firstName (skill) {
   const names = Array.isArray(skill.names) && skill.names.length ? skill.names : [skill.name]
   return String(names[0] || skill.name || 'unknown')
 }
 
-function buildIndex (skills) {
+/**
+ * Which SKILL.md an edit should land in, and what to say about it.
+ *
+ * A plugin-cache row edits its source copy when one is on this machine, so the
+ * change survives the next plugin update. Without a source copy the cache file
+ * itself is edited, with a warning that an update overwrites it.
+ */
+export function editTarget (skill) {
+  const viaSource = Boolean(skill.location === 'plugin-cache' && skill.sourcePath)
+  const path = viaSource
+    ? join(skill.sourcePath, 'SKILL.md')
+    : (skill.skillMd || join(skill.realPath || '', 'SKILL.md'))
+  const refreshNote = viaSource
+    ? ' Edits the source copy at ' + tildify(skill.sourcePath) + '; the installed copy picks it up on the next plugin update' + (skill.installKey ? ' (claude plugin update ' + skill.installKey + ')' : '') + '.'
+    : (skill.location === 'plugin-cache' ? ' This is the plugin cache copy: the next plugin update overwrites it, so make the same change in the plugin\'s repo too.' : '')
+  return { path, viaSource, refreshNote }
+}
+
+export function buildIndex (skills) {
   const byReal = new Map()
   const byName = new Map()
   const ambiguous = new Set()
@@ -258,7 +267,7 @@ export function expandHome (p) {
   return isAbsolute(s) ? s : resolve(s)
 }
 
-function matchSkill (d, index) {
+export function matchSkill (d, index) {
   const expanded = expandHome(d && d.path)
   if (expanded) {
     let real = safeReal(expanded)

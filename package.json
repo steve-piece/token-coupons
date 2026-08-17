@@ -1,51 +1,24 @@
 {
   "name": "token-coupons",
-  "version": "0.1.0",
-  "description": "Find out what your installed Claude Code skills cost on every message, which ones the agent never reads, and what to do about it. Zero dependencies, reads local files only.",
-  "keywords": [
-    "claude-code",
-    "claude",
-    "agent-skills",
-    "skills",
-    "context-window",
-    "prompt-cache",
-    "tokens",
-    "cost",
-    "cli"
-  ],
-  "homepage": "https://github.com/steve-piece/token-coupons#readme",
-  "bugs": {
-    "url": "https://github.com/steve-piece/token-coupons/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/steve-piece/token-coupons.git"
-  },
+  "private": true,
+  "description": "Repo scaffolding for the token-coupons skill. This package is never published: the tool ships as an agent skill, and everything it needs lives in skills/token-coupons.",
   "license": "MIT",
   "author": {
     "name": "Steven Light",
     "email": "steven@modernrefactor.com",
     "url": "https://github.com/steve-piece"
   },
-  "type": "module",
-  "bin": {
-    "token-coupons": "bin/token-coupons.mjs"
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/steve-piece/token-coupons.git"
   },
-  "files": [
-    "bin",
-    "src",
-    "data",
-    "skills",
-    ".claude-plugin",
-    "README.md",
-    "LICENSE"
-  ],
+  "type": "module",
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "test": "node --test",
-    "report": "node bin/token-coupons.mjs report",
+    "report": "node skills/token-coupons/bin/token-coupons.mjs report",
     "lint:dashes": "node tests/dash-scan.mjs"
   }
 }

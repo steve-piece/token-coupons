@@ -103,7 +103,10 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
 
   /* -------------------------------------------------------- what moved */
   const tiles = [
-    { n: fmt(acts.active || 0), k: 'skills set to passive', c: IN.emerald },
+    // Active is the mode where a skill waits to be named, so its description
+    // leaves the listing. The decision list defines the two words the same way,
+    // and the two documents are read side by side.
+    { n: fmt(acts.active || 0), k: 'skills set to active', c: IN.emerald },
     { n: fmt(acts.delete || 0), k: 'unused skills removed', c: IN.rose },
     { n: fmt(acts.optimize || 0), k: 'descriptions optimized', c: IN.text },
   ]
@@ -119,7 +122,9 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
 
   /* ------------------------------------------------------------ footer */
   out.push(rule(P, 902, CW))
-  const cmd = 'npx token-coupons'
+  // The slash command, not an install line: there is no package to install any
+  // more, and the repo link opposite is where someone who wants it goes.
+  const cmd = '/token-coupons'
   const pw = Math.round(w(cmd, 22)) + 44
   out.push(`<rect x="${P}" y="940" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
   out.push(text(cmd, P + 22, 972, { size: 22, fill: IN.cyan }))

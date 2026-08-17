@@ -1,12 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { money } from '../src/lib/util.mjs'
-import { sessionStats } from '../src/calls.mjs'
+import { money } from '../skills/token-coupons/src/lib/util.mjs'
+import { sessionStats } from '../skills/token-coupons/src/calls.mjs'
 import {
   loadPricing, costModel, yourModel, ageInDays, normalizeModelId,
   bundledPricingPath, STALE_DAYS,
-} from '../src/pricing.mjs'
+} from '../skills/token-coupons/src/pricing.mjs'
 
 // A fixture price list, so no test ever depends on what a vendor charges today.
 // Round numbers on purpose: every expected figure below is checkable by hand.
@@ -291,7 +291,7 @@ test('it works on a real sessionStats object built from sessions', () => {
 })
 
 test('per month figures are per week times 52/12, for dollars and for tokens', async () => {
-  const { costModel, WEEKS_PER_MONTH } = await import('../src/pricing.mjs')
+  const { costModel, WEEKS_PER_MONTH } = await import('../skills/token-coupons/src/pricing.mjs')
   const pricing = { currency: 'USD', per: 1000000, verifiedOn: '2026-08-15', models: [{ id: 'm', label: 'M', input: 10, cachedInput: 1, cacheWrite: 20, output: 50, tier: 'frontier' }] }
   const stats = { measured: true, apiCallsPerSessionMedian: 10, sessionsPerDay: 1, sessionsPerWeek: 7, inputTokensPerWeek: 1e9, modelsSeen: [] }
   const c = costModel({ wastedTokens: 1000, listingTokens: 2000, stats, pricing, today: '2026-08-15' })
@@ -305,7 +305,7 @@ test('per month figures are per week times 52/12, for dollars and for tokens', a
 })
 
 test('the listing is priced at the save rate once per cache break, not once per chat', async () => {
-  const { costModel } = await import('../src/pricing.mjs')
+  const { costModel } = await import('../skills/token-coupons/src/pricing.mjs')
   const pricing = { currency: 'USD', per: 1000000, verifiedOn: '2026-08-15', models: [{ id: 'm', label: 'M', input: 10, cachedInput: 1, cacheWrite: 20, output: 50, tier: 'frontier' }] }
   const base = { measured: true, apiCallsPerSessionMedian: 10, sessionsPerDay: 1, sessionsPerWeek: 7, inputTokensPerWeek: 1e9, modelsSeen: [] }
   const once = costModel({ wastedTokens: 1000, listingTokens: 1000, stats: base, pricing, today: '2026-08-15' })

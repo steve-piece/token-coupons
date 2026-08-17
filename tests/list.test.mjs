@@ -1,7 +1,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { renderList } from '../src/render-list.mjs'
+import { renderList } from '../skills/token-coupons/src/render-list.mjs'
 import { sampleReport } from './fixtures/sample-report.mjs'
 
 const report = sampleReport()

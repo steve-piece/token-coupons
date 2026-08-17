@@ -1,6 +1,6 @@
 {
   "name": "token-coupons",
-  "description": "Find out what your installed agent skills cost on every message, which ones the agent never reads, and what to do about it. Ships one skill that runs the report, presents the interactive page, and applies your decisions.",
+  "description": "Find out what your installed agent skills cost on every message, which ones the agent never reads, and what to do about it. Ships one skill that runs the report, presents the interactive page, applies your decisions, and hands back a scorecard of what the pass saved.",
   "version": "0.1.0",
   "author": {
     "name": "Steven Light",

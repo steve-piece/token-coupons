@@ -1,9 +1,9 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { scoreReport, GRADES, WEIGHTS } from '../src/score.mjs'
-import { renderCardSvg, renderCardPage, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT, REPO } from '../src/render-card.mjs'
-import { headline } from '../src/score.mjs'
+import { scoreReport, GRADES, WEIGHTS } from '../skills/token-coupons/src/score.mjs'
+import { renderCardSvg, renderCardPage, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT, REPO } from '../skills/token-coupons/src/render-card.mjs'
+import { headline } from '../skills/token-coupons/src/score.mjs'
 import { sampleReport } from './fixtures/sample-report.mjs'
 
 /** A report shaped like the real one, with only the fields the score reads. */
@@ -118,8 +118,16 @@ describe('card', () => {
     assert.match(svg, /<g transform="translate\([\d.]+ [\d.]+\) scale\([\d.]+\)"/, 'the mark is drawn, not fetched')
   })
 
+  test('the pill is the slash command, because there is no package to install', () => {
+    assert.ok(svg.includes('/token-coupons'))
+    assert.equal(/npx|npm install/.test(svg), false)
+  })
+
   test('the tiles name what changed, in the words the card owner chose', () => {
-    assert.ok(svg.includes('skills set to passive'))
+    // Active is the mode that takes a description out of the listing, and the
+    // decision list says the same, so the two documents cannot disagree.
+    assert.ok(svg.includes('skills set to active'))
+    assert.equal(svg.includes('set to passive'), false)
     assert.ok(svg.includes('unused skills removed'))
     assert.ok(svg.includes('descriptions optimized'))
     // removed is the only count drawn in the warning colour

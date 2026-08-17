@@ -5,31 +5,29 @@
 //   token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]
 //                        [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--card=FILE] [--out=FILE] [--open] [--no-color] [--cwd=DIR]
 //   token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
+//   token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]
 //   token-coupons pricing [--pricing=FILE] [--json]
 //   token-coupons help
 
 import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { dirname, join, resolve, relative, sep } from 'node:path'
+import { dirname, resolve, relative, sep } from 'node:path'
 import { spawn } from 'node:child_process'
 
+import { VERSION } from '../src/version.mjs'
 import { buildReport } from '../src/report.mjs'
 import { renderText } from '../src/render-text.mjs'
-import { renderHtml } from '../src/render-html.mjs'
 import { renderCardPage } from '../src/render-card.mjs'
 import { renderList } from '../src/render-list.mjs'
 import { discoverSkills } from '../src/discover.mjs'
 import { parseDecisions, planApply, applyPlan, summarizeApply } from '../src/apply.mjs'
+import { parseEdits, planDescribe, applyDescribe, summarizeDescribe } from '../src/describe.mjs'
 import { loadPricing } from '../src/pricing.mjs'
 import { DEFAULT_THRESHOLDS } from '../src/recommend.mjs'
 import { fmt, money } from '../src/lib/util.mjs'
 import { tildify } from '../src/paths.mjs'
 
-const HERE = dirname(fileURLToPath(import.meta.url))
-
-export function version () {
-  try { return String(JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')).version || '0.0.0') } catch { return '0.0.0' }
-}
+export function version () { return VERSION }
 
 /* ------------------------------------------------------------------ args */
 
@@ -78,6 +76,7 @@ export function helpText () {
     '                       [--pricing=FILE] [--uncached] [--json] [--html=FILE] [--card=FILE]',
     '                       [--out=FILE] [--open] [--no-color] [--cwd=DIR]',
     '  token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]',
+    '  token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]',
     '  token-coupons pricing [--pricing=FILE] [--json]',
     '  token-coupons help',
     '',
@@ -101,6 +100,13 @@ export function helpText () {
     'apply carries out the decisions you exported from the HTML page. Without --yes it only prints the plan.',
     '  --yes            actually make the changes (deletes go to a trash folder, never erased)',
     '  --trash=DIR      where deleted skill folders are moved (default ~/.token-coupons/trash)',
+    '  --json           print the plan or result as JSON',
+    '',
+    'describe writes rewritten descriptions into the SKILL.md files they belong to, one key each, leaving every other',
+    'line alone. Feed it {"version": 1, "descriptions": [{"name": "...", "description": "..."}]}, or the worklist block',
+    'from apply --json with a description added to each row. Without --yes it only prints the plan.',
+    '  --yes            actually write them (the file as it stands is copied to the trash folder first)',
+    '  --trash=DIR      where those copies are kept (default ~/.token-coupons/trash)',
     '  --json           print the plan or result as JSON',
     '',
     'pricing prints the price table the dollar figures come from, with the date it was checked.',
@@ -197,26 +203,32 @@ export function relativeHref (from, to) {
   return rel.split(sep).map(encodeURIComponent).join('/')
 }
 
+/**
+ * The JSON a command was pointed at, from a file or from stdin. Returns null
+ * after saying why on stderr, so the caller can just exit 1.
+ *
+ * `-` matters because the page says "paste it into your next message": the
+ * agent usually holds the JSON as text, not as a file, and piping it in beats
+ * writing a file only to read it straight back.
+ */
+function readInput (file, io, what) {
+  try {
+    return file === '-' ? readFileSync(0, 'utf8') : readFileSync(resolve(file), 'utf8')
+  } catch (e) {
+    const where = file === '-' ? 'the ' + what + ' JSON from stdin' : file
+    io.err('could not read ' + where + ': ' + (e && e.message ? e.message : e) + '\n')
+    return null
+  }
+}
+
 export async function runApply (positional, flags, io) {
   const file = positional[0]
   if (!file) {
     io.err('apply needs the decisions JSON copied from the report page: a file path, or - to read it from stdin. For example: token-coupons apply decisions.json\n')
     return 1
   }
-  let text
-  if (file === '-') {
-    // The page says "paste it into your next message", so the agent usually
-    // has the JSON as text, not as a file. Let it pipe the text straight in.
-    try { text = readFileSync(0, 'utf8') } catch (e) {
-      io.err('could not read the decisions JSON from stdin: ' + (e && e.message ? e.message : e) + '\n')
-      return 1
-    }
-  } else {
-    try { text = readFileSync(resolve(file), 'utf8') } catch (e) {
-      io.err('could not read ' + file + ': ' + (e && e.message ? e.message : e) + '\n')
-      return 1
-    }
-  }
+  const text = readInput(file, io, 'decisions')
+  if (text === null) return 1
   const parsed = parseDecisions(text)
   if (!parsed.ok) {
     io.err('could not use ' + file + ': ' + parsed.reason + '\n')
@@ -229,6 +241,27 @@ export async function runApply (positional, flags, io) {
   else io.out(summarizeApply(result))
   const errored = result.steps.some((s) => s.error)
   return errored ? 1 : 0
+}
+
+export async function runDescribe (positional, flags, io) {
+  const file = positional[0]
+  if (!file) {
+    io.err('describe needs the new descriptions as JSON: a file path, or - to read it from stdin. For example: token-coupons describe descriptions.json\n')
+    return 1
+  }
+  const text = readInput(file, io, 'descriptions')
+  if (text === null) return 1
+  const parsed = parseEdits(text)
+  if (!parsed.ok) {
+    io.err('could not use ' + file + ': ' + parsed.reason + '\n')
+    return 1
+  }
+  const skills = discoverSkills({ cwd: flags.cwd || process.cwd() })
+  const plan = planDescribe(parsed.edits, { skills })
+  const result = applyDescribe(plan, { yes: Boolean(flags.yes), trashDir: flags.trash || null })
+  if (flags.json) io.out(JSON.stringify(result, null, 2) + '\n')
+  else io.out(summarizeDescribe(result))
+  return result.steps.some((s) => s.error) ? 1 : 0
 }
 
 export async function runPricing (flags, io) {
@@ -280,8 +313,9 @@ export async function main (argv = process.argv.slice(2), io = null) {
   try {
     if (command === 'report') return await runReport(flags, o)
     if (command === 'apply') return await runApply(positional, flags, o)
+    if (command === 'describe') return await runDescribe(positional, flags, o)
     if (command === 'pricing') return await runPricing(flags, o)
-    o.err('unknown command "' + command + '". Try report, apply, pricing, or help.\n')
+    o.err('unknown command "' + command + '". Try report, apply, describe, pricing, or help.\n')
     return 2
   } catch (e) {
     o.err('token-coupons could not finish: ' + (e && e.stack ? e.stack : e) + '\n')

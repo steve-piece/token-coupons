@@ -17,7 +17,7 @@ describe('calls and sessions', () => {
     })
     try {
       await withHome(fx.home, async () => {
-        const { scanTranscripts, sessionStats } = await import('../src/calls.mjs?' + Math.random())
+        const { scanTranscripts, sessionStats } = await import('../skills/token-coupons/src/calls.mjs?' + Math.random())
         const { calls, sessions } = scanTranscripts()
         assert.equal(calls.length, 2)
         assert.equal(calls.find((c) => c.skill === 'alpha').mode, 'active')
@@ -42,7 +42,7 @@ describe('calls and sessions', () => {
     })
     try {
       await withHome(fx.home, async () => {
-        const { scanTranscripts, sessionStats } = await import('../src/calls.mjs?' + Math.random())
+        const { scanTranscripts, sessionStats } = await import('../skills/token-coupons/src/calls.mjs?' + Math.random())
         const { calls, sessions } = scanTranscripts('2026-06-01')
         assert.equal(calls.length, 0)
         assert.equal(sessions.length, 0)
@@ -81,7 +81,7 @@ describe('prompt cache breaks', () => {
     })
     try {
       await withHome(fx.home, async () => {
-        const { scanTranscripts, sessionStats } = await import('../src/calls.mjs?' + Math.random())
+        const { scanTranscripts, sessionStats } = await import('../skills/token-coupons/src/calls.mjs?' + Math.random())
         const { sessions } = scanTranscripts()
         const s = sessions[0]
         assert.equal(s.apiCalls, 6)
@@ -110,7 +110,7 @@ describe('prompt cache breaks', () => {
     })
     try {
       await withHome(fx.home, async () => {
-        const { scanTranscripts } = await import('../src/calls.mjs?' + Math.random())
+        const { scanTranscripts } = await import('../skills/token-coupons/src/calls.mjs?' + Math.random())
         const hour = scanTranscripts(null).sessions[0]
         assert.equal(hour.cacheBreaks.effortSwitch, 1)
         assert.equal(hour.cacheBreaks.cacheExpired, 0, 'ten minutes is inside the default hour')
@@ -124,7 +124,7 @@ describe('prompt cache breaks', () => {
     const fx = makeFixtureHome({ skills: [{ name: 'alpha', description: 'Alpha.' }] })
     try {
       await withHome(fx.home, async () => {
-        const { sessionStats } = await import('../src/calls.mjs?' + Math.random())
+        const { sessionStats } = await import('../skills/token-coupons/src/calls.mjs?' + Math.random())
         const st = sessionStats([])
         assert.equal(st.listingWritesPerSession, 1)
         assert.equal(st.measured, false)

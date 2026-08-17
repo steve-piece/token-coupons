@@ -4,19 +4,19 @@
     {
       "id": "audit-what-skills-cost",
       "prompt": "how much are my skills costing me",
-      "expected_output": "The agent runs the report command (npx token-coupons@latest report, writing the HTML and the JSON under ~/.token-coupons), reads only the summary block out of the JSON, and opens with a single verdict line picked by the ladder in references/report-anatomy.md: skills that cannot be routed to first, then dollars per week naming the model its transcripts actually show, then wasted tokens per API call. It explains in plain words that the skill list is re-sent on every API call, says which numbers were measured and which were assumed, and does not paste the full report JSON or a row per skill into the reply.",
+      "expected_output": "The agent runs the report from the copy of the tool inside this skill directory (node <skill dir>/bin/token-coupons.mjs report, writing the HTML and the JSON under ~/.token-coupons), reads only the summary block out of the JSON, and opens with a single verdict line picked by the ladder in references/report-anatomy.md: skills that cannot be routed to first, then dollars per week naming the model its transcripts actually show, then wasted tokens per API call. It explains in plain words that the skill list is re-sent on every API call, says which numbers were measured and which were assumed, and does not paste the full report JSON or a row per skill into the reply.",
       "files": []
     },
     {
       "id": "present-the-report",
       "prompt": "run token-coupons and show me what to cut",
-      "expected_output": "The agent runs the report, then puts the interactive HTML page in front of the person: published with the Artifact tool when one exists, otherwise opened locally with the absolute path given in the reply. It leads with the verdict, names the biggest few savings, and tells the person to set each row to Keep, Passive, Active, Optimize, or Delete, press Accept all recommendations, and paste the exported JSON back. It then stops: no apply run, no SKILL.md edited, and nothing deleted before the person returns with decisions.",
+      "expected_output": "The agent runs the report, then puts the interactive HTML page in front of the person: published with the Artifact tool when one exists, otherwise opened locally with the absolute path given in the reply. It leads with the verdict, names the biggest few savings, and tells the person to set each row to Keep, Passive, Active, Optimize, or Delete, press Accept all recommendations, and paste the exported JSON back. It then stops: no apply run, no SKILL.md edited, nothing deleted, and no scorecard rendered before the person returns with decisions.",
       "files": []
     },
     {
       "id": "apply-the-decisions",
       "prompt": "proceed with these decisions",
-      "expected_output": "The agent saves the pasted JSON, runs apply without --yes first so nothing is written, and shows the plan grouped by action with every refused item and its reason (plugin cache deletes, unknown skills, frontmatter it cannot safely edit). It waits for a yes, runs apply --yes, and keeps each printed undo line in the reply. It then rewrites every optimize description to roughly 350 characters, keeping the trigger phrases and the boundary while cutting the how, re-runs the report, and closes with three lines: tokens per API call before and after, dollars per week before and after, and whether the listing now fits the budget.",
+      "expected_output": "The agent saves the pasted JSON, runs apply without --yes first so nothing is written, and shows the plan grouped by action with every refused item and its reason (plugin cache deletes, unknown skills, frontmatter it cannot safely edit). It waits for a yes, runs apply --yes, and keeps each printed undo line in the reply. It writes no SKILL.md by hand: for every optimize row it drafts a new description of roughly 350 characters, keeping the trigger phrases and the boundary while cutting the how, and files them with the describe command, dry run first and then with --yes. It re-runs the report, renders the scorecard from the numbers after the changes, and closes with tokens per API call before and after, dollars per week before and after, and whether the listing now fits the budget.",
       "files": []
     }
   ]

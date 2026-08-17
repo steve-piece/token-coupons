@@ -7,10 +7,7 @@
 // economics, rank a recommendation per skill, price the waste, then write the
 // short summary block an agent reads before anything else.
 
-import { readFileSync } from 'node:fs'
-import { fileURLToPath } from 'node:url'
-import { dirname, join } from 'node:path'
-
+import { VERSION } from './version.mjs'
 import { discoverSkills } from './discover.mjs'
 import { scanTranscripts, sessionStats } from './calls.mjs'
 import { listingBudget, listingCost } from './budget.mjs'
@@ -21,15 +18,8 @@ import { tildify } from './paths.mjs'
 
 export const REPORT_VERSION = 1
 
-/** The tool version, read from package.json next to this module. */
-export function toolVersion () {
-  try {
-    const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'package.json'), 'utf8'))
-    return String(pkg.version || '0.0.0')
-  } catch {
-    return '0.0.0'
-  }
-}
+/** The tool version. */
+export function toolVersion () { return VERSION }
 
 /** YYYY-MM-DD for a Date, a date string, or now. */
 export function dayOf (value = null) {

@@ -123,6 +123,60 @@ export function setFrontmatterKey (text, key, value) {
   return { ok: true, reason: null, text: '---\n' + lines.join('\n') + tail }
 }
 
+/**
+ * Replace one frontmatter key whose value is a paragraph, such as
+ * `description`. `setFrontmatterKey` deliberately refuses these: a description
+ * is usually written as a folded block (`>-`) spread over several lines, and
+ * rewriting it means recognising where the old value ends.
+ *
+ * The new value always goes back as a folded block wrapped to `width`, whatever
+ * form it was in before, so the file stays readable and every skill this tool
+ * touches ends up looking the same. Whitespace inside the value is collapsed to
+ * single spaces, which is exactly what a folded block means when it is read
+ * back, so the write round trips through parseFrontmatter unchanged.
+ */
+export function setFrontmatterText (text, key, value, { width = 96, indent = '  ' } = {}) {
+  const t = String(text || '')
+  if (!t.startsWith('---\n')) return { ok: false, reason: 'no settings block at the top of the file', text: t }
+  const end = t.indexOf('\n---', 4)
+  if (end === -1) return { ok: false, reason: 'the settings block at the top of the file is never closed', text: t }
+  const clean = String(value == null ? '' : value).replace(/\s+/g, ' ').trim()
+  if (clean === '') return { ok: false, reason: 'the new ' + key + ' is empty', text: t }
+
+  const head = t.slice(4, end)
+  const tail = t.slice(end)
+  const lines = head.split('\n')
+  const re = new RegExp('^' + escapeRe(key) + ':')
+  const idx = lines.findIndex((l) => re.test(l))
+  const written = foldBlock(key, clean, width, indent)
+  if (idx === -1) return { ok: true, reason: null, text: '---\n' + lines.concat(written).join('\n') + tail }
+
+  // Everything indented under the key belongs to its value. A blank line only
+  // counts as part of it when another indented line follows, so a blank line
+  // left before the closing fence survives untouched.
+  let last = idx
+  for (let i = idx + 1; i < lines.length; i++) {
+    if (/^\s+\S/.test(lines[i])) { last = i; continue }
+    if (lines[i].trim() === '') continue
+    break
+  }
+  lines.splice(idx, last - idx + 1, ...written)
+  return { ok: true, reason: null, text: '---\n' + lines.join('\n') + tail }
+}
+
+/** `key: >-` followed by the value wrapped to `width` columns, indent included. */
+function foldBlock (key, value, width, indent) {
+  const out = []
+  let line = ''
+  for (const word of value.split(' ')) {
+    if (line === '') line = word
+    else if ((indent + line + ' ' + word).length <= width) line += ' ' + word
+    else { out.push(indent + line); line = word }
+  }
+  if (line) out.push(indent + line)
+  return [key + ': >-'].concat(out)
+}
+
 export function escapeRe (s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 
 /** Every file under `dir`, recursively, as paths relative to `dir`. */

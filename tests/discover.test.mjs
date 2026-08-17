@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { join } from 'node:path'
 import { makeFixtureHome, withHome } from './helpers.mjs'
 
-const fresh = () => import('../src/discover.mjs?' + Math.random())
+const fresh = () => import('../skills/token-coupons/src/discover.mjs?' + Math.random())
 
 describe('discover', () => {
   test('finds skills across roots, defaults mode to passive, dedupes symlinks, classifies location', async () => {

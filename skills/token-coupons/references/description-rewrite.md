@@ -69,12 +69,14 @@ installed.
 - A `>-` block folds into one line with single spaces, and that folded string is what gets measured
   and sent. Indentation costs you nothing.
 
-Edit the `description` only. Do not touch the body, the name, or any other key in this pass.
+Do not edit the file by hand. Collect the new text into a descriptions file and let `$TC describe` write it: it
+replaces the `description` key and leaves the body, the name, and every other key exactly as they were, which is the
+whole of what this pass is allowed to change. Both traps above stop mattering, because it always writes a `>-` block.
 
 ## Re-measure, do not estimate
 
 ```bash
-token-coupons report --out="$HOME/.token-coupons/after.json"
+$TC report --out="$HOME/.token-coupons/after.json"
 node -e "const r=JSON.parse(require('fs').readFileSync(process.env.HOME+'/.token-coupons/after.json','utf8'));for(const s of r.skills)if(process.argv.slice(1).includes(s.names[0]))console.log(s.names[0], s.descriptionChars, s.listingTokens, s.capped)" invoice-chaser
 ```
 

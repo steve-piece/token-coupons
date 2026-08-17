@@ -39,18 +39,27 @@ it was missed.
   whole tool at a fixture with `TOKEN_COUPONS_HOME=<dir>`.
 - Reads local files only. No network, ever. Pricing is a data file with a
   verified-on date; refreshing it is a human or agent action, not a fetch.
-- Nothing `apply` does is unrecoverable: deletes move to a trash directory,
-  symlinks are unlinked not followed, and plugin cache paths are refused.
+- Nothing `apply` or `describe` does is unrecoverable: deletes move to a trash
+  directory, a file about to be rewritten is copied there first, symlinks are
+  unlinked not followed, and plugin cache deletes are refused.
 - The report is honest about what is measured versus assumed. Every number
   that rests on an assumption carries a `note` or an `assumed: true` flag.
 
 ## Module map
 
+Everything the tool needs at runtime lives under `skills/token-coupons/`, and
+paths below are relative to it. That is not tidiness: `skills add` copies a
+skill directory and nothing else, so a file left outside it would simply be
+missing on every machine but this one. The root holds the README, the tests, the
+plugin manifests, and a private `package.json` that exists for `pnpm test`.
+
 ```
-bin/token-coupons.mjs      CLI: report (default) | apply | pricing | help
+bin/token-coupons.mjs      CLI: report (default) | apply | describe | pricing | help
+src/version.mjs            VERSION, the one place the number is written
 src/paths.mjs              homeDir(), claudeDir(), projectsDir(), pluginsDir(), trashDir(), tildify()
 src/lib/util.mjs           readText, readJson, listDir, isDir, isSymlink, safeReal, walk,
-                           parseFrontmatter (block scalars ok), setFrontmatterKey, fmt, money
+                           parseFrontmatter (block scalars ok), setFrontmatterKey (one line values),
+                           setFrontmatterText (paragraph values, writes a folded block), fmt, money
 src/budget.mjs             CHARS_PER_TOKEN=4, detectContextWindow, listingBudget, listingCost, nameLineChars, toTokens
 src/discover.mjs           discoverSkills({cwd}) -> Skill[]   (Claude Code folders only, see shape below; cwd decides which project skills are listed)
 src/calls.mjs              scanTranscripts(since, {cacheTtlMinutes}) -> {calls: Call[], sessions: Session[]}, sessionStats(sessions, {since, today, cacheTtlMinutes})
@@ -60,13 +69,17 @@ src/pricing.mjs            loadPricing(path?, {today}?) -> Pricing, costModel({w
 src/report.mjs             buildReport(opts) -> Report   (joins everything above; opts.cwd reaches discover, opts.cacheTtlMinutes reaches calls)
 src/render-text.mjs        renderText(report, {color, top}) -> string
 src/render-list.mjs        renderList(report, {cardHref}) -> the dark decision list, companion to the card
-src/render-html.mjs        renderHtml(report) -> the earlier light report page, no longer wired to a flag
 src/score.mjs              scoreReport(report) -> {score, grade, parts, ratios, tokens} ; headline() ; GRADE_COLOR
-src/render-card.mjs        renderCardSvg(report, {repoUrl}) -> svg ; renderCardPage(report, {listHref, listCount}) -> the postable saved card
+src/render-card.mjs        renderCardSvg(report, {repoUrl}) -> svg ; renderCardPage(report) -> the postable saved card
 src/apply.mjs              planApply(decisions, {skills}) -> Plan ; applyPlan(plan, {yes, trashDir}) -> Result ; cacheNote(result) -> the re-send warning
+                           plus the shared skill lookup: buildIndex, matchSkill, firstName, editTarget, trashStamp
+src/describe.mjs           planDescribe(edits, {skills, cap}) -> Plan ; applyDescribe(plan, {yes, trashDir}) -> Result
 data/pricing.json          the price table (shape below)
+SKILL.md                   the Agent Skill that drives the loop
+references/, evals/        the skill's own reading and its evals
+
+# at the repo root
 .claude-plugin/marketplace.json    the one plugin marketplace that points at this repo
-skills/token-coupons/      the Agent Skill that drives the loop (SKILL.md, references/, evals/)
 tests/*.test.mjs           node:test, one file per module, fixture built under a temp TOKEN_COUPONS_HOME
 tests/helpers.mjs          makeFixtureHome({skills, transcripts, settings}) -> {home, cleanup}
 tests/dash-scan.mjs        fails on any forbidden dash in the repo
@@ -362,7 +375,8 @@ applyPlan(plan, {yes, trashDir, now}) -> {
 token-coupons report [--since=YYYY-MM-DD] [--cwd=DIR] [--window=N] [--fraction=F] [--budget=CHARS]
                      [--pricing=FILE] [--uncached] [--cache-ttl=MIN] [--json] [--html=FILE]
                      [--card=FILE] [--out=FILE] [--open] [--no-color]
-token-coupons apply <decisions.json> [--yes] [--trash=DIR] [--json]
+token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
+token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
 token-coupons help
 ```
@@ -409,22 +423,54 @@ report; apply exits 1 if any step errored.
 
 ## Skill requirements (skills/token-coupons)
 
-- `SKILL.md` frontmatter: `name: token-coupons`, a description that names the
-  three moments it is for (audit skill cost, present the report, apply the
-  decisions), and `disable-model-invocation: true` (this is an operation, run
-  when asked, not something the router should fire).
-- Body: the loop. 1 run report (prefer `npx token-coupons@latest`, fall back to
-  `node <two dirs up>/bin/token-coupons.mjs`), 2 read `summary` and lead with
-  the verdict, 3 present the HTML (publish as an artifact when that tool exists,
-  otherwise open the file), 4 tell the person exactly what to do in the page
-  and what to say when they return, 5 on return save the JSON, run `apply`
-  without `--yes`, show the plan, run with `--yes`, 6 rewrite every `optimize`
-  description per `references/description-rewrite.md`, 7 re-run report and
-  show before and after.
+- `SKILL.md` frontmatter: `name: token-coupons`; a one line description, because
+  this skill carries the gate and a gated skill never routes, so triggers would
+  be paid for and never read (its own `references/description-rewrite.md` says
+  exactly that, and the skill has to obey the tool it ships with);
+  `disable-model-invocation: true` (this is an operation, run when asked, not
+  something the router should fire); and `model: opus`, because the one judgment
+  call in the loop is rewriting a description well.
+- No `allowed-tools`. The loop moves folders and rewrites files, so the
+  permission prompt stays in front of every command.
+- Body: the loop. 0 resolve `SKILL_DIR` with symlinks followed and set `TC`,
+  1 run report writing the HTML and the JSON, 2 read `summary` and lead with the
+  verdict, 3 present the HTML (publish as an artifact when that tool exists,
+  otherwise open the file), 4 tell the person exactly what to do in the page and
+  what to say when they return, 5 on return save the JSON, run `apply --json`
+  without `--yes`, show the plan, run with `--yes`, 6 draft one description per
+  `worklist` row per `references/description-rewrite.md` and file them with
+  `describe`, 7 re-run report with `--card`, publish the scorecard, and show
+  before and after.
+- The card is written in step 7 and nowhere earlier: it is the picture of what
+  changed, so it cannot be honest before the changes are real.
 - `references/`: `report-anatomy.md`, `decisions-file.md`,
   `description-rewrite.md`, `cost-model.md`, `listing-budget.md`. Each 40 to
   100 lines, plain language, no dashes.
 - `evals/evals.json` in the agentskills.io shape with three realistic prompts.
+
+## Why describe is a command and not an edit (src/describe.mjs)
+
+Every other change to a skill file is mechanical, so `apply` does it. Rewriting
+a description is the one job that needs a model, because it is writing. That
+makes it the one expensive step in the loop, and the design follows from that:
+the agent should spend tokens on the words and nothing else.
+
+So `apply` never edits description text. It puts the skill in `worklist` with
+its current description and a target length, and stops. The agent drafts the new
+text and hands it back as `{version: 1, descriptions: [{name, description}]}`,
+and `describe` files it. A worklist row with a `description` added is accepted
+as is, so the block round trips without reshaping.
+
+`describe` reuses `apply`'s skill lookup (`buildIndex`, `matchSkill`,
+`editTarget`), so a plugin skill with its source repo on this machine is written
+there rather than in the cache, exactly as `apply` would. It replaces one key
+through `setFrontmatterText`, which recognises where a folded block ends and
+always writes the new value back as a folded block, so the file stays readable
+and the value round trips through `parseFrontmatter` unchanged. It refuses an
+empty description, one past the 1536 character cap, and any settings block it
+cannot edit safely. Before writing it copies the file into the same dated trash
+folder deletes go to, under `descriptions/<skill>/SKILL.md`, which is what makes
+the `cp` undo line true.
 
 ## The share card (src/score.mjs, src/render-card.mjs)
 
@@ -485,6 +531,6 @@ explainer sits above the table.
 
 **One dark look**, matching the card it ships beside.
 
-`src/render-html.mjs` is the earlier light page. It is no longer reached by any
-flag, and it is kept only because a second session had uncommitted edits in it
-when this landed. Delete it once that settles.
+The earlier light report page is gone. It stopped being reachable when the dark
+list took over `--html`, and dead code that renders one of the two documents the
+tool exists to produce is worse than no code at all.
