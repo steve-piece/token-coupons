@@ -19,6 +19,7 @@
 
 import { fmt, money } from './lib/util.mjs'
 import { INK, MONO } from './render-card.mjs'
+import { scoreReport, headline, GRADE_COLOR } from './score.mjs'
 
 const ACTIONS = [
   ['keep', 'Keep', 'leave this skill exactly as it is'],
@@ -56,6 +57,7 @@ export function renderList (report, { cardHref = null } = {}) {
     '<body>',
     '<div class="wrap">',
     header(r, s, cardHref),
+    score(r, s),
     modes(),
     figures(s, r.cost),
     table(skills, r),
@@ -110,6 +112,29 @@ function modes () {
     '</div>',
     '<p class="note">Every row below is that one question: <strong>does the agent need to find this by itself, or do you ' +
       'always reach for it yourself?</strong> If you always type it, make it active and it stops costing you anything.</p>',
+    '</section>',
+  ].join('\n')
+}
+
+/**
+ * The score, and what is behind it. It lives here rather than on the card
+ * because it is a diagnosis: it belongs next to the list of things it is
+ * telling you to change, not on the thing you post afterwards.
+ */
+function score (r, s) {
+  const scored = scoreReport(r)
+  const tone = GRADE_COLOR[scored.grade] || 'rose'
+  return [
+    '<section class="section" id="score">',
+    '<div class="scorerow">',
+    '<div class="scorenum"><span class="sv">' + esc(String(scored.score)) + '</span><span class="sd">/100</span></div>',
+    '<span class="grade ' + tone + '">' + esc(scored.grade) + '</span>',
+    '<div class="scoretext">',
+    headline(s, r.economics || {}, scored).map((l) => '<p>' + esc(l) + '</p>').join(''),
+    '</div>',
+    '</div>',
+    '<p class="note">Scored out of 100: how much of the list has earned its place (70), whether it fits its allowance (20), ' +
+      'and whether anything is being silently dropped (10). Every change below moves it.</p>',
     '</section>',
   ].join('\n')
 }
@@ -360,6 +385,18 @@ a { color: ${INK.cyan}; }
 .note { color: ${INK.muted}; font-size: 13.5px; max-width: 84ch; }
 .count { color: ${INK.muted}; font-size: 13px; }
 .dim { color: ${INK.muted}; font-weight: 400; }
+
+.scorerow { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.scorenum { display: flex; align-items: baseline; gap: 6px; }
+.sv { font-size: 72px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.sd { font-size: 22px; color: ${INK.muted}; }
+.grade { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 16px; font-size: 32px; font-weight: 700; background: ${INK.panelUp}; border: 1px solid ${INK.line}; }
+.grade.emerald { color: ${INK.emerald}; border-color: ${INK.emerald}; }
+.grade.amber { color: ${INK.amber}; border-color: ${INK.amber}; }
+.grade.rose { color: ${INK.rose}; border-color: ${INK.rose}; }
+.scoretext { flex: 1 1 380px; min-width: 300px; }
+.scoretext p { margin: 0; font-size: 15px; }
+.scoretext p + p { color: ${INK.muted}; }
 
 .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
 .mode { background: ${INK.panel}; border: 1px solid ${INK.line}; border-radius: 16px; padding: 18px 22px; }

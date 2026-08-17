@@ -11,10 +11,12 @@
 // own ground rather than borrowing one.
 
 import { fmt, money } from './lib/util.mjs'
-import { scoreReport } from './score.mjs'
 
 export const CARD_WIDTH = 1200
-export const CARD_HEIGHT = 1300
+export const CARD_HEIGHT = 1210
+
+/** Printed bottom right, so a card that travels can be traced back. */
+export const REPO = 'https://github.com/steve-piece/token-coupons'
 
 export const INK = {
   ink: '#070A12',
@@ -31,8 +33,6 @@ export const INK = {
 
 const IN = INK
 
-const GRADE_COLOR = { A: IN.emerald, B: IN.emerald, C: IN.amber, D: IN.rose, F: IN.rose }
-
 export const MONO = "'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace"
 
 /** Monospace advance width, near enough for pill and bar geometry. */
@@ -42,31 +42,26 @@ const w = (text, size) => String(text).length * size * 0.6
  * @param report a Report from report.mjs
  * @returns {string} the card as one <svg> element
  */
-export function renderCardSvg (report) {
+export function renderCardSvg (report, { repoUrl = REPO } = {}) {
   const r = report || {}
   const s = r.summary || {}
-  const eco = r.economics || {}
   const cost = r.cost || {}
   const vol = cost.volume || {}
-  const scored = scoreReport(r)
 
-  const listing = scored.tokens.listing
-  const wasted = scored.tokens.wasted
-  const earning = scored.tokens.earning
-  const wastedShare = listing > 0 ? wasted / listing : 0
-  const gradeColor = GRADE_COLOR[scored.grade] || IN.rose
-
-  const yours = s.wastedPerWeekOnYourModel
-  const perMonth = yours && typeof yours.dollarsPerMonth === 'number' ? yours.dollarsPerMonth : null
-  const perWeek = yours && typeof yours.dollars === 'number' ? yours.dollars : null
-  const modelName = (yours && yours.model) || null
+  const saved = s.savedOnYourModel || null
+  const savedMonth = saved && typeof saved.dollarsPerMonth === 'number' ? saved.dollarsPerMonth : null
+  const savedTokens = Number(s.savedTokensPerCallIfApplied) || 0
+  const listing = Number(s.listingTokensPerCall) || 0
+  const after = Math.max(0, listing - savedTokens)
+  const acts = s.recommendedActions || {}
+  const touched = (acts.active || 0) + (acts.delete || 0) + (acts.optimize || 0)
 
   const P = 76                       // page padding
   const CW = CARD_WIDTH - P * 2      // content width
   const out = []
 
-  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" role="img" aria-label="${esc(cardAlt(s, scored, perMonth, modelName))}">`)
-  out.push(defs(gradeColor))
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" role="img" aria-label="${esc(cardAlt(savedMonth, savedTokens, touched, listing, after))}">`)
+  out.push(defs(IN.emerald))
   out.push(`<rect width="${CARD_WIDTH}" height="${CARD_HEIGHT}" fill="${IN.ink}"/>`)
   out.push(`<rect width="${CARD_WIDTH}" height="${CARD_HEIGHT}" fill="url(#grid)"/>`)
   out.push(`<rect width="${CARD_WIDTH}" height="${CARD_HEIGHT}" fill="url(#wash)"/>`)
@@ -78,114 +73,82 @@ export function renderCardSvg (report) {
   out.push(text(r.generatedOn || '', CARD_WIDTH - P, 90, { size: 19, fill: IN.muted, anchor: 'end' }))
   out.push(rule(P, 126, CW))
 
-  /* ------------------------------------------------------------- score */
-  out.push(text('SKILL LISTING SCORE', P, 176, { size: 17, fill: IN.muted, spacing: 4.2 }))
+  /* --------------------------------------------------------------- won */
+  out.push(text('SAVED, AT API PRICES', P, 182, { size: 17, fill: IN.muted, spacing: 4.2 }))
 
-  out.push(`<text x="${P - 8}" y="396" font-family="${MONO}" font-size="196" font-weight="700" fill="${IN.text}" filter="url(#whiteglow)">${scored.score}</text>`)
-  const scoreW = w(String(scored.score), 196)
-  out.push(text('/100', P - 8 + scoreW + 18, 396, { size: 46, fill: IN.muted, weight: 500 }))
+  const hero = savedMonth !== null ? money(savedMonth) : fmt(savedTokens)
+  const heroSize = hero.length > 7 ? 150 : 178
+  out.push(`<text x="${P - 6}" y="366" font-family="${MONO}" font-size="${heroSize}" font-weight="700" fill="${IN.emerald}" filter="url(#bigglow)">${esc(hero)}</text>`)
+  out.push(text(savedMonth !== null ? 'a month' : 'tokens a message', P - 6 + w(hero, heroSize) + 20, 366, { size: 42, fill: IN.muted, weight: 500 }))
 
-  // grade chip, right aligned on the same optical line
-  const chipW = 128
-  const chipX = CARD_WIDTH - P - chipW
-  out.push(`<rect x="${chipX}" y="268" width="${chipW}" height="128" rx="26" fill="${IN.panelUp}" stroke="${gradeColor}" stroke-width="1.5" filter="url(#soft)"/>`)
-  out.push(`<text x="${chipX + chipW / 2}" y="370" text-anchor="middle" font-family="${MONO}" font-size="86" font-weight="700" fill="${gradeColor}">${scored.grade}</text>`)
+  const line = savedMonth !== null
+    ? `${fmt(savedTokens)} tokens off every message you send, from ${fmt(touched)} skills.`
+    : `${fmt(touched)} skills stopped riding along in every message you send.`
+  out.push(text(line, P, 428, { size: 27, fill: IN.text }))
 
-  headline(s, eco, scored).forEach((line, i) => {
-    out.push(text(line, P, 458 + i * 38, { size: 27, fill: IN.text }))
-  })
+  /* ------------------------------------------------------- before after */
+  const barY = 522
+  out.push(text('EVERY MESSAGE, BEFORE AND AFTER', P, barY, { size: 16, fill: IN.muted, spacing: 3.6 }))
+  const bh = 34
+  const gapY = 20
+  const beforeW = CW
+  const afterW = listing > 0 ? Math.max(24, Math.round(CW * (after / listing))) : 0
+  out.push(`<rect x="${P}" y="${barY + 26}" width="${beforeW}" height="${bh}" rx="9" fill="${IN.rose}" opacity="0.34"/>`)
+  out.push(text(`${fmt(listing)} tokens`, P + 18, barY + 26 + 23, { size: 19, fill: IN.text }))
+  out.push(text('before', CARD_WIDTH - P - 18, barY + 26 + 23, { size: 18, fill: IN.muted, anchor: 'end' }))
+  const aY = barY + 26 + bh + gapY
+  out.push(`<rect x="${P}" y="${aY}" width="${afterW}" height="${bh}" rx="9" fill="${IN.emerald}" opacity="0.9" filter="url(#soft)"/>`)
+  out.push(text(`${fmt(after)} tokens`, P + 18, aY + 23, { size: 19, fill: '#052A1D', weight: 700 }))
+  out.push(text('after', CARD_WIDTH - P - 18, aY + 23, { size: 18, fill: IN.muted, anchor: 'end' }))
 
-  /* --------------------------------------------------------- split bar */
-  const barY = 562
-  out.push(text(`WHERE ${fmt(listing)} TOKENS GO, EVERY MESSAGE`, P, barY, { size: 16, fill: IN.muted, spacing: 3.6 }))
-  const bh = 36
-  const bt = barY + 26
-  const wastedW = Math.round(CW * wastedShare)
-  out.push(`<rect x="${P}" y="${bt}" width="${CW}" height="${bh}" rx="10" fill="${IN.panel}" stroke="${IN.line}"/>`)
-  if (wastedW > 12) {
-    out.push(`<path d="${leftRounded(P, bt, wastedW, bh, 10)}" fill="${IN.rose}" opacity="0.92" filter="url(#soft)"/>`)
-  }
-  if (CW - wastedW > 12) {
-    out.push(`<path d="${rightRounded(P + wastedW, bt, CW - wastedW, bh, 10)}" fill="${IN.emerald}" opacity="0.55"/>`)
-  }
-  const legendY = bt + bh + 40
-  out.push(dot(P + 5, legendY - 6, IN.rose))
-  out.push(text(`${fmt(wasted)} tokens, ${Math.round(wastedShare * 100)}% of the list`, P + 22, legendY, { size: 21, fill: IN.text }))
-  out.push(text('on skills the agent has never picked', P + 22, legendY + 28, { size: 18, fill: IN.muted }))
-  const rightCol = P + Math.round(CW / 2) + 40
-  out.push(dot(rightCol + 5, legendY - 6, IN.emerald))
-  out.push(text(`${fmt(earning)} tokens, ${100 - Math.round(wastedShare * 100)}%`, rightCol + 22, legendY, { size: 21, fill: IN.text }))
-  out.push(text('on skills it actually uses', rightCol + 22, legendY + 28, { size: 18, fill: IN.muted }))
-
-  /* -------------------------------------------------------- stat tiles */
+  /* -------------------------------------------------------- what moved */
   const tiles = [
-    { n: fmt(s.skills || 0), k: 'in the listing', sub: `${fmt(s.notListed || 0)} more on disk, not listed`, c: IN.text },
-    { n: fmt(s.neverCalledPassive || 0), k: 'never once used', sub: 'described on every message', c: IN.amber },
-    { n: fmt(s.unroutable || 0), k: 'out of reach', sub: 'dropped, with no error', c: IN.rose },
+    { n: fmt(acts.active || 0), k: 'set to name only', c: IN.emerald },
+    { n: fmt(acts.delete || 0), k: 'removed', c: IN.emerald },
+    { n: fmt(acts.optimize || 0), k: 'descriptions cut', c: IN.emerald },
   ]
-  const tileY = 740
+  const tileY = 720
   const gap = 22
   const tw = Math.round((CW - gap * 2) / 3)
   tiles.forEach((t, i) => {
     const x = P + i * (tw + gap)
-    out.push(`<rect x="${x}" y="${tileY}" width="${tw}" height="164" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
-    out.push(`<text x="${x + 26}" y="${tileY + 78}" font-family="${MONO}" font-size="60" font-weight="700" fill="${t.c}">${t.n}</text>`)
-    out.push(text(t.k, x + 26, tileY + 112, { size: 20, fill: IN.text }))
-    for (const [j, line] of wrap(t.sub, 29).entries()) {
-      out.push(text(line, x + 26, tileY + 138 + j * 22, { size: 16, fill: IN.muted }))
-    }
+    out.push(`<rect x="${x}" y="${tileY}" width="${tw}" height="132" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
+    out.push(`<text x="${x + 26}" y="${tileY + 76}" font-family="${MONO}" font-size="58" font-weight="700" fill="${t.c}">${t.n}</text>`)
+    out.push(text(t.k, x + 26, tileY + 108, { size: 19, fill: IN.muted }))
   })
 
-  /* ------------------------------------------------------------- money */
-  const mY = 946
-  const mH = 140
-  out.push(`<rect x="${P}" y="${mY}" width="${CW}" height="${mH}" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
-  out.push(`<rect x="${P}" y="${mY}" width="5" height="${mH}" rx="2.5" fill="${IN.rose}" filter="url(#soft)"/>`)
-  out.push(text('SKILLS NOBODY USED, AT API PRICES', P + 34, mY + 42, { size: 16, fill: IN.muted, spacing: 3.4 }))
-  if (perMonth !== null) {
-    out.push(`<text x="${P + 34}" y="${mY + 110}" font-family="${MONO}" font-size="66" font-weight="700" fill="${IN.rose}" filter="url(#soft)">${esc(money(perMonth))}</text>`)
-    out.push(text('a month', P + 34 + w(money(perMonth), 66) + 18, mY + 110, { size: 26, fill: IN.muted }))
-  } else {
-    out.push(`<text x="${P + 34}" y="${mY + 110}" font-family="${MONO}" font-size="52" font-weight="700" fill="${IN.rose}">${fmt(vol.wastedTokensPerMonth || 0)}</text>`)
-    out.push(text('wasted tokens a month', P + 34 + w(fmt(vol.wastedTokensPerMonth || 0), 52) + 18, mY + 110, { size: 26, fill: IN.muted }))
-  }
-  if (vol.wastedTokensPerWeek) {
-    out.push(text(`${bigNum(vol.wastedTokensPerWeek)} tokens a week`, CARD_WIDTH - P - 34, mY + 110, { size: 26, fill: IN.muted, anchor: 'end' }))
+  /* ------------------------------------------------------------- share */
+  const sY = 894
+  out.push(`<rect x="${P}" y="${sY}" width="${CW}" height="118" rx="18" fill="${IN.panel}" stroke="${IN.line}"/>`)
+  out.push(`<rect x="${P}" y="${sY}" width="5" height="118" rx="2.5" fill="${IN.emerald}" filter="url(#soft)"/>`)
+  // The hero already says what came back, so this line earns its place only by
+  // saying what the bill was and what is left, which nothing else on the card does.
+  const wastedMonth = (s.wastedPerWeekOnYourModel && typeof s.wastedPerWeekOnYourModel.dollarsPerMonth === 'number')
+    ? s.wastedPerWeekOnYourModel.dollarsPerMonth : null
+  out.push(text('WHAT THE UNUSED SKILLS WERE COSTING', P + 34, sY + 40, { size: 15, fill: IN.muted, spacing: 3 }))
+  if (wastedMonth !== null && savedMonth !== null) {
+    const left = Math.max(0, wastedMonth - savedMonth)
+    const before = money(wastedMonth) + ' a month'
+    out.push(text(before, P + 34, sY + 84, { size: 30, fill: IN.muted }))
+    const arrowX = P + 34 + w(before, 30) + 22
+    out.push(text('\u2192', arrowX, sY + 84, { size: 30, fill: IN.muted }))
+    out.push(text(money(left), arrowX + 44, sY + 84, { size: 30, fill: IN.text, weight: 700 }))
+    out.push(text('left, the name lines that stay whatever you do', CARD_WIDTH - P - 34, sY + 84, { size: 18, fill: IN.muted, anchor: 'end' }))
+  } else if (vol.wastedTokensPerMonth) {
+    out.push(text(`${bigNum(vol.wastedTokensPerMonth)} tokens a month`, P + 34, sY + 84, { size: 30, fill: IN.text }))
   }
 
   /* ------------------------------------------------------------ footer */
-  out.push(rule(P, 1148, CW))
+  out.push(rule(P, 1058, CW))
   const cmd = 'npx token-coupons'
   const pw = Math.round(w(cmd, 22)) + 44
-  out.push(`<rect x="${P}" y="1186" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
-  out.push(text(cmd, P + 22, 1218, { size: 22, fill: IN.cyan }))
-  out.push(text('measure your own', CARD_WIDTH - P, 1218, { size: 19, fill: IN.muted, anchor: 'end' }))
+  out.push(`<rect x="${P}" y="1096" width="${pw}" height="50" rx="12" fill="${IN.panelUp}" stroke="${IN.cyan}" stroke-opacity="0.5"/>`)
+  out.push(text(cmd, P + 22, 1128, { size: 22, fill: IN.cyan }))
+  out.push(text('View on GitHub', CARD_WIDTH - P, 1112, { size: 20, fill: IN.text, anchor: 'end' }))
+  out.push(text(esc(repoUrl.replace(/^https?:\/\//, '')), CARD_WIDTH - P, 1138, { size: 16, fill: IN.muted, anchor: 'end' }))
 
   out.push('</svg>')
   return out.join('\n')
-}
-
-/**
- * The line under the score. Not an adjective for the grade: the two facts a
- * person would want, which skills are buying nothing and what they cost, taken
- * straight from the counts. Two lines at 27px, each inside the 64 character
- * column.
- */
-export function headline (summary, economics, scored) {
-  const never = Number((economics.neverCalledPassive || {}).count) || 0
-  const summoned = Number((economics.summonedOnlyPassive || {}).count) || 0
-  const wasted = scored.tokens.wasted
-
-  if (wasted <= 0 || (never === 0 && summoned === 0)) {
-    return ['Every description in your listing has been read at least once.']
-  }
-  const first = []
-  if (never > 0) first.push(`${fmt(never)} skill${never === 1 ? ' has' : 's have'} never been used.`)
-  if (summoned > 0) first.push(`${fmt(summoned)} more you only type yourself.`)
-  return [
-    first.join(' '),
-    `Their descriptions cost ${fmt(wasted)} tokens in every message you send.`,
-  ]
 }
 
 /* ------------------------------------------------------------- pieces */
@@ -261,13 +224,11 @@ export function bigNum (n) {
   return fmt(v)
 }
 
-function cardAlt (s, scored, perMonth, modelName) {
-  const bits = [
-    `Skill listing score ${scored.score} out of 100, grade ${scored.grade}.`,
-    `${fmt(scored.tokens.wasted)} of ${fmt(scored.tokens.listing)} tokens in every message buy no routing decision.`,
-    `${fmt(s.neverCalledPassive || 0)} skills never used, ${fmt(s.unroutable || 0)} out of reach.`,
-  ]
-  if (perMonth !== null) bits.push(`${money(perMonth)} a month${modelName ? ' on ' + modelName : ''}.`)
+function cardAlt (savedMonth, savedTokens, touched, listing, after) {
+  const bits = []
+  if (savedMonth !== null) bits.push(`Saved ${money(savedMonth)} a month at API prices.`)
+  bits.push(`${fmt(savedTokens)} tokens off every message, from ${fmt(touched)} skills.`)
+  bits.push(`The skill list went from ${fmt(listing)} tokens a message to ${fmt(after)}.`)
   return bits.join(' ')
 }
 

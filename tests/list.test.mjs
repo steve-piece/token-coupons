@@ -95,3 +95,24 @@ describe('the two questions a reader asks about the money', () => {
     assert.match(html, /leaves its <strong>name<\/strong> in the list/)
   })
 })
+
+describe('the score, now that it lives here', () => {
+  test('is shown above the list it is telling you to change', () => {
+    const scoreAt = html.indexOf('id="score"')
+    const tableAt = html.indexOf('id="rows-section"')
+    assert.ok(scoreAt > 0 && scoreAt < tableAt)
+    assert.match(html, /class="sv">\d+<\/span><span class="sd">\/100</)
+    assert.match(html, /class="grade (emerald|amber|rose)"/)
+  })
+
+  test('carries the headline that says what is buying nothing', () => {
+    assert.match(html, /have never been used/)
+    assert.match(html, /in every message you send/)
+  })
+
+  test('says how the score is built, so it is not a black box', () => {
+    assert.match(html, /earned its place \(70\)/)
+    assert.match(html, /allowance \(20\)/)
+    assert.match(html, /silently dropped \(10\)/)
+  })
+})

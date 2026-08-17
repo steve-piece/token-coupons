@@ -1,3 +1,5 @@
+import { fmt } from './lib/util.mjs'
+
 // The scorecard number. One 0 to 100 figure a person can post, built from the
 // three things the report already measures, weighted by how much each one
 // actually costs.
@@ -27,6 +29,9 @@ export const GRADES = [
   { grade: 'D', min: 45 },
   { grade: 'F', min: 0 },
 ]
+
+/** What each grade is drawn in, wherever a grade is shown. */
+export const GRADE_COLOR = { A: 'emerald', B: 'emerald', C: 'amber', D: 'rose', F: 'rose' }
 
 const clamp01 = (n) => Math.max(0, Math.min(1, Number(n) || 0))
 
@@ -75,3 +80,26 @@ export function scoreReport (report) {
 }
 
 function round (n, places = 1) { return +(Number(n) || 0).toFixed(places) }
+
+/**
+ * The line under the score. Not an adjective for the grade: the two facts a
+ * person would want, which skills are buying nothing and what they cost, taken
+ * straight from the counts.
+ */
+export function headline (summary, economics, scored) {
+  const never = Number((economics.neverCalledPassive || {}).count) || 0
+  const summoned = Number((economics.summonedOnlyPassive || {}).count) || 0
+  const wasted = scored.tokens.wasted
+
+  if (wasted <= 0 || (never === 0 && summoned === 0)) {
+    return ['Every description in your listing has been read at least once.']
+  }
+  const first = []
+  if (never > 0) first.push(`${fmt(never)} skill${never === 1 ? ' has' : 's have'} never been used.`)
+  if (summoned > 0) first.push(`${fmt(summoned)} more you only type yourself.`)
+  return [
+    first.join(' '),
+    `Their descriptions cost ${fmt(wasted)} tokens in every message you send.`,
+  ]
+}
+

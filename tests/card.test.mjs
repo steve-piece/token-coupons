@@ -2,7 +2,8 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { scoreReport, GRADES, WEIGHTS } from '../src/score.mjs'
-import { renderCardSvg, renderCardPage, headline, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT } from '../src/render-card.mjs'
+import { renderCardSvg, renderCardPage, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT, REPO } from '../src/render-card.mjs'
+import { headline } from '../src/score.mjs'
 import { sampleReport } from './fixtures/sample-report.mjs'
 
 /** A report shaped like the real one, with only the fields the score reads. */
@@ -20,6 +21,7 @@ function report ({ listing, wasted, over = 1, unroutable = 0 }) {
       fitsAfter: true,
       recommendedActions: { active: 41, delete: 25, optimize: 8, review: 0, keep: 20, passive: 0 },
       wastedPerWeekOnYourModel: { model: 'Claude Opus 5', dollars: 8.97, dollarsPerMonth: 38.88 },
+      savedOnYourModel: { model: 'Claude Opus 5', dollars: 8.29, dollarsPerMonth: 35.93, tokens: wasted - 400 },
     },
     economics: { perSession: { overBudgetRatio: over } },
     cost: { volume: { wastedTokensPerWeek: 15732252, wastedTokensPerMonth: 68173092 } },
@@ -76,27 +78,32 @@ describe('card', () => {
     assert.equal(svg.includes('<image'), false)
   })
 
-  test('carries the numbers a reader would check', () => {
-    assert.ok(svg.includes('>45<'), 'the score')
-    assert.ok(svg.includes('>D<'), 'the grade')
-    assert.ok(svg.includes('7,777'), 'wasted tokens')
-    assert.ok(svg.includes('10,832'), 'listing tokens')
-    assert.ok(svg.includes('$38.88'), 'the monthly bill')
-    assert.ok(svg.includes('AT API PRICES'), 'the basis, since a flat plan is not billed this')
-    assert.equal(svg.includes('WHAT ONE PASS GIVES BACK'), false, 'the saving is its own card now')
+  test('leads with what was saved, not with the score', () => {
+    assert.ok(svg.includes('SAVED, AT API PRICES'), 'the basis, since a flat plan is not billed this')
+    assert.ok(svg.includes('10,832'), 'the before figure')
     assert.ok(svg.includes('token-coupons'), 'the wordmark')
+    assert.ok(svg.includes('View on GitHub') && svg.includes('github.com/steve-piece/token-coupons'))
+    // the score is a diagnosis and lives on the list instead
+    assert.equal(svg.includes('SKILL LISTING SCORE'), false)
+    assert.equal(/>D<\/text>/.test(svg), false, 'no grade chip')
   })
 
   test('describes itself for a screen reader', () => {
     const alt = (svg.match(/aria-label="([^"]*)"/) || [])[1] || ''
-    assert.match(alt, /score 45 out of 100/)
-    assert.match(alt, /grade D/)
+    assert.match(alt, /Saved \$/)
+    assert.match(alt, /tokens off every message/)
+    assert.match(alt, /went from/)
   })
 
-  test('the split bar is drawn in proportion to the waste', () => {
-    const lean = renderCardSvg(report({ listing: 1000, wasted: 0 }))
-    assert.equal(/fill="#FF6B8A" opacity="0.92"/.test(lean), false, 'no waste, no rose slab')
-    assert.ok(/fill="#FF6B8A" opacity="0.92"/.test(svg), 'waste present, rose slab drawn')
+  test('the after bar is drawn shorter than the before bar, in proportion', () => {
+    const widths = [...svg.matchAll(/<rect x="76" y="\d+" width="(\d+)" height="34"/g)].map((m) => Number(m[1]))
+    assert.equal(widths.length, 2, 'a before bar and an after bar')
+    assert.ok(widths[1] < widths[0], 'after is shorter than before')
+  })
+
+  test('the repo is printed so a card that travels can be traced back', () => {
+    assert.ok(REPO.startsWith('https://github.com/'))
+    assert.ok(svg.includes(REPO.replace(/^https?:\/\//, '')))
   })
 
   test('the page ships both save paths, and no banned character reaches it', () => {

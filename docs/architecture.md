@@ -61,8 +61,8 @@ src/report.mjs             buildReport(opts) -> Report   (joins everything above
 src/render-text.mjs        renderText(report, {color, top}) -> string
 src/render-list.mjs        renderList(report, {cardHref}) -> the dark decision list, companion to the card
 src/render-html.mjs        renderHtml(report) -> the earlier light report page, no longer wired to a flag
-src/score.mjs              scoreReport(report) -> {score, grade, parts, ratios, tokens}
-src/render-card.mjs        renderCardSvg(report) -> svg ; renderCardPage(report) -> the postable scorecard
+src/score.mjs              scoreReport(report) -> {score, grade, parts, ratios, tokens} ; headline() ; GRADE_COLOR
+src/render-card.mjs        renderCardSvg(report, {repoUrl}) -> svg ; renderCardPage(report, {listHref, listCount}) -> the postable saved card
 src/apply.mjs              planApply(decisions, {skills}) -> Plan ; applyPlan(plan, {yes, trashDir}) -> Result ; cacheNote(result) -> the re-send warning
 data/pricing.json          the price table (shape below)
 .claude-plugin/marketplace.json    the one plugin marketplace that points at this repo
@@ -428,8 +428,15 @@ report; apply exits 1 if any step errored.
 
 ## The share card (src/score.mjs, src/render-card.mjs)
 
-`--card=FILE` writes a second, much smaller page: one dark scorecard sized for
+`--card=FILE` writes a second, much smaller page: one dark card sized for
 posting, and a button that turns it into a PNG.
+
+The card is the **after** picture, and carries only good news: what the changes
+saved, in dollars at API prices, with the before and after token figures and
+what moved. It ends with the repo, bottom right, so a card that travels can be
+traced back. The **score** does not appear on it. A score is a diagnosis, and it
+belongs beside the list of things it is telling you to change, which is why it
+renders on the decision list instead. Nobody shares a D.
 
 The score is 0 to 100 over three weighted parts, defined in `score.mjs`:
 `earned` (70) is the share of listing tokens spent on skills the agent has
@@ -439,8 +446,9 @@ skill. Grades start at 90 A, 75 B, 60 C, 45 D, and F below. The weighting is
 deliberately harsh on `earned`: a listing where most tokens buy no routing
 decision is failing at its only job.
 
-The line under the score is computed by `headline()`, not chosen from a table of
-sentences per grade. It names how many skills have never been used, how many are
+The line under the score is computed by `headline()` (in `score.mjs`, since both
+the score and the sentence come from the same counts), not chosen from a table
+of sentences per grade. It names how many skills have never been used, how many are
 only ever typed by hand, and what those descriptions cost per message. An
 adjective for the band would read as filler and would not tell anyone which
 skills are the problem.

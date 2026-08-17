@@ -30,7 +30,7 @@ Write the interactive page and open it in your browser.
 npx token-coupons@latest report --html=report.html --open
 ```
 
-Or write the scorecard instead: one dark card sized for posting, with a button that saves it as a PNG.
+Or write the share card: one dark card of what the changes saved, sized for posting, with a button that saves it as a PNG.
 
 ```bash
 npx token-coupons@latest report --card=scorecard.html --open
@@ -204,7 +204,7 @@ token-coupons help
                    subscription behaviour; use 5 on a plain API key)
   --json           print JSON instead of text
   --html=FILE      also write the decision list: every skill priced per month, with a suggestion you can change
-  --card=FILE      also write the shareable scorecard, which exports itself as a PNG
+  --card=FILE      also write the shareable saved card, which exports itself as a PNG
   --out=FILE       also write the report JSON
   --open           open the HTML page in your browser after writing it
   --no-color       plain text without colors
