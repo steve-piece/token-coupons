@@ -2,7 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { scoreReport, GRADES, WEIGHTS } from '../skills/token-coupons/src/score.mjs'
-import { renderCardSvg, renderCardPage, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT, REPO } from '../skills/token-coupons/src/render-card.mjs'
+import { renderCardSvg, renderCardPage, linkedinHref, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT, REPO } from '../skills/token-coupons/src/render-card.mjs'
 import { headline } from '../skills/token-coupons/src/score.mjs'
 import { sampleReport } from './fixtures/sample-report.mjs'
 
@@ -140,7 +140,10 @@ describe('card', () => {
     assert.ok(page.includes('a.download'), 'the opened from disk path')
     assert.ok(page.includes('toBlob'), 'the rasterizer')
     assert.ok(page.includes('id="png"'))
-    assert.ok(page.includes('Save image') && page.includes('Copy image'))
+    assert.ok(page.includes('Save image'))
+    // Copying an image is blocked inside the artifact viewer, so the button
+    // that promised it is gone rather than sitting there failing.
+    assert.equal(/Copy image|ClipboardItem|navigator\.clipboard/.test(page), false)
     const DASHES = [0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2212].map((c) => String.fromCodePoint(c))
     assert.equal(DASHES.some((d) => page.includes(d)), false, 'no forbidden dash reaches the page')
   })
@@ -203,13 +206,38 @@ describe('headline', () => {
 describe('the card page', () => {
   const r = report({ listing: 10832, wasted: 7777, over: 1.08, unroutable: 3 })
 
-  test('offers the two image actions, each with its own glyph', () => {
+  test('offers save then share, each with its own glyph', () => {
     const page = renderCardPage(r)
     const bar = page.slice(page.indexOf('<div class="bar">'), page.indexOf('</div>', page.indexOf('<div class="bar">')))
-    assert.ok(bar.indexOf('Save image') < bar.indexOf('Copy image'), 'save first')
+    // Save comes first because the composer cannot carry the picture: the image
+    // has to exist on disk before the draft is any use.
+    assert.ok(bar.indexOf('Save image') < bar.indexOf('Draft a LinkedIn post'), 'save first')
     assert.equal((bar.match(/class="ico"/g) || []).length, 2, 'one glyph each')
+    assert.match(bar, /<a class="btn alt" id="li" href="https:\/\/www\.linkedin\.com/, 'a link, not a scripted navigation')
+    assert.match(bar, /target="_blank" rel="noreferrer noopener"/)
     // the card is the end of the loop, so it does not send anyone back to the list
     assert.equal(page.includes('See suggestions'), false)
+  })
+
+  test('the draft opens with the numbers already written, and says the picture is not included', () => {
+    const href = linkedinHref(r)
+    const text = decodeURIComponent(href.split('text=')[1] || '')
+    assert.match(href, /^https:\/\/www\.linkedin\.com\/feed\/\?shareActive=true&text=/)
+    assert.match(text, /7,377 tokens off every message/)
+    assert.match(text, /74 of mine were riding along/, 'the three action counts, summed')
+    assert.match(text, /\$35\.93 a month at API prices/)
+    assert.ok(text.includes(REPO), 'and where it came from')
+    // The platform takes words from a link and nothing else, so the page has to
+    // say so rather than let someone post a card with no card in it.
+    assert.match(renderCardPage(r), /Save the image first/)
+  })
+
+  test('a report with no priced model drafts without inventing a dollar figure', () => {
+    const bare = report({ listing: 900, wasted: 500 })
+    delete bare.summary.savedOnYourModel
+    const text = decodeURIComponent(linkedinHref(bare).split('text=')[1] || '')
+    assert.equal(/\$/.test(text), false)
+    assert.match(text, /tokens off every message/)
   })
 
   test('scales the card to the viewport, so the whole thing reads on one screen', () => {

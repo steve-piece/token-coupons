@@ -191,8 +191,36 @@ const GITHUB_PATH = 'M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.
 /** Stroke glyphs for the controls. Inline, because the page fetches nothing. */
 const ICON_DOWNLOAD = '<svg class="ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
   '<path d="M12 4v11m0 0l-4.5-4.5M12 15l4.5-4.5"></path><path d="M4 18v1a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-1"></path></svg>'
-const ICON_COPY = '<svg class="ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
-  '<rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1"></path></svg>'
+/** Simple Icons, CC0, drawn rather than fetched like every other mark here. */
+const ICON_LINKEDIN = '<svg class="ico" viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="currentColor">' +
+  '<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 1 1 0-4.125 2.062 2.062 0 0 1 0 4.125zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.225 0z"></path></svg>'
+
+/**
+ * The LinkedIn composer, opened with the words already in it.
+ *
+ * Text only, and that is the whole of what the platform accepts from a link:
+ * there is no way to attach the PNG from here, so the page says out loud that
+ * the image has to be dropped in by hand. A button that quietly posted without
+ * the picture would be worse than no button.
+ */
+export function linkedinHref (report) {
+  const s = (report || {}).summary || {}
+  const saved = s.savedOnYourModel || null
+  const month = saved && typeof saved.dollarsPerMonth === 'number' ? saved.dollarsPerMonth : null
+  const tokens = Number(s.savedTokensPerCallIfApplied) || 0
+  const acts = s.recommendedActions || {}
+  const touched = (acts.active || 0) + (acts.delete || 0) + (acts.optimize || 0)
+
+  const lines = [
+    `I cut ${fmt(tokens)} tokens off every message I send in Claude Code.`,
+    '',
+    `Every skill you install puts its description in the system prompt, and that goes out again on every single API call. ${fmt(touched)} of mine were riding along without ever being read.` +
+      (month !== null ? ` That is ${money(month)} a month at API prices.` : ''),
+    '',
+    `Measured with token-coupons: ${REPO}`,
+  ]
+  return 'https://www.linkedin.com/feed/?shareActive=true&text=' + encodeURIComponent(lines.join('\n'))
+}
 
 function text (value, x, y, { size = 20, fill = IN.text, weight = 400, anchor = 'start', spacing = 0 } = {}) {
   const sp = spacing ? ` letter-spacing="${spacing}"` : ''
@@ -288,11 +316,12 @@ export function renderCardPage (report) {
     '<div class="card" id="card">' + svg + '</div>',
     '<div class="bar">',
     '<button type="button" id="png" class="go">' + ICON_DOWNLOAD + 'Save image</button>',
-    '<button type="button" id="copy" class="alt">' + ICON_COPY + 'Copy image</button>',
+    '<a class="btn alt" id="li" href="' + attr(linkedinHref(report)) + '" target="_blank" rel="noreferrer noopener">' +
+      ICON_LINKEDIN + 'Draft a LinkedIn post</a>',
     '</div>',
     '<p class="msg" id="msg" role="status" aria-live="polite"></p>',
-    '<p class="fine">Measured on ' + esc(day) + ' from the skills and session transcripts already on this machine. ' +
-      'Nothing left the machine to make it.</p>',
+    '<p class="fine">Save the image first: LinkedIn takes the words from a link but not the picture, so the draft opens written and you attach the card yourself. ' +
+      'Measured on ' + esc(day) + ' from the skills and session transcripts already on this machine. Nothing left the machine to make it.</p>',
     '</main>',
     '<script>' + pageScript() + '</script>',
     '</body>',
@@ -319,19 +348,22 @@ body {
 .card { line-height: 0; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 80px rgba(0,0,0,.6), 0 0 0 1px ${IN.line}; max-width: 100%; }
 .card svg { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 214px); }
 .bar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; }
-button {
+/* One rule for both controls: the second is a link rather than a button,
+   because opening the composer is navigation and an anchor survives a sandbox
+   that blocks scripted navigation. It should not look like anything else. */
+button, a.btn {
   font: inherit; font-size: 15px; cursor: pointer; border-radius: 12px; padding: 12px 20px; min-height: 46px;
-  display: inline-flex; align-items: center; gap: 9px;
+  display: inline-flex; align-items: center; gap: 9px; text-decoration: none;
   border: 1px solid ${IN.line}; background: ${IN.panelUp}; color: ${IN.text};
   transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
 }
-button.go { background: ${IN.cyan}; border-color: ${IN.cyan}; color: #04202B; font-weight: 700; }
-button.go:hover { filter: brightness(1.08); }
+.go { background: ${IN.cyan}; border-color: ${IN.cyan}; color: #04202B; font-weight: 700; }
+.go:hover { filter: brightness(1.08); }
 .ico { flex: 0 0 auto; }
-button.alt:hover { border-color: ${IN.cyan}; color: ${IN.cyan}; }
+.alt:hover { border-color: ${IN.cyan}; color: ${IN.cyan}; }
 button:disabled { opacity: .55; cursor: default; }
 
-button:focus-visible { outline: 2px solid ${IN.cyan}; outline-offset: 3px; }
+button:focus-visible, a.btn:focus-visible { outline: 2px solid ${IN.cyan}; outline-offset: 3px; }
 .msg { color: ${IN.muted}; font-size: 13.5px; margin: 0; min-height: 20px; text-align: center; }
 .fine { color: ${IN.muted}; font-size: 12.5px; margin: 0; max-width: 78ch; text-align: center; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
@@ -344,7 +376,7 @@ function pageScript () {
 (function () {
   var msg = document.getElementById('msg');
   var pngBtn = document.getElementById('png');
-  var copyBtn = document.getElementById('copy');
+  var liBtn = document.getElementById('li');
   var svg = document.querySelector('#card svg');
   function say (t) { if (msg) msg.textContent = t; }
 
@@ -408,21 +440,9 @@ function pageScript () {
     say('Saved to your downloads.');
   }
 
-  copyBtn && copyBtn.addEventListener('click', function () {
-    if (!navigator.clipboard || !window.ClipboardItem) {
-      say('This browser cannot copy images. Use Save PNG instead.');
-      return;
-    }
-    copyBtn.disabled = true;
-    say('Rendering at 2x...');
-    toPng(2).then(function (blob) {
-      return navigator.clipboard.write([new window.ClipboardItem({ 'image/png': blob })]).then(
-        function () { say('Copied. Paste it straight into Slack or a post.'); },
-        function () { say('Copying is blocked here. Use Save PNG instead.'); }
-      );
-    }).catch(function () {
-      say('The image could not be made here. Use Save PNG instead.');
-    }).then(function () { copyBtn.disabled = false; });
+  /* the composer carries the words only, so say what is still to do */
+  liBtn && liBtn.addEventListener('click', function () {
+    say('Composer opening. Attach the image you saved, then post.');
   });
 })();
 `
