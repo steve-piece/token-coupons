@@ -203,7 +203,7 @@ token-coupons help
   --cache-ttl=MIN  minutes the saved prompt survives with no messages (default 60, the Claude
                    subscription behaviour; use 5 on a plain API key)
   --json           print JSON instead of text
-  --html=FILE      also write the interactive page
+  --html=FILE      also write the decision list: every skill priced per month, with a suggestion you can change
   --card=FILE      also write the shareable scorecard, which exports itself as a PNG
   --out=FILE       also write the report JSON
   --open           open the HTML page in your browser after writing it

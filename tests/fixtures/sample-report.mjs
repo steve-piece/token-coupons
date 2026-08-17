@@ -396,6 +396,11 @@ export function sampleReport () {
   for (const r of rows) counts[r.recommendation.action] = (counts[r.recommendation.action] || 0) + 1
 
   const yours = cost.perModel.find((m) => m.seenInTranscripts) || cost.perModel[0]
+  // gating leaves the name line behind, so the saving is a share of the waste
+  const savedShare = wastedTokens > 0 ? Math.min(1, economics.ifGated.savedTokensPerSession / wastedTokens) : 0
+  // one rate for every row, the way report.mjs derives it
+  const rate = yours && wastedTokens > 0 ? yours.wasted.perMonth / wastedTokens : null
+  if (rate !== null) for (const r of rows) r.dollarsPerMonth = round(r.listingTokens * rate, 4)
 
   return {
     version: 1,
@@ -436,7 +441,15 @@ export function sampleReport () {
       wastedTokensPerCall: wastedTokens,
       savedTokensPerCallIfApplied: economics.ifGated.savedTokensPerSession,
       fitsAfter: economics.ifGated.fitsBudgetAfter,
-      wastedPerWeekOnYourModel: yours ? { model: yours.label, dollars: yours.wasted.perWeek } : null,
+      wastedPerWeekOnYourModel: yours ? { model: yours.label, dollars: yours.wasted.perWeek, dollarsPerMonth: yours.wasted.perMonth } : null,
+      savedOnYourModel: yours
+        ? {
+            model: yours.label,
+            dollars: round(yours.wasted.perWeek * savedShare),
+            dollarsPerMonth: round(yours.wasted.perMonth * savedShare),
+            tokens: economics.ifGated.savedTokensPerSession,
+          }
+        : null,
       recommendedActions: counts,
     },
   }

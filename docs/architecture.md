@@ -59,7 +59,8 @@ src/recommend.mjs          recommend(rows, {economics, budget, thresholds, today
 src/pricing.mjs            loadPricing(path?, {today}?) -> Pricing, costModel({wastedTokens, listingTokens, stats, pricing, cached, today}) -> Cost
 src/report.mjs             buildReport(opts) -> Report   (joins everything above; opts.cwd reaches discover, opts.cacheTtlMinutes reaches calls)
 src/render-text.mjs        renderText(report, {color, top}) -> string
-src/render-html.mjs        renderHtml(report) -> string  (self-contained, theme aware, interactive)
+src/render-list.mjs        renderList(report, {cardHref}) -> the dark decision list, companion to the card
+src/render-html.mjs        renderHtml(report) -> the earlier light report page, no longer wired to a flag
 src/score.mjs              scoreReport(report) -> {score, grade, parts, ratios, tokens}
 src/render-card.mjs        renderCardSvg(report) -> svg ; renderCardPage(report) -> the postable scorecard
 src/apply.mjs              planApply(decisions, {skills}) -> Plan ; applyPlan(plan, {yes, trashDir}) -> Result ; cacheNote(result) -> the re-send warning
@@ -456,3 +457,26 @@ Three constraints shape the card and must not be broken casually:
   confirms. Opened from disk there is no host, so it falls back to an anchor.
 - It commits to **one dark look**, with no light variant, because it is meant to
   land in other people's apps where it cannot know the surrounding theme.
+
+## The decision list (src/render-list.mjs)
+
+`--html=FILE` writes the companion to the card: the same dark ground and mono
+voice, carrying every row behind the headline figure so a person can change any
+of them. Three rules shape it.
+
+**Money, not tokens.** A token count is a unit nobody has intuition for. Every
+row is priced per month from `cost.dollarsPerTokenPerMonth`, the single rate
+`report.mjs` derives from the model the transcripts actually ran on, so the card
+and the list can never disagree about what a skill costs. When no priced model
+matches, rows fall back to token counts rather than a guessed price.
+
+**Passive and active first.** The page opens by explaining the two modes and
+nothing else, because nobody can make these decisions without knowing what they
+are, and that difference is the only lever the tool pulls. A test asserts the
+explainer sits above the table.
+
+**One dark look**, matching the card it ships beside.
+
+`src/render-html.mjs` is the earlier light page. It is no longer reached by any
+flag, and it is kept only because a second session had uncommitted edits in it
+when this landed. Delete it once that settles.

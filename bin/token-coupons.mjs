@@ -17,6 +17,7 @@ import { buildReport } from '../src/report.mjs'
 import { renderText } from '../src/render-text.mjs'
 import { renderHtml } from '../src/render-html.mjs'
 import { renderCardPage } from '../src/render-card.mjs'
+import { renderList } from '../src/render-list.mjs'
 import { discoverSkills } from '../src/discover.mjs'
 import { parseDecisions, planApply, applyPlan, summarizeApply } from '../src/apply.mjs'
 import { loadPricing } from '../src/pricing.mjs'
@@ -169,7 +170,8 @@ export async function runReport (flags, io) {
     if (flags.open && !flags.html) openFile(full)
   }
   if (flags.html) {
-    const full = writeFile(flags.html, renderHtml(report))
+    const cardHref = flags.card ? relativeHref(flags.html, flags.card) : null
+    const full = writeFile(flags.html, renderList(report, { cardHref }))
     notes.push('wrote the interactive page to ' + tildify(full))
     if (flags.open) {
       openFile(full)
