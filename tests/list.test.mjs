@@ -13,15 +13,17 @@ describe('the decision list', () => {
     const tableAt = html.indexOf('id="rows-section"')
     assert.ok(modesAt > 0, 'the explainer exists')
     assert.ok(modesAt < tableAt, 'and it comes before the table')
-    assert.ok(html.includes('whole description'), 'passive is explained by what it sends')
-    assert.ok(html.includes('disable-model-invocation: true'), 'active names the one line that sets it')
-    assert.ok(html.includes('pays on every message'))
-    assert.ok(html.includes('pays almost nothing'))
+    assert.ok(html.includes("Descriptions injected in the model's context, used as needed."), 'passive, in one line')
+    assert.ok(html.includes('Skills activated through direct reference within the prompt.'), 'active, in one line')
+    assert.ok(html.includes('One line in the YAML: <code>disable-model-invocation: true</code>'))
   })
 
   test('leads with money, and prices every row the same way', () => {
     assert.ok(html.includes('a month, back'), 'the recoverable figure comes first')
     assert.ok(html.includes('a month, wasted'))
+    // green on what you get back, red on the count behind it
+    assert.match(html, /class="fig good"><span class="v">\$/)
+    assert.match(html, /class="fig bad"><span class="v">\d+<\/span><span class="k">skills never used/)
     assert.ok(html.includes('Cost a month'), 'the column is money, not tokens')
     const rows = (html.match(/<tr data-index=/g) || []).length
     const costs = (html.match(/td class="num cost"/g) || []).length

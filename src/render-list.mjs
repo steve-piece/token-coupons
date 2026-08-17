@@ -99,16 +99,13 @@ function modes () {
     '<h2 class="eyebrow">The two modes, and the whole idea</h2>',
     '<div class="modes">',
     '<article class="mode">',
-    '<div class="modehead"><span class="pill warn">Passive</span><span class="modecost">pays on every message</span></div>',
-    '<p>The agent may pick this skill on its own. So it can decide, your agent sends the skill\'s <strong>whole ' +
-      'description</strong> inside every single message you send, used or not. That is what lands on the bill.</p>',
-    '<p class="modefine">The default: a skill is passive unless its file says otherwise.</p>',
+    '<div class="modehead"><span class="pill warn">Passive</span></div>',
+    '<p>Descriptions injected in the model\'s context, used as needed.</p>',
     '</article>',
     '<article class="mode">',
-    '<div class="modehead"><span class="pill good">Active</span><span class="modecost">pays almost nothing</span></div>',
-    '<p>The skill runs only when you type its name. Just the <strong>name</strong> is sent, a few tokens instead of a few ' +
-      'hundred. The skill itself is unchanged and works exactly as before.</p>',
-    '<p class="modefine">One line in the skill file: <code>disable-model-invocation: true</code></p>',
+    '<div class="modehead"><span class="pill good">Active</span></div>',
+    '<p>Skills activated through direct reference within the prompt.</p>',
+    '<p class="modefine">One line in the YAML: <code>disable-model-invocation: true</code></p>',
     '</article>',
     '</div>',
     '<p class="note">Every row below is that one question: <strong>does the agent need to find this by itself, or do you ' +
@@ -124,9 +121,11 @@ function figures (s) {
   const saved = s.savedOnYourModel
   const model = (saved && saved.model) || (wasted && wasted.model) || null
   const cells = []
-  if (saved) cells.push(fig(money(saved.dollarsPerMonth), 'a month, back', 'if you take every suggestion below', 'good'))
-  if (wasted) cells.push(fig(money(wasted.dollarsPerMonth), 'a month, wasted', 'on descriptions nothing has read', 'bad'))
-  cells.push(fig(fmt(s.neverCalledPassive || 0), 'never used', 'the agent has not once picked them', 'plain'))
+  // Green on what you get back, red on the count that causes it. The wasted
+  // figure sits between them and needs no colour of its own.
+  if (saved) cells.push(fig(money(saved.dollarsPerMonth), 'a month, back', 'good'))
+  if (wasted) cells.push(fig(money(wasted.dollarsPerMonth), 'a month, wasted', 'plain'))
+  cells.push(fig(fmt(s.neverCalledPassive || 0), 'skills never used', 'bad'))
   if (!cells.length) return ''
   return [
     '<section class="section" id="figures">',
@@ -137,9 +136,9 @@ function figures (s) {
   ].join('\n')
 }
 
-function fig (value, label, sub, tone) {
+function fig (value, label, tone) {
   return '<div class="fig ' + tone + '"><span class="v">' + esc(value) + '</span>' +
-    '<span class="k">' + esc(label) + '</span><span class="s">' + esc(sub) + '</span></div>'
+    '<span class="k">' + esc(label) + '</span></div>'
 }
 
 /* ----------------------------------------------------------------- table */
@@ -347,8 +346,8 @@ a { color: ${INK.cyan}; }
 .dim { color: ${INK.muted}; font-weight: 400; }
 
 .modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-.mode { background: ${INK.panel}; border: 1px solid ${INK.line}; border-radius: 16px; padding: 20px 22px; }
-.modehead { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.mode { background: ${INK.panel}; border: 1px solid ${INK.line}; border-radius: 16px; padding: 18px 22px; }
+.modehead { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .modecost { color: ${INK.muted}; font-size: 13px; }
 .mode p { color: ${INK.muted}; margin: 0 0 8px; }
 .modefine { font-size: 13px; border-top: 1px solid ${INK.line}; padding-top: 10px; margin: 12px 0 0 !important; }
@@ -366,12 +365,11 @@ a { color: ${INK.cyan}; }
 .fig::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
 .fig.good::before { background: ${INK.emerald}; box-shadow: 0 0 18px ${INK.emerald}; }
 .fig.bad::before { background: ${INK.rose}; box-shadow: 0 0 18px ${INK.rose}; }
-.fig.plain::before { background: ${INK.line}; }
+.fig.plain::before { background: ${INK.muted}; opacity: .5; }
 .fig .v { display: block; font-size: 40px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .fig.good .v { color: ${INK.emerald}; }
 .fig.bad .v { color: ${INK.rose}; }
-.fig .k { display: block; margin-top: 4px; }
-.fig .s { display: block; color: ${INK.muted}; font-size: 13px; margin-top: 2px; }
+.fig .k { display: block; margin-top: 4px; color: ${INK.muted}; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
 .chip, .ghost, .go {
