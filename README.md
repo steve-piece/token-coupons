@@ -1,30 +1,78 @@
-# token-coupons
+<p align="center">
+  <img src="./assets/readme/hero.svg" width="100%" alt="token-coupons: every skill you install is described again in every message you send. A skill listing panel shows one skill in use and three that have never been used, still billed, totalling 10,832 tokens on every message.">
+</p>
 
-Find out what your installed Claude Code skills cost on every message, which ones the agent never reads, and what to do about it.
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT licensed"></a>
+  <img src="https://img.shields.io/badge/dependencies-0-brightgreen.svg" alt="Zero dependencies">
+  <img src="https://img.shields.io/badge/node-20%2B-brightgreen.svg" alt="Requires Node 20 or newer">
+  <img src="https://img.shields.io/badge/network-never-8A63D2.svg" alt="Never uses the network">
+</p>
 
-[![license MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![dependencies 0](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](#install)
-[![node 20+](https://img.shields.io/badge/node-20%2B-brightgreen.svg)](#install)
+## What it tells you
 
-## The problem in 20 seconds
+Real output, from the author's machine, trimmed to fit:
 
-Every skill you install carries a description. Claude Code puts a listing of every installed skill, name plus description, into the system prompt, and re-sends it with every single API call. Install 200 skills and you are paying for 200 descriptions on every message of every chat, whether or not any of them get used.
+```text
+WHAT THE LISTING COSTS
+  Skills in your listing: 96 (95 let the agent pick them, 1 starts only when you type its name)
+  Allowance for the list: 40,000 characters, about 10,000 tokens (1 percent of a 1,000,000 token window)
+  Sent with every message: about 11,049 tokens
+  Over the allowance by 4,162 characters (1.1x). Past that line Claude Code drops descriptions
+  quietly, least used first, so those skills cannot be found by the agent.
 
-That listing has a budget you never see. Claude Code gives it about 1 percent of the context window. When the listing goes over, Claude Code keeps every name but starts dropping descriptions, least-invoked first, until the rest fits. A skill with no description in the listing cannot be picked by the agent on its own. It is installed, it is correct, and it is unreachable, and nothing anywhere prints an error.
+  65    never used, but described on every message  7,089 tokens per message
+  4     cannot be reached (their description is being dropped to fit)
+  7     only ever started by you typing their name    689 tokens per message
 
-`token-coupons` reads the skills on your disk and the session transcripts already on your disk, and tells you: what the listing costs per message, which skills have never once been chosen, which ones are being dropped right now, what the waste costs in dollars per week and per month on the model you actually use, and one recommended action per skill. It counts only what Claude Code actually lists from where you run it (your `~/.claude/skills`, the current project's `.claude/skills`, and enabled plugins); everything else on disk is shown separately and costs nothing.
+  Set those 72 skills to start only when you type their name and you save about 7,338 tokens
+  on every message, and the list fits its allowance again.
+
+WHAT IT COSTS IN DOLLARS
+    model                     wasted/week  wasted/month  uncached/week  whole list/month
+  * Claude Opus 5                  $12.15        $52.67         $79.27            $74.83
+  * Claude Sonnet 5                 $4.86        $21.07         $31.71            $29.93
+  * seen in your own sessions
+  Assumes 135 messages per chat and 15.1 chats per week, measured from your sessions.
+
+RECOMMENDED
+  41 to gate (active), 25 to delete, 8 to rewrite (optimize), 20 to keep
+
+   #  action    saves/msg  skill
+   1  delete          384  typescript-e2e-testing
+       Never used, last edited 150 days ago, 2,327 chars sent every message.
+   2  active          286  app-review
+       Never used in these sessions, yet its 1,143 chars description costs 290 tokens a message.
+```
+
+Then it hands you a page where every row is already set to what it recommends, you change the ones you disagree with, and it carries out your decisions.
+
+## Why this happens
+
+Every skill carries a description. Claude Code puts a listing of every installed skill, name plus description, into the system prompt, and re-sends it on **every single API call**. Two hundred skills means two hundred descriptions on every message of every chat, used or not.
+
+That listing has a budget you never see: about 1 percent of the context window. When it overflows, Claude Code keeps every name and starts dropping **descriptions**, least-invoked first, until the rest fits. A skill with no description in the listing cannot be chosen by the agent at all.
+
+It is installed. It is correct. It is unreachable. Nothing anywhere prints an error.
+
+Three numbers follow from that, and the report leads with whichever is worst:
+
+| The number | What it means |
+| --- | --- |
+| **Never called** | The agent has not once chosen this skill, and its description still ships with every message |
+| **Cannot be reached** | The listing is over its allowance and this skill's description is one of the ones being dropped |
+| **Summoned only** | It does get used, but only when you type its name, so its description buys nothing |
 
 ## Install
-
-It is an Agent Skill, not a package. There is nothing to publish and nothing to keep up to date but the skill itself.
 
 ```bash
 npx skills add steve-piece/token-coupons
 ```
 
-Then say `/token-coupons` in Claude Code and let the agent drive the whole loop. Node 20 or newer is the only requirement: no dependencies, no install step, no network.
+Then say `/token-coupons` in Claude Code. Node 20 or newer is the only requirement: no dependencies, no build step, no network.
 
-Two other ways in, if you prefer them:
+<details>
+<summary>Other ways in</summary>
 
 ```bash
 # Claude Code plugin: this repo is a marketplace with one plugin
@@ -38,194 +86,95 @@ git clone https://github.com/steve-piece/token-coupons
 ln -s "$PWD/token-coupons/skills/token-coupons" ~/.claude/skills/token-coupons
 ```
 
-## Driving it yourself
+</details>
 
-Everything the skill runs is a command you can run. `TC` below is the tool inside the skill directory, wherever it landed:
-
-```bash
-TC="node $HOME/.claude/skills/token-coupons/bin/token-coupons.mjs"
-```
-
-Print the report. Nothing is changed on disk.
-
-```bash
-$TC report
-```
-
-Write the interactive page and open it in your browser.
-
-```bash
-$TC report --html=report.html --open
-```
-
-Or write the share card: one dark card of what the changes saved, sized for posting, with a button that saves it as a PNG.
-
-```bash
-$TC report --card=scorecard.html --open
-```
-
-In the page, every row starts on the recommendation. Change the rows you disagree with, then press Copy on the decisions box at the bottom. If an agent is driving, paste that JSON into your next message and say "proceed with these decisions". By hand, save it as `decisions.json` and carry it out yourself: once without `--yes` to read the plan, then again with `--yes`.
-
-```bash
-$TC apply decisions.json         # prints the plan, writes nothing
-$TC apply decisions.json --yes   # makes the changes
-```
-
-`apply -` reads the same JSON from stdin, so `pbpaste | $TC apply -` works too.
-
-`apply` never edits a description: rewriting one is writing, so it hands you a worklist instead. Once the new text exists, `describe` files it, replacing that one key and leaving every other line of the file alone.
-
-```bash
-echo '{"version": 1, "descriptions": [{"name": "some-skill", "description": "the new text"}]}' > descriptions.json
-$TC describe descriptions.json         # prints the plan, writes nothing
-$TC describe descriptions.json --yes   # writes them, keeping a copy of each file first
-```
-
-## What you get
-
-Real output from the author's machine, trimmed to fit here (`report --since=2026-06-01 --no-color`):
-
-```text
-token-coupons v0.1.0 (generated 2026-08-17, sessions since 2026-06-01, 167 sessions read)
-
-WHAT THE LISTING COSTS
-  Skills in your listing: 94 (93 let the agent pick them, 1 start only when you type their name)
-                          plus 81 on disk but not listed, see ON DISK, NOT LISTED
-  Allowance for the list: 40,000 characters, about 10,000 tokens (1 percent of a 1,000,000 token window)
-  The list right now:     43,296 characters of descriptions, about 10,824 tokens, plus 8 tokens of name lines
-  Sent with every message: about 10,832 tokens
-  Over the allowance by 3,296 characters (1.08x). Past that line Claude Code drops descriptions
-  quietly, least used first, so those skills cannot be found by the agent.
-
-  65    never used, but described on every message  7,089 tokens per message
-  3     cannot be reached (their description is being dropped to fit)
-  7     only ever started by you typing their name  689 tokens per message
-
-  Set those 72 skills to start only when you type their name and you save about 7,338 tokens on
-  every message, and the list fits its allowance again.
-
-WHAT IT COSTS IN DOLLARS
-  15,748,425 tokens wasted per week, 68,243,175 per month, from 7,777 unused tokens in every message.
-
-    model                     wasted/week  wasted/month  uncached/week  whole list/month
-  * Claude Opus 5                  $12.04        $52.18         $78.74            $72.68
-  * Claude Sonnet 5                 $4.82        $20.87         $31.50            $29.07
-    GPT-5.6 Sol                     $9.85        $42.67         $78.74            $59.44
-  * seen in your own sessions
-  Assumes 135 messages per chat and 15 chats per week, measured from your sessions.
-  The saved copy is thrown away and rewritten 3.76 times per chat, measured: 127 chat starts,
-  396 gaps longer than 60 minutes, 91 model switches, 5 effort switches.
-  Share of everything you send: the list is 2.02 percent of your input, the wasted part is 1.45 percent.
-
-RECOMMENDED
-  41 to gate (active), 25 to delete, 8 to rewrite (optimize), 20 to keep
-
-   #  action    saves/msg  skill
-   1  delete          384  typescript-e2e-testing
-       Never used, last edited 150 days ago, 2,327 chars sent every message.
-   2  active          286  app-review
-       Never used in these sessions, yet its 1,143 chars description costs 290 tokens a message.
-```
-
-Reading the arithmetic in that block: 7,089 plus 689 is what those 72 descriptions spend today, and gating a skill still leaves its name line in the list, so the saving is 7,338 rather than the full 7,778. The 3 that cannot be reached are counted inside the 65, not on top of them. The 81 on disk but not listed are skills Claude Code does not put in the list from this folder (other projects, marketplace checkouts, plugin source repos, disabled plugins, older versions left in the plugin cache), so they are listed at the bottom for completeness and cost nothing.
-
-The full report has these sections: what the listing costs, what it costs in dollars, recommended (every skill ranked by how much it saves, with one short reason each), heaviest descriptions, thin descriptions, never called, called (with uses split into agent picked and you typed), on disk but not listed, and calls in your transcripts that match nothing installed today.
-
-## How it works
-
-```mermaid
-flowchart LR
-  S["skills on disk<br/>SKILL.md frontmatter"] --> D["discover"]
-  T["transcripts on disk<br/>~/.claude/projects"] --> C["scan calls"]
-  D --> E["economics<br/>what fits, what is dropped"]
-  C --> E
-  E --> R["recommend<br/>one action per skill"]
-  R --> M["cost model"]
-  P[("skills/token-coupons/data/pricing.json")] --> M
-  M --> O1["text report"]
-  M --> O2["HTML page"]
-  M --> O3["JSON"]
-```
-
-The decision loop, with the bundled skill driving it:
+## The loop
 
 ```mermaid
 sequenceDiagram
   participant P as You
   participant A as Agent
   participant T as token-coupons
-  participant H as HTML page
   A->>T: report
-  T-->>A: summary + report.html
-  A->>P: verdict, then the page
-  P->>H: mark a decision per skill
-  H-->>P: Copy (the decisions JSON)
-  P->>A: paste it: "proceed with these decisions"
+  T-->>A: summary + the decision page
+  A->>P: one verdict line, then the page
+  P->>P: change any row you disagree with
+  P->>A: paste the decisions back
   A->>T: apply (plan first, then --yes)
   T-->>A: steps with undo lines, plus a rewrite worklist
   A->>A: draft the new descriptions
   A->>T: describe (plan first, then --yes)
   A->>T: report again, with the card
-  T-->>P: before and after, and the scorecard
+  T-->>P: before and after, and a scorecard to post
 ```
 
-## The three numbers
+Nothing on disk changes while it waits for you. The agent runs `apply` without `--yes` first and shows you the plan, asks, then runs it.
 
-**Never called** means the agent has not once chosen this skill in the sessions read, while its description still goes out with every message.
+## What it can change, and how to undo it
 
-**Cannot be reached (unroutable)** means the listing is over its allowance and this skill's description is one Claude Code is dropping, so the agent cannot pick it at all until something shrinks.
+Two modes, and the whole tool is about which one a skill should be in.
 
-**Only ever started by you typing its name (summoned only)** means the skill does get used, but never by the agent's own choice, so its description in the listing buys nothing.
+| Mode | In the skill's SKILL.md | Sent every message |
+| --- | --- | --- |
+| **Passive** (the default) | no `disable-model-invocation` line | the name and the whole description |
+| **Active** | `disable-model-invocation: true` | the name only; you start it by typing its name |
 
-### The cost model
+| Action | Recommended when | What it does | Undo |
+| --- | --- | --- | --- |
+| `keep` | it gets used and its description is a fair size | nothing | nothing to undo |
+| `active` | never used, or only ever started by name | adds `disable-model-invocation: true` | delete that line |
+| `passive` | you want the agent picking it again | removes that line | add the line back |
+| `optimize` | used, but the description is oversized or past the cap | puts it on a rewrite worklist for `describe` | `cp` the copy `describe` kept |
+| `delete` | never used, in a folder you own, untouched for 90 days | unlinks the shortcut, or moves the folder to a trash folder | `ln -s` it back, or move it back |
+| `review` | already active and never used | nothing: answer it with one of the five above | nothing |
 
-- Prices assume caching by default, because that is how Claude Code runs: the listing rides at the very front of the saved prompt, so it is written into the cache and re-read cheaply on later messages.
-- That saved copy does not last a whole chat: starting a chat, switching model, switching effort, and coming back after it has expired each throw it away, and the listing is then paid at the write rate (roughly twice input) rather than the read rate (a tenth of it). `/compact` is not one of those. How often it happens is measured from your own transcripts; `--cache-ttl=MIN` sets how long the saved copy survives (default 60, the Claude subscription behaviour) and `--uncached` still prices the worst case, where nothing is cached at all.
-- Messages per chat and chats per week are measured from your own transcripts. When no history is found, the report says the numbers were assumed instead.
-- On a subscription, dollars are the wrong unit, so the report also gives the listing as a share of everything you send.
-- Prices are a data file (`skills/token-coupons/data/pricing.json`) with a verified-on date, never code, and the report says so when that date is more than 60 days old.
+Nothing is unrecoverable. Shortcuts are unlinked rather than followed, folders are moved to `~/.token-coupons/trash/<timestamp>` rather than erased, a file about to have its description replaced is copied there first, and copies owned by the plugin cache are refused outright with the `claude plugin uninstall` command to run instead. Every step prints its own undo line.
 
-### Two runs a week apart should be comparable
+Rewriting a description is the one job that needs a model, so it is the one job the tool does not do for you. `apply` hands back a worklist; you write the words; `describe` files them, replacing that one key and leaving every other line of the file untouched.
+
+## Where the numbers come from
+
+- **Caching is priced the way Claude Code really runs it.** The listing sits at the very front of the cached prefix, so it is written at the cache-write rate whenever that prefix is invalidated (chat start, model switch, effort switch, or a gap longer than the cache lifetime) and re-read at a tenth of input the rest of the time. A `/compact` is not one of those. How often it happens is measured from your own transcripts.
+- **Messages per chat and chats per week are measured**, not assumed. When no history is found, the report says so instead of quietly guessing.
+- **On a subscription, dollars are the wrong unit**, so the report also gives the listing as a share of everything you send.
+- **Prices are a data file** with a verified-on date, never code, and the report warns you when that date is more than 60 days old.
+
+<details>
+<summary>Two runs a week apart should be comparable</summary>
 
 A report is only as steady as its inputs, and two of them change without you noticing: the folder you ran it from, which decides whose project skills count as listed, and how far back it read. So every run leaves a small record in `~/.token-coupons/runs`, and the next one reads it.
 
-- **Settings carry forward.** Ask for `--since=2026-06-01` once and every later report reads the same stretch of history without being told again. Anything you do type wins. Flags that only decide what gets written (`--html`, `--card`, `--out`) are deliberately not remembered.
-- **The report says what moved.** A `SINCE YOUR LAST RUN` block appears when the folder changed, skills came or went, or a headline number moved by more than a fifth. Nothing there means the two runs measured the same thing.
+**Settings carry forward.** Ask for `--since=2026-06-01` once and every later report reads the same stretch of history without being told again. Anything you do type wins. Flags that only decide what gets written (`--html`, `--card`, `--out`) are deliberately not remembered.
 
-`--fresh` skips both. History is thirty records deep, about 7 KB each, and it lives outside the skill folder on purpose: a plugin update replaces the plugin cache and `skills update` re-copies an installed skill, so history kept in there would be wiped by the very event it exists to survive.
+**The report says what moved.** A `SINCE YOUR LAST RUN` block appears when the folder changed, skills came or went, or a headline number moved by more than a fifth. Silence there means the two runs measured the same thing.
 
-## Conventions
+`--fresh` skips both. History is thirty records deep, about 7 KB each, and it lives outside the skill folder on purpose: a plugin update replaces the plugin cache and `skills update` re-copies an installed skill, so history kept there would be wiped by the very event it exists to survive.
 
-| Mode | In the skill's SKILL.md | What is sent every message |
-| --- | --- | --- |
-| Passive (the default) | no `disable-model-invocation` line | the name and the whole description |
-| Active | `disable-model-invocation: true` | the name line only; you start it by typing its name |
+</details>
 
-| Action | When it is recommended | What `apply` does | Undo |
-| --- | --- | --- | --- |
-| `keep` | it gets used and its description is a reasonable size | nothing, it is left out of the plan | nothing to undo |
-| `active` | never used, or only ever started by name | sets `disable-model-invocation: true` in SKILL.md | delete that line |
-| `passive` | you want the agent to be able to pick it again | removes that line | add the line back |
-| `optimize` | used, but the description is over 600 characters or past the per entry cap, or never used and too thin to route to | changes no file; puts the skill on a worklist with a target of about 350 characters, which `describe` then writes back | `cp` the copy `describe` kept back over the file |
-| `delete` | never used, in a folder you own, and not edited in 90 days | unlinks the shortcut under `~/.claude/skills`, or moves the folder into the trash folder | `ln -s` it back, or move the folder back |
-| `review` (report only) | already active, never used; costs one name line | not an action you send back: answer it with one of the five above | nothing |
+## Driving it yourself
 
-Plugin skills are a special case: the installed copy lives in the plugin cache and is overwritten on the next update. When the plugin's source repo is on your machine, `apply` and `describe` edit that source copy instead and tell you to run `claude plugin update`; when it is not, the cache copy is edited with a warning.
+Everything the skill runs is a command you can run.
 
-## Use it from your agent
+```bash
+TC="node $HOME/.claude/skills/token-coupons/bin/token-coupons.mjs"
 
-Say `/token-coupons`. The agent runs the report, leads with one verdict line, hands you the HTML page, and stops. Nothing on disk changes while it waits. Mark your decisions in the page, press Copy, and paste the JSON into your next message with "proceed with these decisions". The agent runs `apply` without `--yes` first and shows you the plan, asks, then runs it, drafts new text for the descriptions marked `optimize` and files them with `describe`, then re-runs the report and hands you the scorecard of what the pass saved.
+$TC report                                  # print it, change nothing
+$TC report --html=report.html --open        # the decision page
+$TC report --card=scorecard.html --open     # the shareable card, exports itself as a PNG
+$TC apply decisions.json                    # the plan, writes nothing
+$TC apply decisions.json --yes              # make the changes
+```
 
-The skill ships with `disable-model-invocation: true`, so it only ever runs when you ask for it, and `model: opus`, because the one judgment call in the loop is rewriting a description well. It pre-approves no tools: this loop moves folders and rewrites files, so every command goes through the normal permission prompt.
+`apply -` and `describe -` read the same JSON from stdin, so `pbpaste | $TC apply -` works too.
 
-The whole tool lives inside `skills/token-coupons`. That is deliberate: `skills add` copies a skill directory, so anything sitting outside it would not come along.
-
-## CLI reference
+<details>
+<summary>Full CLI reference</summary>
 
 ```text
-token-coupons report [--since=YYYY-MM-DD] [--window=N] [--fraction=F] [--budget=CHARS]
+token-coupons report [--since=YYYY-MM-DD] [--cwd=DIR] [--window=N] [--fraction=F] [--budget=CHARS]
                      [--pricing=FILE] [--uncached] [--cache-ttl=MIN] [--json] [--html=FILE]
-                     [--card=FILE] [--out=FILE] [--open] [--no-color] [--cwd=DIR]
+                     [--card=FILE] [--out=FILE] [--open] [--no-color] [--fresh] [--runs=DIR]
 token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
@@ -236,31 +185,31 @@ token-coupons help
   --window=N       context window size in tokens, instead of reading it from your settings
   --fraction=F     share of the window the listing may use (default 0.01)
   --budget=CHARS   a fixed allowance in characters, which wins over --fraction
-  --pricing=FILE   a price list to use instead of the bundled data/pricing.json
+  --pricing=FILE   a price list to use instead of the bundled one
   --uncached       price the worst case, where nothing is cached
   --cache-ttl=MIN  minutes the saved prompt survives with no messages (default 60, the Claude
                    subscription behaviour; use 5 on a plain API key)
   --json           print JSON instead of text
-  --html=FILE      also write the decision list: every skill priced per month, with a suggestion you can change
-  --card=FILE      also write the shareable saved card, which exports itself as a PNG
+  --html=FILE      also write the decision page
+  --card=FILE      also write the shareable card
   --out=FILE       also write the report JSON
-  --open           open the HTML page in your browser after writing it
+  --open           open the page in your browser after writing it
   --no-color       plain text without colors
-  --fresh          report only: ignore the last run, carry nothing forward, compare nothing
-  --runs=DIR       report only: where run history is kept (default ~/.token-coupons/runs)
+  --fresh          ignore the last run: carry nothing forward, compare nothing
+  --runs=DIR       where run history is kept (default ~/.token-coupons/runs)
   --yes            apply and describe only: actually make the changes
   --trash=DIR      apply and describe only: where deleted folders and replaced files go
-                   (default ~/.token-coupons/trash)
 ```
 
 `report` exits 0 when it finishes. `apply` and `describe` exit 1 if a step failed, 0 otherwise; refusals are not failures. An unknown flag or command exits 2.
 
-## Privacy and safety
+</details>
 
-- Local files only, and only the ones Claude Code itself reads. It reads your skill folders (`~/.claude/skills`, a project's own `.claude/skills`, plugin marketplaces and caches, and a shallow pass over `~/Projects`), your session transcripts under `~/.claude/projects`, and `~/.claude/settings.json` (plus `settings.local.json`) for the model you run. Folders belonging to other tools are never opened.
-- No network access, ever. Prices ship as a data file with a date on them; refreshing them is a human action, not a fetch.
-- `report` writes nothing unless you pass `--html` or `--out`.
-- `apply` and `describe` write nothing without `--yes`, and nothing they do is unrecoverable: shortcuts under `~/.claude/skills` are unlinked rather than followed, folders are moved to `~/.token-coupons/trash/<timestamp>` rather than erased, a file about to have its description replaced is copied into that same folder first, and copies owned by the plugin cache are refused with the `claude plugin uninstall` command to run instead. Every step prints its own undo line.
+## Privacy
+
+- **Local files only**, and only the ones Claude Code itself reads: your skill folders, your session transcripts under `~/.claude/projects`, and `~/.claude/settings.json` for the model you run. Folders belonging to other tools are never opened.
+- **No network access, ever.** Prices ship as a data file with a date on them; refreshing them is a human action, not a fetch.
+- **`report` writes nothing** beyond the paths you give it and its own run record.
 - Set `TOKEN_COUPONS_HOME` to point the whole tool at a different home directory.
 
 ## Contributing
@@ -270,11 +219,9 @@ pnpm test                    # node --test, no dependencies to install
 node tests/dash-scan.mjs     # fails on any em dash or en dash in the repo
 ```
 
-The whole tool is `skills/token-coupons`, and `tests/` at the repo root reaches into it. Nothing the tool needs at runtime may live outside that directory: `skills add` copies it on its own, and anything left behind would simply be missing. The root `package.json` is private and exists for the test script.
+The whole tool is `skills/token-coupons`, and `tests/` at the repo root reaches into it. Nothing the tool needs at runtime may live outside that directory: `skills add` copies it on its own, and anything left behind would simply be missing. [docs/architecture.md](docs/architecture.md) is the contract every module is written against; change it there first.
 
-One rule that trips everyone up: no em dashes or en dashes anywhere in this repo, including code, comments, strings, docs, and the generated HTML. Use commas, colons, parentheses, or periods. Run the dash scan before you open a pull request.
-
-Node 20 or newer. Zero runtime dependencies, and it stays that way.
+One rule that trips everyone up: no em dashes or en dashes anywhere in this repo, including code, comments, strings, docs, and generated HTML. Run the dash scan before you open a pull request.
 
 ## License
 
