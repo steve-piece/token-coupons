@@ -10,8 +10,8 @@
 
 | # | Recommendation | Priority | Rough effort |
 |---|----------------|----------|--------------|
-| 1 | **[Upload the social preview image](#1-upload-the-social-preview-image)** - the PNG is drawn and ready; the upload is a web form nobody but the owner can submit | High | Low |
-| 2 | **[Rewrite the OG image tagline](#2-rewrite-the-og-image-tagline)** - the current line was rejected, and the image needs redrawing once the replacement is chosen | Medium | Low |
+| 1 | **[Upload the social preview image](#1-upload-the-social-preview-image)** - handed off: the final PNG was delivered 2026-08-18; the upload is a web form only the owner can submit | High | Low |
+| 2 | **[Rewrite the OG image tagline](#2-rewrite-the-og-image-tagline)** - done: the card now reads "Smart Savings, Cleaner Context" over the line the owner chose | Medium | Low |
 | 3 | **[Refine the README verbiage and design](#3-refine-the-readme-verbiage-and-design)** - the structure is right now; the sentence-level copy and the visual system have not had a second pass | Medium | Medium |
 | 4 | **[Run the tests on push and pull request](#4-run-the-tests-on-push-and-pull-request)** - done: one workflow runs the suite and the dash scan on Node 20 and 22 | High | Low |
 | 5 | **[Confirm the skill is indexed in the registry](#5-confirm-the-skill-is-indexed-in-the-registry)** - install works, search does not find it yet | Low | Low |
@@ -24,7 +24,7 @@
 
 ### 1. Upload the social preview image
 
-- **Status:** Open, blocked on the repo owner, identified 2026-08-18
+- **Status:** Handed off 2026-08-18. The final 1280x640 PNG (275 KB) was rendered from the item 2 tagline and delivered to the owner; the upload form is the only step left. Identified 2026-08-18.
 - **Priority:** High
 - **Rough effort:** Low
 - **Context:** Shared anywhere, the repo link renders GitHub's auto-generated thumbnail: the owner avatar, the repo name and the description, laid out like a screenshot of a settings page. A replacement is drawn and rasterized at 1280x640, 264 KB, well inside GitHub's 1 MB limit. The generator is committed at `tools/og-image.mjs`.
@@ -34,7 +34,7 @@
 
 ### 2. Rewrite the OG image tagline
 
-- **Status:** Open, identified 2026-08-18
+- **Status:** Done 2026-08-18. The card now reads "Smart Savings | Cleaner Context", then "Stop paying for skills your agent never uses.", then "Use your session history to tune your agent's skills." The GitHub About field was set to match ("Stop paying for skills your agent never uses. Turn your session history into suggestions that save money and clean up your Claude Code context."). The README hero still carries the older "described again in every message" line; bringing it into line is part of item 3. Identified 2026-08-18.
 - **Priority:** Medium
 - **Rough effort:** Low
 - **Context:** The first attempt read "Every skill you install rides along in every message you send" over "See what that costs. Cut what is never read." The owner rejected it. "Rides along" is vague: it gestures at the mechanism without naming it, and it buries the fact that the cost repeats.
