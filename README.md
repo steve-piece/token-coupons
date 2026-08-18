@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./assets/readme/hero.svg" width="100%" alt="token-coupons: every skill you install is described again in every message you send. A skill listing panel shows one skill in use and three that have never been used, still billed, totalling 10,832 tokens on every message.">
+  <img src="./assets/readme/hero.svg" width="100%" alt="token-coupons: stop paying for skills your agent never uses. Use your session history to tune your agent's skills. A skill listing panel shows one skill in use and three that have never been used, still billed, totalling 10,832 tokens on every message.">
 </p>
 
 <p align="center">
@@ -16,32 +16,33 @@ Real output, from the author's machine, trimmed to fit:
 
 ```text
 WHAT THE LISTING COSTS
-  Skills in your listing: 96 (95 let the agent pick them, 1 starts only when you type its name)
+  Skills in your listing: 99 (98 let the agent pick them, 1 starts only when you type its name)
   Allowance for the list: 40,000 characters, about 10,000 tokens (1 percent of a 1,000,000 token window)
-  Sent with every message: about 11,049 tokens
-  Over the allowance by 4,162 characters (1.1x). Past that line Claude Code drops descriptions
+  Sent with every message: about 11,485 tokens
+  Over the allowance by 5,908 characters (1.15x). Past that line Claude Code drops descriptions
   quietly, least used first, so those skills cannot be found by the agent.
 
-  65    never used, but described on every message  7,089 tokens per message
-  4     cannot be reached (their description is being dropped to fit)
+  66    never used, but described on every message  7,181 tokens per message
+  6     cannot be reached (their description is being dropped to fit)
   7     only ever started by you typing their name    689 tokens per message
 
-  Set those 72 skills to start only when you type their name and you save about 7,338 tokens
+  Set those 73 skills to start only when you type their name and you save about 7,427 tokens
   on every message, and the list fits its allowance again.
 
 WHAT IT COSTS IN DOLLARS
     model                     wasted/week  wasted/month  uncached/week  whole list/month
-  * Claude Opus 5                  $12.15        $52.67         $79.27            $74.83
-  * Claude Sonnet 5                 $4.86        $21.07         $31.71            $29.93
+  * Claude Fable 5                 $26.81       $116.19        $173.18           $169.58
+  * Claude Opus 5                  $13.41        $58.09         $86.59            $84.79
+  * Claude Sonnet 5                 $5.36        $23.24         $34.64            $33.92
   * seen in your own sessions
-  Assumes 135 messages per chat and 15.1 chats per week, measured from your sessions.
+  Assumes 131 messages per chat and 16.8 chats per week, measured from your sessions.
 
 RECOMMENDED
-  41 to gate (active), 25 to delete, 8 to rewrite (optimize), 20 to keep
+  41 to gate (active), 25 to delete, 10 to rewrite (optimize), 23 to keep
 
    #  action    saves/msg  skill
    1  delete          384  typescript-e2e-testing
-       Never used, last edited 150 days ago, 2,327 chars sent every message.
+       Never used, last edited 151 days ago, 2,327 chars sent every message.
    2  active          286  app-review
        Never used in these sessions, yet its 1,143 chars description costs 290 tokens a message.
 ```
@@ -50,19 +51,19 @@ Then it hands you a page where every row is already set to what it recommends, y
 
 ## Why this happens
 
-Every skill carries a description. Claude Code puts a listing of every installed skill, name plus description, into the system prompt, and re-sends it on **every single API call**. Two hundred skills means two hundred descriptions on every message of every chat, used or not.
+Every skill carries a description. Claude Code puts a listing of every installed skill, name plus description, into the system prompt and re-sends it on **every single API call**. Two hundred skills means two hundred descriptions on every message of every chat, used or not.
 
 That listing has a budget you never see: about 1 percent of the context window. When it overflows, Claude Code keeps every name and starts dropping **descriptions**, least-invoked first, until the rest fits. A skill with no description in the listing cannot be chosen by the agent at all.
 
 It is installed. It is correct. It is unreachable. Nothing anywhere prints an error.
 
-Three numbers follow from that, and the report leads with whichever is worst:
+Three numbers follow, and the report leads with whichever is worst:
 
 | The number | What it means |
 | --- | --- |
-| **Never called** | The agent has not once chosen this skill, and its description still ships with every message |
-| **Cannot be reached** | The listing is over its allowance and this skill's description is one of the ones being dropped |
-| **Summoned only** | It does get used, but only when you type its name, so its description buys nothing |
+| **Never called** | The agent has never chosen it, and its description still ships with every message |
+| **Cannot be reached** | The listing is over its allowance and this description is one of the ones being dropped |
+| **Summoned only** | It is used, but only when you type its name, so its description buys nothing |
 
 ## Install
 
@@ -113,30 +114,34 @@ Nothing on disk changes while it waits for you. The agent runs `apply` without `
 
 ## What it can change, and how to undo it
 
-Two modes, and the whole tool is about which one a skill should be in.
+Two modes, a distinction this tool draws, and the whole job is deciding which one each skill belongs in.
 
-| Mode | In the skill's SKILL.md | Sent every message |
+<p align="center">
+  <img src="./assets/readme/modes.svg" width="100%" alt="Passive, the default: the skill's name and its whole description are sent with every message, and the agent picks it up as needed. Active: only the name is sent, and you start it by typing its name. One line in SKILL.md, disable-model-invocation: true, is the switch.">
+</p>
+
+| Mode | SKILL.md line | Sent every message |
 | --- | --- | --- |
-| **Passive** (the default) | no `disable-model-invocation` line | the name and the whole description |
-| **Active** | `disable-model-invocation: true` | the name only; you start it by typing its name |
+| **Passive** (default) | none | name and full description; the agent picks it up as needed |
+| **Active** | `disable-model-invocation: true` | name only; a workflow you start by typing its name |
 
-| Action | Recommended when | What it does | Undo |
+| Action | When | What it does | Undo |
 | --- | --- | --- | --- |
-| `keep` | it gets used and its description is a fair size | nothing | nothing to undo |
-| `active` | never used, or only ever started by name | adds `disable-model-invocation: true` | delete that line |
-| `passive` | you want the agent picking it again | removes that line | add the line back |
-| `optimize` | used, but the description is oversized or past the cap | puts it on a rewrite worklist for `describe` | `cp` the copy `describe` kept |
-| `delete` | never used, in a folder you own, untouched for 90 days | unlinks the shortcut, or moves the folder to a trash folder | `ln -s` it back, or move it back |
-| `review` | already active and never used | nothing: answer it with one of the five above | nothing |
+| `keep` | used, description a fair size | nothing | nothing |
+| `active` | never used, or only started by name | adds the line | delete the line |
+| `passive` | you want the agent picking it again | removes the line | add it back |
+| `optimize` | used, but oversized or past the cap | queues it for `describe` | `cp` the copy `describe` kept |
+| `delete` | never used, yours, untouched 90 days | unlinks the shortcut, or moves the folder to trash | `ln -s` or move it back |
+| `review` | already active, never used | nothing: pick one of the five above | nothing |
 
-Nothing is unrecoverable. Shortcuts are unlinked rather than followed, folders are moved to `~/.token-coupons/trash/<timestamp>` rather than erased, a file about to have its description replaced is copied there first, and copies owned by the plugin cache are refused outright with the `claude plugin uninstall` command to run instead. Every step prints its own undo line.
+Nothing is unrecoverable. Shortcuts are unlinked rather than followed. Folders move to `~/.token-coupons/trash/<timestamp>` rather than being erased. A file about to have its description replaced is copied there first. Copies owned by the plugin cache are refused outright, with the `claude plugin uninstall` command to run instead. Every step prints its own undo line.
 
-Rewriting a description is the one job that needs a model, so it is the one job the tool does not do for you. `apply` hands back a worklist; you write the words; `describe` files them, replacing that one key and leaving every other line of the file untouched.
+Rewriting a description is the one job that needs a model, so it is the one job the tool leaves to the agent. `apply` hands back a worklist, the agent drafts the words, and `describe` files them, replacing that one key and leaving every other line untouched.
 
 ## Where the numbers come from
 
-- **Caching is priced the way Claude Code really runs it.** The listing sits at the very front of the cached prefix, so it is written at the cache-write rate whenever that prefix is invalidated (chat start, model switch, effort switch, or a gap longer than the cache lifetime) and re-read at a tenth of input the rest of the time. A `/compact` is not one of those. How often it happens is measured from your own transcripts.
-- **Messages per chat and chats per week are measured**, not assumed. When no history is found, the report says so instead of quietly guessing.
+- **Caching is priced the way Claude Code really runs it.** The listing sits at the front of the cached prefix, so it is paid at the cache-write rate whenever that prefix is invalidated (chat start, model switch, effort switch, or a gap longer than the cache lifetime) and at a tenth of input the rest of the time. A `/compact` is not one of those. How often it happens is measured from your own transcripts.
+- **Messages per chat and chats per week are measured**, not assumed. When no history is found, the report says so instead of guessing.
 - **On a subscription, dollars are the wrong unit**, so the report also gives the listing as a share of everything you send.
 - **Prices are a data file** with a verified-on date, never code, and the report warns you when that date is more than 60 days old.
 
@@ -158,16 +163,16 @@ A report is only as steady as its inputs, and two of them change without you not
 Everything the skill runs is a command you can run.
 
 ```bash
-TC="node $HOME/.claude/skills/token-coupons/bin/token-coupons.mjs"
+TC() { node "$HOME/.claude/skills/token-coupons/bin/token-coupons.mjs" "$@"; }
 
-$TC report                                  # print it, change nothing
-$TC report --html=report.html --open        # the decision page
-$TC report --card=scorecard.html --open     # the shareable card, exports itself as a PNG
-$TC apply decisions.json                    # the plan, writes nothing
-$TC apply decisions.json --yes              # make the changes
+TC report                                  # print it, change nothing
+TC report --html=report.html --open        # the decision page
+TC report --card=scorecard.html --open     # the shareable card, exports itself as a PNG
+TC apply decisions.json                    # the plan, writes nothing
+TC apply decisions.json --yes              # make the changes
 ```
 
-`apply -` and `describe -` read the same JSON from stdin, so `pbpaste | $TC apply -` works too.
+`apply -` and `describe -` read the same JSON from stdin, so `pbpaste | TC apply -` works too.
 
 <details>
 <summary>Full CLI reference</summary>

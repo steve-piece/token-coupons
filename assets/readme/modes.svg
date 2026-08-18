@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="modes-title modes-desc">
+  <title id="modes-title">Passive and active skills, side by side</title>
+  <desc id="modes-desc">Two panels. Passive, the default: the skill's name and its whole description are sent with every message, and the agent picks the skill up when it fits. Active: only the name is sent, and you start the skill by typing its name, like a workflow. The one line that switches a skill from passive to active is disable-model-invocation: true in its SKILL.md.</desc>
+
+  <defs>
+    <pattern id="mg" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1E2739" stroke-width="1" stroke-opacity="0.35"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="300" rx="26" fill="#070A12"/>
+  <rect width="1200" height="300" rx="26" fill="url(#mg)"/>
+  <rect x="0.5" y="0.5" width="1199" height="299" rx="26" fill="none" stroke="#1E2739"/>
+
+  <!-- passive panel -->
+  <g transform="translate(48 40)">
+    <rect x="0" y="0" width="520" height="220" rx="16" fill="#0E1422" stroke="#1E2739"/>
+    <text x="24" y="36" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#7E8CA6" letter-spacing="2.4">PASSIVE, THE DEFAULT</text>
+    <text x="496" y="36" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7E8CA6">the agent picks it up</text>
+    <rect x="24" y="50" width="472" height="1" fill="#1E2739"/>
+
+    <text x="24" y="86" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7E8CA6">SKILL.md</text>
+    <text x="24" y="110" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#4A5570">no disable-model-invocation line</text>
+
+    <text x="24" y="150" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7E8CA6">SENT WITH EVERY MESSAGE</text>
+    <rect x="24" y="162" width="118" height="30" rx="7" fill="#131B2C"/>
+    <text x="36" y="183" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#E8EEF9">jira-sync</text>
+    <rect x="150" y="162" width="346" height="30" rx="7" fill="#2A1620" stroke="#FF6B8A" stroke-opacity="0.45"/>
+    <text x="162" y="183" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#FF6B8A">the whole description, 1,400 chars</text>
+  </g>
+
+  <!-- the switch -->
+  <g transform="translate(568 40)">
+    <text x="32" y="118" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="30" fill="#4DD8FF">&#8594;</text>
+    <text x="32" y="86" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#7E8CA6">1 line</text>
+  </g>
+
+  <!-- active panel -->
+  <g transform="translate(632 40)">
+    <rect x="0" y="0" width="520" height="220" rx="16" fill="#0E1422" stroke="#35E3A1" stroke-opacity="0.45"/>
+    <text x="24" y="36" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#35E3A1" letter-spacing="2.4">ACTIVE</text>
+    <text x="496" y="36" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7E8CA6">you type its name</text>
+    <rect x="24" y="50" width="472" height="1" fill="#1E2739"/>
+
+    <text x="24" y="86" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7E8CA6">SKILL.md</text>
+    <text x="24" y="110" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#35E3A1">disable-model-invocation: true</text>
+
+    <text x="24" y="150" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7E8CA6">SENT WITH EVERY MESSAGE</text>
+    <rect x="24" y="162" width="118" height="30" rx="7" fill="#131B2C"/>
+    <text x="36" y="183" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#E8EEF9">jira-sync</text>
+    <text x="156" y="183" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#7E8CA6">and nothing else. Start it with /jira-sync</text>
+  </g>
+</svg>

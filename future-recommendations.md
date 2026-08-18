@@ -12,11 +12,11 @@
 |---|----------------|----------|--------------|
 | 1 | **[Upload the social preview image](#1-upload-the-social-preview-image)** - handed off: the final PNG was delivered 2026-08-18; the upload is a web form only the owner can submit | High | Low |
 | 2 | **[Rewrite the OG image tagline](#2-rewrite-the-og-image-tagline)** - done: the card now reads "Smart Savings, Cleaner Context" over the line the owner chose | Medium | Low |
-| 3 | **[Refine the README verbiage and design](#3-refine-the-readme-verbiage-and-design)** - the structure is right now; the sentence-level copy and the visual system have not had a second pass | Medium | Medium |
+| 3 | **[Refine the README verbiage and design](#3-refine-the-readme-verbiage-and-design)** - done: copy pass, fresh proof numbers, hero aligned with the card, and a passive-versus-active graphic | Medium | Medium |
 | 4 | **[Run the tests on push and pull request](#4-run-the-tests-on-push-and-pull-request)** - done: one workflow runs the suite and the dash scan on Node 20 and 22 | High | Low |
 | 5 | **[Confirm the skill is indexed in the registry](#5-confirm-the-skill-is-indexed-in-the-registry)** - checked 2026-08-18, still not indexed; listing follows install telemetry, so recheck in a week | Low | Low |
 | 6 | **[Share the scorecard as a link, not an attachment](#6-share-the-scorecard-as-a-link-not-an-attachment)** - deferred by owner decision: a hosted card publishes personal usage data | Low | High |
-| 7 | **[Run the evals that ship with the skill](#7-run-the-evals-that-ship-with-the-skill)** - three eval cases exist and have never been executed against the skill | Medium | Medium |
+| 7 | **[Run the evals that ship with the skill](#7-run-the-evals-that-ship-with-the-skill)** - done: all three ran against a fixture home, 14 of 15 assertions passed, and the fixes they surfaced are in | Medium | Medium |
 
 ---
 
@@ -44,7 +44,7 @@
 
 ### 3. Refine the README verbiage and design
 
-- **Status:** Open, identified 2026-08-18
+- **Status:** Done 2026-08-18. Copy pass: the proof block was re-captured from a fresh report (99 skills, 66 never used, 6 unreachable, Fable 5 at $26.81 a week wasted, which is the more striking row), the three tables were shortened so they wrap cleanly at 360 pixels, the "nothing is unrecoverable" run-on became five sentences, and the mode table now says who starts each kind of skill. The hero was redrawn to carry the card's line ("Stop paying for skills your agent never uses" over "Use your session history to tune your agent's skills") so the repo card and the README agree. Design pass: one new graphic, `assets/readme/modes.svg`, showing passive against active side by side, placed under "What it can change". SVG section headers and an actions diagram were considered and left out: the headers would add six images for no new information, and the actions table is denser and searchable as text. Verified with `audit_readme.py` (2 images OK) and a `gh api /markdown` render at 900 and 360 pixels. Identified 2026-08-18.
 - **Priority:** Medium
 - **Rough effort:** Medium
 - **Context:** The README was rebuilt around value, then proof, then mechanism, and dropped from 281 lines to 228 with more in it. That pass fixed the reading order, the repetition and the visual system. It did not do a sentence-level edit, and the visual layer is one hero and nothing else.
@@ -84,7 +84,7 @@
 
 ### 7. Run the evals that ship with the skill
 
-- **Status:** Open, identified 2026-08-18
+- **Status:** Done 2026-08-18. All three cases ran as subagents with the skill loaded, against a fixture home built with `tests/helpers.mjs` (12 skills, 12 transcripts, one plugin-cache skill, one oversized description) so `apply --yes` never touched the real machine. Result: audit 5/6 (the one miss: the reply gestured at "riding along in every message" instead of saying the list is re-sent on every API call), present 4/4, apply 5/5. What the runs surfaced, all fixed on this branch: the `TC="node ..."` shorthand fails under zsh because an unquoted variable is not word-split, so it is now a shell function everywhere; `report-anatomy.md` listed twelve of the thirteen summary fields (`savedOnYourModel` was missing); the present-the-report eval told the person to press "Accept all recommendations", a button the page does not have (it is Copy); step 5 now says to run the report first when `report.json` is missing so step 7 has a before; step 5 says to take undo lines from the `--yes` run, not the dry run, because the trash stamp differs; step 7 names the local fallback for the card when there is no Artifact tool. Identified 2026-08-18.
 - **Priority:** Medium
 - **Rough effort:** Medium
 - **Context:** `skills/token-coupons/evals/evals.json` holds three cases: audit what skills cost, present the report, apply the decisions. They were written alongside the skill and updated when the loop changed, but they have never been executed. The third case in particular now asserts behaviour that only landed recently (filing descriptions with `describe`, rendering the scorecard last).
