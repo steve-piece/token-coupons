@@ -47,6 +47,7 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 | `savedTokensPerCallIfApplied` | what the recommendations recover, per API call |
 | `fitsAfter` | true if the listing fits the budget once the recommendations are applied |
 | `wastedPerWeekOnYourModel` | `{ model, dollars, dollarsPerMonth }` for the model the transcripts actually ran on, or null when none of them is in the price list |
+| `savedOnYourModel` | `{ model, dollars, dollarsPerMonth, tokens }`: what taking the recommendations is worth on that same model. A share of the waste, never all of it, because a gated skill still costs its name line. Null whenever the field above is |
 | `recommendedActions` | how many skills landed on each action: `active`, `delete`, `optimize`, `review`, `keep`, `passive`. The six add up to `skills` |
 
 ## The other blocks, and who they are for

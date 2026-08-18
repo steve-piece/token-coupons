@@ -10,7 +10,7 @@
     {
       "id": "present-the-report",
       "prompt": "run token-coupons and show me what to cut",
-      "expected_output": "The agent runs the report, then puts the interactive HTML page in front of the person: published with the Artifact tool when one exists, otherwise opened locally with the absolute path given in the reply. It leads with the verdict, names the biggest few savings, and tells the person to set each row to Keep, Passive, Active, Optimize, or Delete, press Accept all recommendations, and paste the exported JSON back. It then stops: no apply run, no SKILL.md edited, nothing deleted, and no scorecard rendered before the person returns with decisions.",
+      "expected_output": "The agent runs the report, then puts the interactive HTML page in front of the person: published with the Artifact tool when one exists, otherwise opened locally with the absolute path given in the reply. It leads with the verdict, names the biggest few savings, and tells the person to set each row to Keep, Passive, Active, Optimize, or Delete, press Copy on the decisions box, and paste the JSON back with the words proceed with these decisions. It then stops: no apply run, no SKILL.md edited, nothing deleted, and no scorecard rendered before the person returns with decisions.",
       "files": []
     },
     {

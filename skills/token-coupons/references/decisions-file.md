@@ -12,7 +12,7 @@ related: [report-anatomy, description-rewrite, listing-budget, cost-model]
 ## Shape
 
 The page's Copy button puts this on the clipboard, and the person pastes it into their next message (the page
-tells them to add "proceed with these decisions"). Save it verbatim to a file, pipe it to `$TC apply -`, or write it by hand.
+tells them to add "proceed with these decisions"). Save it verbatim to a file, pipe it to `TC apply -`, or write it by hand.
 
 ```json
 {
@@ -63,8 +63,8 @@ Refusals appear in `plan.refused` with a reason. Read every one of them out loud
 Without `--yes` nothing is written. The plan prints and stops, and that is what you show the person before asking for a go ahead.
 
 ```bash
-$TC apply "$HOME/.token-coupons/decisions.json"
-$TC apply "$HOME/.token-coupons/decisions.json" --yes
+TC apply "$HOME/.token-coupons/decisions.json"
+TC apply "$HOME/.token-coupons/decisions.json" --yes
 ```
 
 `--trash=DIR` moves deletes somewhere else. `--json` prints the plan or the result as data, which is the
@@ -111,8 +111,8 @@ empty description, one past the 1536 character cap, and any settings block it ca
 ```
 
 ```bash
-$TC describe "$HOME/.token-coupons/descriptions.json"
-$TC describe "$HOME/.token-coupons/descriptions.json" --yes
+TC describe "$HOME/.token-coupons/descriptions.json"
+TC describe "$HOME/.token-coupons/descriptions.json" --yes
 ```
 
 A worklist row with a `description` added to it is accepted as is, so the block can go straight back without reshaping.
