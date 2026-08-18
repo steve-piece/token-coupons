@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/steve-piece/token-coupons/actions/workflows/test.yml"><img src="https://github.com/steve-piece/token-coupons/actions/workflows/test.yml/badge.svg" alt="Tests"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT licensed"></a>
   <img src="https://img.shields.io/badge/dependencies-0-brightgreen.svg" alt="Zero dependencies">
   <img src="https://img.shields.io/badge/node-20%2B-brightgreen.svg" alt="Requires Node 20 or newer">

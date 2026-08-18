@@ -13,7 +13,7 @@
 | 1 | **[Upload the social preview image](#1-upload-the-social-preview-image)** - the PNG is drawn and ready; the upload is a web form nobody but the owner can submit | High | Low |
 | 2 | **[Rewrite the OG image tagline](#2-rewrite-the-og-image-tagline)** - the current line was rejected, and the image needs redrawing once the replacement is chosen | Medium | Low |
 | 3 | **[Refine the README verbiage and design](#3-refine-the-readme-verbiage-and-design)** - the structure is right now; the sentence-level copy and the visual system have not had a second pass | Medium | Medium |
-| 4 | **[Run the tests on push and pull request](#4-run-the-tests-on-push-and-pull-request)** - a public repo with 188 tests and a lint that nothing runs but the author | High | Low |
+| 4 | **[Run the tests on push and pull request](#4-run-the-tests-on-push-and-pull-request)** - done: one workflow runs the suite and the dash scan on Node 20 and 22 | High | Low |
 | 5 | **[Confirm the skill is indexed in the registry](#5-confirm-the-skill-is-indexed-in-the-registry)** - install works, search does not find it yet | Low | Low |
 | 6 | **[Share the scorecard as a link, not an attachment](#6-share-the-scorecard-as-a-link-not-an-attachment)** - the LinkedIn draft cannot carry the picture, so posting is still a two-step | Low | High |
 | 7 | **[Run the evals that ship with the skill](#7-run-the-evals-that-ship-with-the-skill)** - three eval cases exist and have never been executed against the skill | Medium | Medium |
@@ -54,7 +54,7 @@
 
 ### 4. Run the tests on push and pull request
 
-- **Status:** Open, identified 2026-08-18
+- **Status:** Done 2026-08-18. `.github/workflows/test.yml` runs `node --test` and `node tests/dash-scan.mjs` on push and pull request against Node 20 and 22, and the README carries the workflow badge. Identified 2026-08-18.
 - **Priority:** High
 - **Rough effort:** Low
 - **Context:** The repo went public with 188 passing tests and a lint (`node tests/dash-scan.mjs`) that nothing runs automatically. The README tells contributors to run the dash scan before opening a pull request, which is an honour system. There is no `.github/workflows` directory at all.
