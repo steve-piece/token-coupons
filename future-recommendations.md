@@ -14,8 +14,8 @@
 | 2 | **[Rewrite the OG image tagline](#2-rewrite-the-og-image-tagline)** - done: the card now reads "Smart Savings, Cleaner Context" over the line the owner chose | Medium | Low |
 | 3 | **[Refine the README verbiage and design](#3-refine-the-readme-verbiage-and-design)** - the structure is right now; the sentence-level copy and the visual system have not had a second pass | Medium | Medium |
 | 4 | **[Run the tests on push and pull request](#4-run-the-tests-on-push-and-pull-request)** - done: one workflow runs the suite and the dash scan on Node 20 and 22 | High | Low |
-| 5 | **[Confirm the skill is indexed in the registry](#5-confirm-the-skill-is-indexed-in-the-registry)** - install works, search does not find it yet | Low | Low |
-| 6 | **[Share the scorecard as a link, not an attachment](#6-share-the-scorecard-as-a-link-not-an-attachment)** - the LinkedIn draft cannot carry the picture, so posting is still a two-step | Low | High |
+| 5 | **[Confirm the skill is indexed in the registry](#5-confirm-the-skill-is-indexed-in-the-registry)** - checked 2026-08-18, still not indexed; listing follows install telemetry, so recheck in a week | Low | Low |
+| 6 | **[Share the scorecard as a link, not an attachment](#6-share-the-scorecard-as-a-link-not-an-attachment)** - deferred by owner decision: a hosted card publishes personal usage data | Low | High |
 | 7 | **[Run the evals that ship with the skill](#7-run-the-evals-that-ship-with-the-skill)** - three eval cases exist and have never been executed against the skill | Medium | Medium |
 
 ---
@@ -64,7 +64,7 @@
 
 ### 5. Confirm the skill is indexed in the registry
 
-- **Status:** Open, identified 2026-08-18
+- **Status:** Checked 2026-08-18, not indexed yet; recheck on or after 2026-08-25. `npx skills find token-coupons` and `--owner steve-piece` both return nothing, and `skills.sh/steve-piece/token-coupons/token-coupons` is a 404. The skills.sh docs say the directory is built from anonymous install telemetry sent by the CLI, so there is nothing to submit: the listing appears once enough installs have been reported. Identified 2026-08-18.
 - **Priority:** Low
 - **Rough effort:** Low
 - **Context:** `npx skills add steve-piece/token-coupons` was verified working the moment the repo went public: the CLI resolves it straight from GitHub and reads the skill description correctly. Search is a separate system. `npx skills find token-coupons` returned only unrelated coupon skills, because skills.sh indexes public repos on its own schedule and the repo was private until now.
@@ -74,7 +74,7 @@
 
 ### 6. Share the scorecard as a link, not an attachment
 
-- **Status:** Open, identified 2026-08-18
+- **Status:** Deferred 2026-08-18 by owner decision. A hosted card would publish one person's usage numbers and cut against the promise that nothing leaves the machine; the two-step share stays. Kept on the sheet so the option is on record. Identified 2026-08-18.
 - **Priority:** Low
 - **Rough effort:** High
 - **Context:** The scorecard page offers Save image and Draft a LinkedIn post. The draft opens the composer with the numbers already written, but LinkedIn accepts text from a link and never an image, so the person still has to attach the PNG by hand. The page says so plainly rather than pretending otherwise.
