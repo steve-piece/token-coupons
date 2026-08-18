@@ -1,6 +1,7 @@
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 import { join } from 'node:path'
+import { realpathSync } from 'node:fs'
 import { makeFixtureHome, withHome } from './helpers.mjs'
 
 const fresh = () => import('../skills/token-coupons/src/discover.mjs?' + Math.random())
@@ -69,6 +70,15 @@ describe('discover', () => {
         assert.equal(inside[0].loaded, true)
         const outside = discoverSkills({ cwd: fx.home })
         assert.equal(outside[0].loaded, false)
+        // The same two questions with every symlink resolved. On macOS the
+        // temp dir sits behind /var to /private/var, which used to hide a bug
+        // that only showed on Linux: a project below the working directory
+        // counted as loaded.
+        const realHome = realpathSync(fx.home)
+        const above = discoverSkills({ cwd: join(realHome, 'Projects') })
+        assert.equal(above[0].loaded, false, 'a project below cwd is not loaded')
+        const within = discoverSkills({ cwd: join(realHome, 'Projects', 'demo') })
+        assert.equal(within[0].loaded, true, 'the project root itself is inside')
       })
     } finally { fx.cleanup() }
   })

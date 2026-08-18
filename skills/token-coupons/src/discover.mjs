@@ -218,10 +218,15 @@ function marketplaceOf (real) {
 function loadedState (location, real, dir, { cwd, state, HOME }) {
   if (location === 'user' || location === 'user-symlink') return { loaded: true, reason: 'in ~/.claude/skills', installKey: null }
   if (location === 'project') {
+    // Claude Code reads .claude/skills from the working directory and its
+    // parents, never its children, so the only question is whether cwd sits
+    // at or below the project root. Each side is compared as given and as
+    // resolved, so a home behind a symlink (macOS /var to /private/var) and a
+    // cwd that does not exist yet both compare like any other path.
     const projectRoot = dir.replace(/\/\.claude\/skills\/[^/]+$/, '')
-    let realCwd = cwd
-    try { realCwd = realpathSync(cwd) } catch { /* keep */ }
-    const inside = realCwd === projectRoot || realCwd.startsWith(projectRoot + sep) || dir.startsWith(realCwd + sep)
+    const roots = [projectRoot, safeReal(projectRoot)].filter(Boolean)
+    const cwds = [cwd, safeReal(cwd)].filter(Boolean)
+    const inside = cwds.some((c) => roots.some((r) => c === r || c.startsWith(r + sep)))
     return inside
       ? { loaded: true, reason: 'project skill, and you are working in that project', installKey: null }
       : { loaded: false, reason: 'project skill; loads only when you work in ' + projectRoot.replace(HOME, '~'), installKey: null }

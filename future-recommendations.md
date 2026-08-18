@@ -54,7 +54,7 @@
 
 ### 4. Run the tests on push and pull request
 
-- **Status:** Done 2026-08-18. `.github/workflows/test.yml` runs `node --test` and `node tests/dash-scan.mjs` on push and pull request against Node 20 and 22, and the README carries the workflow badge. Identified 2026-08-18.
+- **Status:** Done 2026-08-18. `.github/workflows/test.yml` runs `node --test` and `node tests/dash-scan.mjs` on push and pull request against Node 20 and 22, and the README carries the workflow badge. Its first run paid for itself: two `discover` tests failed on Linux that pass on macOS, because `loadedState` counted any project *below* the working directory as loaded, and on macOS the `/var` to `/private/var` symlink in the temp path hid it. Fixed in `src/discover.mjs` with a regression test that resolves the symlink. Identified 2026-08-18.
 - **Priority:** High
 - **Rough effort:** Low
 - **Context:** The repo went public with 188 passing tests and a lint (`node tests/dash-scan.mjs`) that nothing runs automatically. The README tells contributors to run the dash scan before opening a pull request, which is an honour system. There is no `.github/workflows` directory at all.
