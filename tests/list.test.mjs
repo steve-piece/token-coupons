@@ -115,4 +115,11 @@ describe('the score, now that it lives here', () => {
     assert.match(html, /allowance \(20\)/)
     assert.match(html, /silently dropped \(10\)/)
   })
+
+  test('keeps that rule behind a question, revealed on hover or focus', () => {
+    assert.match(html, /<button type="button" class="tiptrigger" aria-describedby="score-how">/)
+    assert.match(html, /How is the score calculated\?/)
+    assert.match(html, /<span class="tip" role="tooltip" id="score-how">Scored out of 100/)
+    assert.match(html, /\.tipwrap:hover \.tip, \.tipwrap:focus-within \.tip \{[^}]*visibility: visible/)
+  })
 })
