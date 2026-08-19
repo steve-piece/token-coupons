@@ -83,7 +83,7 @@ function header (r, s, cardHref) {
     '<span class="when">' + esc(r.generatedOn || '') + '</span>',
     '</div>',
     '<h1>Every skill, and what it costs you</h1>',
-    '<p class="lede">' + fmt(s.skills || 0) + ' skills ride along in every message you send. Below is each one, what it costs a ' +
+    '<p class="lede">' + fmt(s.skills || 0) + ' skills are described again in every message you send. Below is each one, what it costs a ' +
       'month, and what to do about it. Change any row you disagree with, then send the result back to your agent. Nothing on ' +
       'this page touches your disk.</p>',
     '</header>',
@@ -133,8 +133,13 @@ function score (r, s) {
     headline(s, r.economics || {}, scored).map((l) => '<p>' + esc(l) + '</p>').join(''),
     '</div>',
     '</div>',
-    '<p class="note">Scored out of 100: how much of the list has earned its place (70), whether it fits its allowance (20), ' +
-      'and whether anything is being silently dropped (10). Every change below moves it.</p>',
+    // The scoring rule sits behind a question rather than on the page: it is
+    // the answer to "why this number", so it should appear when that is asked
+    // and stay out of the way otherwise. Hover or focus reveals it.
+    '<p class="note tipwrap"><button type="button" class="tiptrigger" aria-describedby="score-how">' +
+      '<span class="tipmark" aria-hidden="true">?</span>How is the score calculated?</button>' +
+      '<span class="tip" role="tooltip" id="score-how">Scored out of 100: how much of the list has earned its place (70), ' +
+      'whether it fits its allowance (20), and whether anything is being silently dropped (10). Every change below moves it.</span></p>',
     '</section>',
   ].join('\n')
 }
@@ -386,6 +391,16 @@ a { color: ${INK.cyan}; }
 .sechead { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-bottom: 1px solid ${INK.line}; padding-bottom: 10px; margin-bottom: 16px; }
 .eyebrow { font-size: 13px; letter-spacing: .22em; text-transform: uppercase; color: ${INK.muted}; font-weight: 400; margin-bottom: 14px; }
 .note { color: ${INK.muted}; font-size: 13.5px; max-width: 84ch; }
+
+/* a question that answers itself on hover or focus */
+.tipwrap { position: relative; display: inline-block; margin-top: 14px; }
+.tiptrigger { font: inherit; color: ${INK.muted}; background: none; border: 0; padding: 0; cursor: help; display: inline-flex; align-items: center; gap: 8px; text-decoration: underline dotted; text-underline-offset: 3px; }
+.tiptrigger:hover, .tiptrigger:focus-visible { color: ${INK.cyan}; }
+.tipmark { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 999px; border: 1px solid currentColor; font-size: 11px; font-weight: 700; }
+.tip { position: absolute; left: 0; top: calc(100% + 10px); z-index: 5; width: min(46ch, 80vw); padding: 12px 14px; border-radius: 12px; background: ${INK.panelUp}; color: ${INK.text}; border: 1px solid ${INK.line}; box-shadow: 0 12px 32px rgba(0,0,0,.45); font-size: 13.5px; line-height: 1.5; opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity .12s ease, transform .12s ease, visibility 0s linear .12s; }
+.tip::before { content: ""; position: absolute; left: 22px; top: -6px; width: 10px; height: 10px; background: ${INK.panelUp}; border-left: 1px solid ${INK.line}; border-top: 1px solid ${INK.line}; transform: rotate(45deg); }
+.tipwrap:hover .tip, .tipwrap:focus-within .tip { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+@media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
 .count { color: ${INK.muted}; font-size: 13px; }
 .dim { color: ${INK.muted}; font-weight: 400; }
 

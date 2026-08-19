@@ -226,7 +226,7 @@ describe('the card page', () => {
     const text = decodeURIComponent(href.split('text=')[1] || '')
     assert.match(href, /^https:\/\/www\.linkedin\.com\/feed\/\?shareActive=true&text=/)
     assert.match(text, /7,377 tokens off every message/)
-    assert.match(text, /74 of mine were riding along/, 'the three action counts, summed')
+    assert.match(text, /74 of mine were described in every message/, 'the three action counts, summed')
     assert.match(text, /\$35\.93 a month at API prices/)
     assert.ok(text.includes(REPO), 'and where it came from')
     // The platform takes words from a link and nothing else, so the page has to

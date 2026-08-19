@@ -28,8 +28,8 @@ with symlinks resolved, because `skills add` installs into `~/.agents/skills` an
 
 ```bash
 SKILL_DIR="$(dirname "$(node -p "require('node:fs').realpathSync('$HOME/.claude/skills/token-coupons/SKILL.md')")")"
-TC="node $SKILL_DIR/bin/token-coupons.mjs"
-$TC help
+TC() { node "$SKILL_DIR/bin/token-coupons.mjs" "$@"; }
+TC help
 ```
 
 Installed as a plugin instead, `SKILL_DIR` is `${CLAUDE_PLUGIN_ROOT}/skills/token-coupons`. Working
@@ -41,7 +41,7 @@ It needs Node 20 or newer and nothing else: no install step, no dependencies, no
 
 ```bash
 mkdir -p "$HOME/.token-coupons"
-$TC report --html="$HOME/.token-coupons/report.html" --out="$HOME/.token-coupons/report.json"
+TC report --html="$HOME/.token-coupons/report.html" --out="$HOME/.token-coupons/report.json"
 ```
 
 Run it from the folder they usually start Claude Code in: a project's own `.claude/skills` only
@@ -84,7 +84,7 @@ saying which it was is the difference between a report they trust and one they a
 
 - If an Artifact tool is available, publish `$HOME/.token-coupons/report.html` with it and hand over
   the link. The page is one self contained file, so it works inside a sandboxed frame.
-- Otherwise open it locally (`$TC report --open ...`, or `open <path>` on macOS, `xdg-open <path>` on
+- Otherwise open it locally (`TC report --open ...`, or `open <path>` on macOS, `xdg-open <path>` on
   Linux) and give the absolute path in the reply as well, so they can find it again later.
 
 ## Step 4. Tell them what to do, then stop
@@ -107,21 +107,25 @@ Stop. Do not run `apply`, do not edit a SKILL.md, do not delete anything while y
    "proceed with the recommendations", regenerate the default file from the report instead:
    `node -e` over `report.json` collecting every skill whose `recommendation.action` is not `keep`
    or `review`, in the same shape.
+   If `$HOME/.token-coupons/report.json` is missing (a fresh chat, and the decisions came from an
+   earlier one), run step 1 first: it is the "before" that step 7 compares against, and the run
+   record it leaves is what makes the after report say what moved.
 2. Dry run. Without `--yes` nothing is written:
    ```bash
-   $TC apply "$HOME/.token-coupons/decisions.json" --json > "$HOME/.token-coupons/plan.json"
+   TC apply "$HOME/.token-coupons/decisions.json" --json > "$HOME/.token-coupons/plan.json"
    ```
-   (`$TC apply -` reads the same JSON from stdin if you would rather pipe it than write a file. Drop
+   (`TC apply -` reads the same JSON from stdin if you would rather pipe it than write a file. Drop
    `--json` for the same plan as plain text.)
 3. Show the plan back to them, grouped by action, one line per skill. Call out every entry under
    `refused` and why. Say plainly that Delete moves the folder to a trash directory and can be put
    back, and that Optimize changes no file yet.
 4. Wait for a yes. Then:
    ```bash
-   $TC apply "$HOME/.token-coupons/decisions.json" --yes
+   TC apply "$HOME/.token-coupons/decisions.json" --yes
    ```
-5. Keep the undo line each step prints in your reply. If the command exits 1, name the steps that
-   failed instead of reporting success.
+5. Keep the undo line each step prints in your reply. Take them from the `--yes` run, not the dry
+   run: the trash folder is stamped with the run time, so the plan's paths are already stale. If the
+   command exits 1, name the steps that failed instead of reporting success.
 6. `apply` ends with a note about the skill list having changed. Relay it: Claude Code picks the change
    up inside a chat that is already running, so the next message in any chat still open re-sends its
    whole conversation at full price once. Suggest `/clear` so that lands on an empty conversation.
@@ -148,8 +152,8 @@ it is still a command.
 4. Dry run, then write. `describe` replaces the `description` key and leaves every other line of the
    file alone, so no SKILL.md is ever edited by hand:
    ```bash
-   $TC describe "$HOME/.token-coupons/descriptions.json"
-   $TC describe "$HOME/.token-coupons/descriptions.json" --yes
+   TC describe "$HOME/.token-coupons/descriptions.json"
+   TC describe "$HOME/.token-coupons/descriptions.json" --yes
    ```
    It copies each file into the trash folder before writing it, so every rewrite has a `cp` undo
    line. It refuses an empty description, one past the 1536 character cap, and any file whose
@@ -165,13 +169,14 @@ plugin update overwrites it, so say the lasting fix belongs in that plugin's own
 Now the numbers describe a machine that has actually changed.
 
 ```bash
-$TC report --out="$HOME/.token-coupons/report-after.json" --card="$HOME/.token-coupons/scorecard.html"
+TC report --out="$HOME/.token-coupons/report-after.json" --card="$HOME/.token-coupons/scorecard.html"
 ```
 
 The card is one dark page: what the pass saved, in dollars a month at API prices, over what the
 listing costs now. It carries its own Save image and Copy image buttons. Publish it as an artifact
-and declare the `downloads` capability, or the save button has nothing to save to. Hand over the
-link and say it is theirs to post.
+and declare the `downloads` capability, or the save button has nothing to save to. Without an
+Artifact tool, open it locally the way step 3 does and put the absolute path in the reply. Hand over
+the link and say it is theirs to post.
 
 Read the new `summary` the same way as step 2, then close with exactly three lines:
 

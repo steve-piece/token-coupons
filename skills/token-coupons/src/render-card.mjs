@@ -83,7 +83,7 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
 
   const line = savedMonth !== null
     ? `${fmt(savedTokens)} tokens off every message you send, from ${fmt(touched)} skills.`
-    : `${fmt(touched)} skills stopped riding along in every message you send.`
+    : `${fmt(touched)} skills are no longer described in every message you send.`
   out.push(text(line, P, 428, { size: 27, fill: IN.text }))
 
   /* ------------------------------------------------------- before after */
@@ -215,7 +215,7 @@ export function linkedinHref (report) {
   const lines = [
     `I cut ${fmt(tokens)} tokens off every message I send in Claude Code.`,
     '',
-    `Every skill you install puts its description in the system prompt, and that goes out again on every single API call. ${fmt(touched)} of mine were riding along without ever being read.` +
+    `Every skill you install puts its description in the system prompt, and that goes out again on every single API call. ${fmt(touched)} of mine were described in every message without ever being read.` +
       (month !== null ? ` That is ${money(month)} a month at API prices.` : ''),
     '',
     `Measured with token-coupons: ${REPO}`,

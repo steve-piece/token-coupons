@@ -20,9 +20,9 @@
   <g id="title-block" transform="translate(64 0)">
     <text x="0" y="84" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="19" font-weight="500" fill="#7E8CA6" letter-spacing="4">CLAUDE CODE</text>
     <text x="0" y="160" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="62" font-weight="700" fill="#E8EEF9">token-coupons</text>
-    <text x="0" y="214" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="27" font-weight="400" fill="#E8EEF9">Every skill you install is described again</text>
-    <text x="0" y="250" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="27" font-weight="400" fill="#35E3A1">in every message you send.</text>
-    <text x="0" y="296" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="21" font-weight="400" fill="#7E8CA6">Find the ones the agent has never read, and stop paying for them.</text>
+    <text x="0" y="214" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="27" font-weight="400" fill="#E8EEF9">Stop paying for skills</text>
+    <text x="0" y="250" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="27" font-weight="400" fill="#35E3A1">your agent never uses.</text>
+    <text x="0" y="296" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="21" font-weight="400" fill="#7E8CA6">Use your session history to tune your agent's skills.</text>
     <rect x="0" y="322" width="446" height="46" rx="11" fill="#131B2C" stroke="#4DD8FF" stroke-opacity="0.45"/>
     <text x="20" y="352" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="20" fill="#4DD8FF">npx skills add steve-piece/token-coupons</text>
   </g>

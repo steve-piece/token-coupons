@@ -38,7 +38,7 @@ function text (value, x, y, { size = 24, fill = IN.text, weight = 400, spacing =
 
 export function renderOgSvg () {
   const out = []
-  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}" width="${OG_WIDTH}" height="${OG_HEIGHT}" role="img" aria-label="token-coupons: every skill you install rides along in every message you send.">`)
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${OG_WIDTH} ${OG_HEIGHT}" width="${OG_WIDTH}" height="${OG_HEIGHT}" role="img" aria-label="token-coupons: smart savings, cleaner context. Stop paying for skills your agent never uses. Use your session history to tune your agent's skills.">`)
   out.push(`<defs>
   <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
     <path d="M 40 0 L 0 0 0 40" fill="none" stroke="${IN.line}" stroke-width="1" stroke-opacity="0.35"/>
@@ -62,10 +62,10 @@ export function renderOgSvg () {
   out.push(text('CLAUDE CODE', OG_WIDTH - P, P + 16, { size: 15, fill: IN.muted, spacing: 3.4, anchor: 'end' }))
   out.push(`<rect x="${P}" y="${P + 44}" width="${OG_WIDTH - P * 2}" height="1" fill="${IN.line}"/>`)
 
-  /* the claim, in two lines, because one would run off the edge at this size */
-  out.push(text('Every skill you install rides along', P, 296, { size: 50, weight: 700 }))
-  out.push(text('in every message you send.', P, 362, { size: 50, weight: 700, fill: IN.emerald }))
-  out.push(text('See what that costs. Cut what is never read.', P, 424, { size: 25, fill: IN.muted }))
+  /* the claim: the pairing, the line people repeat, then how it works */
+  out.push(text('Smart Savings | Cleaner Context', P, 290, { size: 50, weight: 700 }))
+  out.push(text('Stop paying for skills your agent never uses.', P, 352, { size: 38, weight: 700, fill: IN.emerald }))
+  out.push(text("Use your session history to tune your agent's skills.", P, 414, { size: 25, fill: IN.muted }))
 
   /* the one command, drawn as the pill the scorecard uses */
   const cmd = 'npx skills add steve-piece/token-coupons'
