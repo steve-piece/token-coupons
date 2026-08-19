@@ -83,7 +83,7 @@ function header (r, s, cardHref) {
     '<span class="when">' + esc(r.generatedOn || '') + '</span>',
     '</div>',
     '<h1>Every skill, and what it costs you</h1>',
-    '<p class="lede">' + fmt(s.skills || 0) + ' skills ride along in every message you send. Below is each one, what it costs a ' +
+    '<p class="lede">' + fmt(s.skills || 0) + ' skills are described again in every message you send. Below is each one, what it costs a ' +
       'month, and what to do about it. Change any row you disagree with, then send the result back to your agent. Nothing on ' +
       'this page touches your disk.</p>',
     '</header>',
