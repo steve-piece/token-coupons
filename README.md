@@ -10,6 +10,10 @@
   <img src="https://img.shields.io/badge/network-never-8A63D2.svg" alt="Never uses the network">
 </p>
 
+<p align="center">
+  <img src="./assets/readme/scorecard.png" width="100%" alt="The scorecard token-coupons draws from the author's report, showing what taking its recommendations is worth: $56.64 a month, 7,427 tokens off every message from 76 skills; every message before 11,485 tokens, after 4,058; 41 skills set to active, 25 unused skills removed, 10 descriptions optimized.">
+</p>
+
 ## What it tells you
 
 Real output, from the author's machine, trimmed to fit:
@@ -48,6 +52,10 @@ RECOMMENDED
 ```
 
 Then it hands you a page where every row is already set to what it recommends, you change the ones you disagree with, and it carries out your decisions.
+
+<p align="center">
+  <img src="./assets/readme/decision-page.png" width="100%" alt="The decision page: a score of 43 out of 100 with the grade F, 66 skills never used, the two modes explained, $56.64 a month back against $60.01 wasted, and the ranked list where each row shows the skill, its mode today, how often the agent and you used it, its cost a month, the suggested action, why, and a dropdown for your call.">
+</p>
 
 ## Why this happens
 
