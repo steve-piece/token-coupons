@@ -21,13 +21,22 @@ import { fmt, money } from './lib/util.mjs'
 import { INK, MONO } from './render-card.mjs'
 import { scoreReport, headline, GRADE_COLOR } from './score.mjs'
 
-const ACTIONS = [
-  ['keep', 'Keep', 'leave this skill exactly as it is'],
-  ['passive', 'Passive', 'let the agent pick it, which means paying for its description in every message'],
-  ['active', 'Active', 'stop sending the description; reach it by typing its name'],
-  ['optimize', 'Optimize', 'keep the skill, rewrite the description shorter'],
+// Two independent questions, so two controls. Blending them into one select
+// made the reader choose between "make it active" and "shorten it" when those
+// are not alternatives: a skill can be both.
+const MODES = [
+  ['passive', 'Passive', 'the agent can pick it, so its description is sent in every message'],
+  ['active', 'Active', 'the description stops being sent; you reach it by typing its name'],
+]
+
+const DISPOSITIONS = [
+  ['keep', 'Keep', 'leave the skill as it is'],
+  ['optimize', 'Shorten', 'keep the skill, rewrite the description shorter'],
   ['delete', 'Delete', 'remove it, moving the folder to a trash directory so you can put it back'],
 ]
+
+const MODE_TIP = 'Passive: the agent can pick it on its own, so its description rides in every message. ' +
+  'Active: the description is not sent, and you start it by typing its name.'
 
 const FILTERS = [
   ['all', 'All'],
@@ -61,7 +70,6 @@ export function renderList (report, { cardHref = null } = {}) {
     modes(),
     figures(s, r.cost),
     table(skills, r),
-    notListed(r),
     exportFooter(r, skills),
     '</div>',
     island(r),
@@ -83,9 +91,8 @@ function header (r, s, cardHref) {
     '<span class="when">' + esc(r.generatedOn || '') + '</span>',
     '</div>',
     '<h1>Every skill, and what it costs you</h1>',
-    '<p class="lede">' + fmt(s.skills || 0) + ' skills are described again in every message you send. Below is each one, what it costs a ' +
-      'month, and what to do about it. Change any row you disagree with, then send the result back to your agent. Nothing on ' +
-      'this page touches your disk.</p>',
+    '<p class="lede">' + fmt(s.skills || 0) + ' skills are described again in every message you send. Below is each one, ' +
+      'what it costs a month, and what to do about it.</p>',
     '</header>',
   ].join('\n')
 }
@@ -139,7 +146,8 @@ function score (r, s) {
     '<p class="note tipwrap"><button type="button" class="tiptrigger" aria-describedby="score-how">' +
       '<span class="tipmark" aria-hidden="true">?</span>How is the score calculated?</button>' +
       '<span class="tip" role="tooltip" id="score-how">Scored out of 100: how much of the list has earned its place (70), ' +
-      'whether it fits its allowance (20), and whether anything is being silently dropped (10). Every change below moves it.</span></p>',
+      'whether the whole list fits the space your agent gives it (20), and whether anything is being silently dropped (10). ' +
+      'Every change below moves it.</span></p>',
     '</section>',
   ].join('\n')
 }
@@ -167,7 +175,7 @@ function figures (s, cost) {
     ? wasted.dollarsPerMonth - saved.dollarsPerMonth : null
   const notes = []
   notes.push('<p class="note">' + (model ? 'At ' + esc(model) + ' API prices. ' : '') +
-    'On a flat plan this is not a bill you will see: it is what the waste is worth, and it comes out of your usage allowance ' +
+    'On a flat plan this is not a bill you will see: it is what the waste is worth, and it eats into your plan\'s limits ' +
     'instead' + (shareText ? ', where it is ' + esc(shareText) + ' of everything you send' : '') + '.</p>')
   if (residue !== null && residue > 0.005) {
     notes.push('<p class="note">The two figures do not match, and cannot: gating a skill removes its description but leaves its ' +
@@ -213,15 +221,13 @@ function table (skills, r) {
       '<span class="where">' + esc([x.plugin ? 'from ' + x.plugin : '', locationLabel(x.location)].filter(Boolean).join(', ')) + '</span>',
       marks.length ? '<span class="marks">' + marks.join('') + '</span>' : '',
       '</td>',
-      '<td>' + (x.mode === 'active' ? '<span class="pill good sm">Active</span>' : '<span class="pill warn sm">Passive</span>') + '</td>',
-      '<td class="num">' + fmt(x.passiveCalls || 0) + '</td>',
-      '<td class="num">' + fmt(x.activeCalls || 0) + '</td>',
+      '<td class="act">' + modeSelect(x, i, name) + '</td>',
+      '<td class="num used"><span>' + fmt(x.passiveCalls || 0) + '</span><span class="slash">/</span><span>' + fmt(x.activeCalls || 0) + '</span></td>',
       '<td class="num cost">' + (priced
         ? '<span>' + esc(money(cost)) + '</span><span class="bar" aria-hidden="true"><i style="width:' + bar + '%"></i></span>'
         : '<span>' + fmt(x.descriptionTokens || 0) + '</span>') + '</td>',
-      '<td>' + recPill(rec.action) + '</td>',
       '<td class="why">' + esc(rec.reason || '') + '</td>',
-      '<td class="act">' + select(x, i, name, preset) + '</td>',
+      '<td class="act">' + dispositionSelect(x, i, name, preset) + '</td>',
       '</tr>',
     ].join('')
   }).join('\n')
@@ -240,13 +246,11 @@ function table (skills, r) {
     '<thead><tr>',
     '<th class="num rank">#</th>',
     '<th>Skill</th>',
-    '<th>Today</th>',
-    '<th class="num" title="the agent read the description and chose it on its own">Agent</th>',
-    '<th class="num" title="you typed its name">You</th>',
+    '<th title="' + attr(MODE_TIP) + '">Type</th>',
+    '<th class="num" title="how often it was used: times the agent picked it on its own, then times you typed its name">Used</th>',
     '<th class="num">' + (priced ? 'Cost a month' : 'Desc. tokens') + '</th>',
-    '<th>Suggested</th>',
     '<th>Why</th>',
-    '<th>Your call</th>',
+    '<th title="every control starts on the suggestion, so changing nothing accepts all of them">Decision</th>',
     '</tr></thead>',
     '<tbody id="rows">' + rows + '</tbody>',
     '</table>',
@@ -257,53 +261,48 @@ function table (skills, r) {
   ].join('\n')
 }
 
-function select (x, i, name, preset) {
+/**
+ * Passive or active. It starts on whichever the tool suggests, which is only
+ * different from today's value when the suggestion is to gate the skill, and
+ * the option labels carry the suggestion so the column that used to hold it is
+ * no longer needed.
+ */
+function modeSelect (x, i, name) {
+  const today = x.mode === 'active' ? 'active' : 'passive'
+  const rec = ((x.recommendation || {}).action === 'active') ? 'active' : today
+  const opts = MODES.map(([value, label, tip]) =>
+    '<option value="' + value + '"' + (value === rec ? ' selected' : '') + ' title="' + attr(tip) + '">' +
+    esc(label + (value === rec && rec !== today ? ' (suggested)' : '')) + '</option>').join('')
+  return '<select class="mode" data-index="' + i + '" data-rec="' + attr(rec) + '" data-today="' + attr(today) +
+    '" data-name="' + attr(name) + '" aria-label="' + attr('passive or active for ' + name) + '">' + opts + '</select>'
+}
+
+/** Keep, shorten or delete. Orthogonal to the mode above: a skill can be both active and shortened. */
+function dispositionSelect (x, i, name, preset) {
   const locked = x.location === 'plugin-cache'
-  const opts = ACTIONS.map(([value, label, tip]) => {
+  const rec = DISPOSITIONS.some(([v]) => v === preset) ? preset : 'keep'
+  const opts = DISPOSITIONS.map(([value, label, tip]) => {
     const disabled = value === 'delete' && locked
-    return '<option value="' + value + '"' + (value === preset ? ' selected' : '') + (disabled ? ' disabled' : '') +
+    return '<option value="' + value + '"' + (value === rec ? ' selected' : '') + (disabled ? ' disabled' : '') +
       ' title="' + attr(disabled ? 'this lives in a plugin cache folder; remove it with claude plugin uninstall instead' : tip) + '">' +
-      esc(label) + '</option>'
+      esc(label + (value === rec && rec !== 'keep' ? ' (suggested)' : '')) + '</option>'
   }).join('')
-  return '<select class="action" data-index="' + i + '" data-rec="' + attr(preset) + '" data-name="' + attr(name) +
+  return '<select class="action" data-index="' + i + '" data-rec="' + attr(rec) + '" data-name="' + attr(name) +
     '" aria-label="' + attr('what to do with ' + name) + '">' + opts + '</select>'
 }
 
-/** The control starts on the suggestion. Review has no control of its own, so it lands on Keep. */
+/**
+ * The disposition control starts on the suggestion. Gating suggestions live in
+ * the mode control instead, so 'active' and 'passive' land on Keep here, as do
+ * 'review' and a delete the plugin system would undo.
+ */
 export function presetFor (action, location) {
-  if (action === 'review' || !action) return 'keep'
   if (action === 'delete' && location === 'plugin-cache') return 'keep'
-  return ACTIONS.some(([v]) => v === action) ? action : 'keep'
-}
-
-function recPill (action) {
-  const tone = { delete: 'danger', optimize: 'warn', active: 'good', passive: 'good', review: 'plain', keep: 'plain' }[action] || 'plain'
-  const label = { delete: 'Delete', optimize: 'Shorten', active: 'Active', passive: 'Passive', review: 'Review', keep: 'Keep' }[action] || 'Keep'
-  return '<span class="pill ' + tone + ' sm">' + esc(label) + '</span>'
+  return DISPOSITIONS.some(([v]) => v === action) ? action : 'keep'
 }
 
 function mark (tone, label, tip) {
   return '<span class="pill ' + tone + ' xs" title="' + attr(tip) + '">' + esc(label) + '</span>'
-}
-
-/* ------------------------------------------------------------ not listed */
-
-function notListed (r) {
-  const list = Array.isArray(r.notLoaded) ? r.notLoaded : []
-  if (!list.length) return ''
-  const groups = new Map()
-  for (const n of list) { const a = groups.get(n.reason) || []; a.push(n); groups.set(n.reason, a) }
-  return [
-    '<section class="section" id="not-listed">',
-    '<details>',
-    '<summary>' + fmt(list.length) + ' more skills sit on disk and cost you nothing</summary>',
-    '<p class="note">Your agent does not put these in the list from this folder, so they are neither scored nor priced. Grouped by why.</p>',
-    [...groups.entries()].sort((a, b) => b[1].length - a[1].length).map(([reason, items]) =>
-      '<h3 class="grouphead">' + fmt(items.length) + ' <span class="dim">' + esc(reason) + '</span></h3>' +
-      '<p class="names">' + items.map((n) => esc(n.name)).join(', ') + '</p>').join(''),
-    '</details>',
-    '</section>',
-  ].join('\n')
 }
 
 /* ---------------------------------------------------------------- export */
@@ -332,11 +331,18 @@ function decisionsOf (r, skills) {
     version: 1,
     generatedOn: r.generatedOn || null,
     source: 'token-coupons html report',
-    decisions: skills.map((x) => {
-      const action = presetFor((x.recommendation || {}).action, x.location)
-      if (action === 'keep') return null
-      return { name: (x.names && x.names[0]) || x.name, path: x.path || x.realPath || '', action, note: '' }
-    }).filter(Boolean),
+    // One row can produce two entries, because mode and disposition are
+    // separate questions: gating a skill and shortening it are not exclusive.
+    decisions: skills.flatMap((x) => {
+      const name = (x.names && x.names[0]) || x.name
+      const path = x.path || x.realPath || ''
+      const out = []
+      const today = x.mode === 'active' ? 'active' : 'passive'
+      if ((x.recommendation || {}).action === 'active' && today !== 'active') out.push({ name, path, action: 'active', note: '' })
+      const disposition = presetFor((x.recommendation || {}).action, x.location)
+      if (disposition !== 'keep') out.push({ name, path, action: disposition, note: '' })
+      return out
+    }),
   }
 }
 
@@ -463,14 +469,14 @@ input[type="search"] {
 input[type="search"]::placeholder { color: ${INK.muted}; }
 
 .tablewrap { overflow-x: auto; border: 1px solid ${INK.line}; border-radius: 16px; background: ${INK.panel}; }
-table { border-collapse: collapse; width: 100%; min-width: 1020px; font-size: 13px; }
-th, td { text-align: left; padding: 11px 14px; border-bottom: 1px solid ${INK.line}; vertical-align: top; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13px; }
+th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid ${INK.line}; vertical-align: top; }
 thead th { position: sticky; top: 0; z-index: 2; background: ${INK.panelUp}; font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: ${INK.muted}; font-weight: 600; white-space: nowrap; }
 tbody tr:last-child td { border-bottom: 0; }
 tbody tr:hover td { background: ${INK.panelUp}; }
 th.num, td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 th.rank, td.rank { width: 42px; color: ${INK.muted}; }
-td.skill { min-width: 210px; }
+td.skill { min-width: 180px; }
 .sname { font: inherit; font-weight: 700; color: ${INK.text}; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
 .sname:hover, .sname[aria-expanded="true"] { color: ${INK.cyan}; }
 .where { display: block; color: ${INK.muted}; font-size: 12px; }
@@ -478,9 +484,11 @@ td.skill { min-width: 210px; }
 td.cost span:first-child { display: block; font-weight: 700; }
 td.cost .bar { display: block; height: 3px; background: ${INK.line}; border-radius: 2px; margin-top: 5px; overflow: hidden; }
 td.cost .bar i { display: block; height: 100%; background: ${INK.rose}; }
-td.why { min-width: 250px; max-width: 350px; color: ${INK.muted}; font-size: 12.5px; line-height: 1.45; }
+td.why { min-width: 180px; max-width: 320px; color: ${INK.muted}; font-size: 12.5px; line-height: 1.45; }
+td.used .slash { color: ${INK.muted}; margin: 0 3px; }
+td.act select { max-width: 150px; }
 td.act select { font: inherit; font-size: 12.5px; padding: 5px 8px; border: 1px solid ${INK.line}; border-radius: 8px; background: ${INK.panelUp}; color: ${INK.text}; }
-tr[data-changed="yes"] td.act select { border-color: ${INK.cyan}; color: ${INK.cyan}; }
+tr[data-changed="yes"] td.act select[data-changed-mark], tr[data-changed="yes"] td.act select { border-color: ${INK.cyan}; color: ${INK.cyan}; }
 tr.detail td { background: ${INK.panelUp}; padding: 14px 18px 16px 58px; }
 tr.detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; max-width: 96ch; font-size: 12.5px; }
 tr.detail dt { color: ${INK.muted}; }
@@ -512,6 +520,8 @@ function script () {
   try { report = JSON.parse(document.getElementById('report-data').textContent); } catch (e) { report = {}; }
   var skills = report.skills || [];
   var selects = [].slice.call(document.querySelectorAll('select.action'));
+  var modeSelects = [].slice.call(document.querySelectorAll('select.mode'));
+  var allSelects = selects.concat(modeSelects);
   var rows = [].slice.call(document.querySelectorAll('#rows tr'));
   var search = document.getElementById('search');
   var rowCount = document.getElementById('row-count');
@@ -560,32 +570,47 @@ function script () {
     if (rowCount) rowCount.textContent = shown === rows.length ? rows.length + ' skills' : shown + ' of ' + rows.length + ' skills';
   }
 
+  function pathOf (sel) {
+    var s = skills[Number(sel.getAttribute('data-index'))] || {};
+    return s.path || s.realPath || '';
+  }
+
+  /* A row can send two entries: the mode only when it differs from today's
+     value, and the disposition whenever it is not Keep. */
   function decisions () {
     var out = [];
+    modeSelects.forEach(function (sel) {
+      if (sel.value === sel.getAttribute('data-today')) return;
+      out.push({ name: sel.getAttribute('data-name'), path: pathOf(sel), action: sel.value, note: '' });
+    });
     selects.forEach(function (sel) {
       if (sel.value === 'keep') return;
-      var s = skills[Number(sel.getAttribute('data-index'))] || {};
-      out.push({ name: sel.getAttribute('data-name'), path: s.path || s.realPath || '', action: sel.value, note: '' });
+      out.push({ name: sel.getAttribute('data-name'), path: pathOf(sel), action: sel.value, note: '' });
     });
     return { version: 1, generatedOn: report.generatedOn || null, source: 'token-coupons html report', decisions: out };
   }
 
   function refresh () {
-    var n = 0;
-    selects.forEach(function (sel) {
-      var isChanged = sel.value !== sel.getAttribute('data-rec');
-      if (isChanged) n++;
-      var tr = rows[Number(sel.getAttribute('data-index'))];
-      if (tr) tr.setAttribute('data-changed', isChanged ? 'yes' : 'no');
+    var touched = {};
+    allSelects.forEach(function (sel) {
+      var i = Number(sel.getAttribute('data-index'));
+      if (sel.value !== sel.getAttribute('data-rec')) touched[i] = true;
     });
-    if (changed) changed.textContent = n === 1 ? '1 changed' : n + ' changed';
+    var n = 0;
+    rows.forEach(function (tr) {
+      var i = Number(tr.getAttribute('data-index'));
+      var isChanged = !!touched[i];
+      if (isChanged) n++;
+      tr.setAttribute('data-changed', isChanged ? 'yes' : 'no');
+    });
+    if (changed) changed.textContent = n === 1 ? '1 row changed' : n + ' rows changed';
     if (box) box.value = JSON.stringify(decisions(), null, 2);
     if (filter === 'changed') apply();
   }
-  selects.forEach(function (sel) { on(sel, 'change', refresh); });
+  allSelects.forEach(function (sel) { on(sel, 'change', refresh); });
 
   on(document.getElementById('reset'), 'click', function () {
-    selects.forEach(function (sel) { sel.value = sel.getAttribute('data-rec'); });
+    allSelects.forEach(function (sel) { sel.value = sel.getAttribute('data-rec'); });
     if (search) search.value = '';
     filter = 'all';
     chips.forEach(function (c) {

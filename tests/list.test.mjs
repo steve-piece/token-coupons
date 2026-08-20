@@ -30,15 +30,27 @@ describe('the decision list', () => {
     assert.equal(costs, rows, 'every row carries a cost cell')
   })
 
-  test('gives one control per skill, preset to the suggestion', () => {
+  test('gives two controls per skill, one per question, each preset to the suggestion', () => {
     const rows = (html.match(/<tr data-index=/g) || []).length
-    assert.equal((html.match(/select class="action"/g) || []).length, rows)
     assert.equal(rows, report.skills.length)
-    // a review suggestion has no control of its own, so it lands on keep
+    // passive or active is one question, keep or shorten or delete is another,
+    // so a row carries one control for each
+    assert.equal((html.match(/select class="action"/g) || []).length, rows)
+    assert.equal((html.match(/select class="mode"/g) || []).length, rows)
+
+    // a review suggestion changes nothing, so both controls sit where they are
     const review = report.skills.findIndex((s) => (s.recommendation || {}).action === 'review')
     if (review !== -1) {
-      const block = html.split('data-index="' + review + '"')[2] || ''
-      assert.match(block.slice(0, 900), /data-rec="keep"/)
+      const block = html.split('data-index="' + review + '"').slice(1).join('data-index="')
+      assert.match(block.slice(0, 1400), /data-rec="keep"/)
+    }
+    // a gating suggestion belongs to the mode control, and never to the other
+    const gate = report.skills.findIndex((s) => (s.recommendation || {}).action === 'active')
+    if (gate !== -1) {
+      const block = html.split('data-index="' + gate + '"').slice(1).join('data-index="').slice(0, 1400)
+      assert.match(block, /class="mode"[^>]*data-rec="active"/)
+      assert.match(block, /class="action"[^>]*data-rec="keep"/)
+      assert.match(block, /Active \(suggested\)/)
     }
   })
 
@@ -87,7 +99,7 @@ describe('the two questions a reader asks about the money', () => {
   test('says the figures are API prices, and what a flat plan actually pays', () => {
     assert.ok(html.includes('API prices'))
     assert.match(html, /not a bill you will see/)
-    assert.match(html, /usage allowance/)
+    assert.match(html, /eats into your plan's limits/)
   })
 
   test('explains why the wasted and recovered figures cannot match', () => {
@@ -112,7 +124,7 @@ describe('the score, now that it lives here', () => {
 
   test('says how the score is built, so it is not a black box', () => {
     assert.match(html, /earned its place \(70\)/)
-    assert.match(html, /allowance \(20\)/)
+    assert.match(html, /fits the space your agent gives it \(20\)/)
     assert.match(html, /silently dropped \(10\)/)
   })
 

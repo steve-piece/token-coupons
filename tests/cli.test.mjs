@@ -118,7 +118,7 @@ describe('cli: report', () => {
       assert.ok(existsSync(out))
       const page = readFileSync(html, 'utf8')
       assert.equal(page.split('id="report-data"').length - 1, 1)
-      assert.equal(page.split('<select').length - 1, 4, 'one select per skill')
+      assert.equal(page.split('<select').length - 1, 8, 'two selects per skill: passive or active, and what to do')
       const report = JSON.parse(readFileSync(out, 'utf8'))
       assert.equal(report.budget.contextWindow, 200000)
       assert.equal(report.budget.windowSource, '--window flag')
