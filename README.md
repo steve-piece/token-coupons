@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img src="./assets/readme/scorecard.png" width="100%" alt="The scorecard token-coupons draws from the author's report, showing what taking its recommendations is worth: $56.64 a month, 7,427 tokens off every message from 76 skills; every message before 11,485 tokens, after 4,058; 41 skills set to active, 25 unused skills removed, 10 descriptions optimized.">
+  <img src="./assets/readme/scorecard.png" width="100%" alt="The scorecard token-coupons draws from the author's report, showing what taking its recommendations is worth: $52.59 a month, 7,427 tokens off every message from 81 skills; every message before 11,485 tokens, after 4,058; 46 skills set to active, 25 unused skills removed, 10 descriptions optimized.">
 </p>
 
 ## What it tells you
@@ -35,18 +35,18 @@ WHAT THE LISTING COSTS
 
 WHAT IT COSTS IN DOLLARS
     model                     wasted/week  wasted/month  uncached/week  whole list/month
-  * Claude Fable 5                 $26.81       $116.19        $173.18           $169.58
-  * Claude Opus 5                  $13.41        $58.09         $86.59            $84.79
-  * Claude Sonnet 5                 $5.36        $23.24         $34.64            $33.92
+  * Claude Fable 5                 $25.72       $111.43        $166.78           $162.64
+  * Claude Opus 5                  $12.86        $55.72         $83.39            $81.32
+  * Claude Sonnet 5                 $5.14        $22.29         $33.36            $32.53
   * seen in your own sessions
-  Assumes 131 messages per chat and 16.8 chats per week, measured from your sessions.
+  Assumes 135 messages per chat and 15.7 chats per week, measured from your sessions.
 
 RECOMMENDED
-  41 to gate (active), 25 to delete, 10 to rewrite (optimize), 23 to keep
+  46 to gate (active), 25 to delete, 10 to rewrite (optimize), 18 to keep
 
    #  action    saves/msg  skill
    1  delete          384  typescript-e2e-testing
-       Never used, last edited 151 days ago, 2,327 chars sent every message.
+       Never used, last edited 153 days ago, 2,327 chars sent every message.
    2  active          286  app-review
        Never used in these sessions, yet its 1,143 chars description costs 290 tokens a message.
 ```
@@ -54,7 +54,7 @@ RECOMMENDED
 Then it hands you a page where every row is already set to what it recommends, you change the ones you disagree with, and it carries out your decisions.
 
 <p align="center">
-  <img src="./assets/readme/decision-page.png" width="100%" alt="The decision page: a score of 43 out of 100 with the grade F, 66 skills never used, the two modes explained, $56.64 a month back against $60.01 wasted, and the ranked list where each row shows the skill, its mode today, how often the agent and you used it, its cost a month, the suggested action, why, and a dropdown for your call.">
+  <img src="./assets/readme/decision-page.png" width="100%" alt="The decision page: a score of 43 out of 100 with the grade F, 66 skills never used, the two modes explained, $52.59 a month back against $55.72 wasted, and the ranked list where each row shows the skill, its mode today, how often the agent and you used it, its cost a month, the suggested action, why, and a dropdown for your call.">
 </p>
 
 ## Why this happens
