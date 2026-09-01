@@ -40,7 +40,7 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 | `notListed` | how many more sit on disk outside the listing: other projects, marketplace checkouts, disabled plugins. They cost nothing per message and are scored nowhere |
 | `listingTokensPerCall` | what the whole name plus description listing costs on every API call |
 | `overBudgetRatio` | 1.0 means it exactly fills the space Claude Code allows; 2.5 means two and a half times over |
-| `neverCalledPassive` | open to the router, never once chosen by it |
+| `neverCalledContext` | open to the router, never once chosen by it |
 | `unroutable` | listed by name only, because Claude Code dropped their descriptions to fit |
 | `summonedOnly` | only ever reached by typing a slash, yet still paying to sit in the router's list |
 | `wastedTokensPerCall` | never called plus summoned only, per API call |
@@ -48,7 +48,7 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 | `fitsAfter` | true if the listing fits the budget once the recommendations are applied |
 | `wastedPerWeekOnYourModel` | `{ model, dollars, dollarsPerMonth }` for the model the transcripts actually ran on, or null when none of them is in the price list |
 | `savedOnYourModel` | `{ model, dollars, dollarsPerMonth, tokens }`: what taking the recommendations is worth on that same model. A share of the waste, never all of it, because a gated skill still costs its name line. Null whenever the field above is |
-| `recommendedActions` | how many skills landed on each action: `active`, `delete`, `optimize`, `review`, `keep`, `passive`. The six add up to `skills` |
+| `recommendedActions` | how many skills landed on each action: `command`, `delete`, `optimize`, `review`, `keep`, `context`. The six add up to `skills` |
 
 ## The other blocks, and who they are for
 
@@ -82,14 +82,14 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 | `thin-description` | too short for the router to tell when it applies |
 | `capped` | past the per entry limit, so part of it is already cut off |
 | `unroutable` | name is listed, description was dropped, cannot be chosen |
-| `dormant-active` | slash only and never used; costs one line, saves nothing to change |
+| `dormant-command` | slash only and never used; costs one line, saves nothing to change |
 | `too-new` | installed inside the last 14 days and not used yet, which is expected; it is left alone and no saving is claimed |
 | `not-editable` | lives in a plugin cache; edit its source copy when one is on this machine, or the next update wipes the change |
 | `stale` | the file has not been touched in a long time |
 
 ## Actions the tool recommends
 
-`keep` leave it alone. `active` add the slash only gate so it stops paying routing rent. `passive`
+`keep` leave it alone. `command` add the slash only gate so it stops paying routing rent. `context`
 remove that gate so the router can pick it. `optimize` rewrite the description shorter, see
 [description-rewrite](description-rewrite.md). `delete` move it to trash. `review` a judgement call
 only the person can make.

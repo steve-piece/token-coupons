@@ -15,7 +15,7 @@ const ANSI = {
   cyan: '\x1b[36m',
 }
 
-const ACTION_ORDER = ['active', 'delete', 'optimize', 'review', 'keep', 'passive']
+const ACTION_ORDER = ['command', 'delete', 'optimize', 'review', 'keep', 'context']
 
 /**
  * @param report a Report from report.mjs
@@ -69,12 +69,12 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   // WHAT THE LISTING COSTS
   head('WHAT THE LISTING COSTS')
   line('  Skills in your listing: ' + fmt(totals.skills || 0) +
-    ' (' + fmt(totals.declaredPassive || 0) + ' let the agent pick them, ' + fmt(totals.declaredActive || 0) + ' start only when you type their name)' +
+    ' (' + fmt(totals.declaredContext || 0) + ' let the agent pick them, ' + fmt(totals.declaredCommand || 0) + ' start only when you type their name)' +
     (totals.onDiskNotListed ? paint.dim('  plus ' + fmt(totals.onDiskNotListed) + ' on disk but not listed, see ON DISK, NOT LISTED') : ''))
   line('  Allowance for the list: ' + fmt(budget.chars || 0) + ' characters, about ' + fmt(budget.tokens || 0) + ' tokens' +
     paint.dim(' (' + describeBudget(budget) + ')'))
-  line('  The list right now:     ' + fmt(per.passiveListingChars || 0) + ' characters of descriptions, about ' + fmt(per.passiveListingTokens || 0) + ' tokens' +
-    (per.activeListingTokens ? ', plus ' + fmt(per.activeListingTokens) + ' tokens of name lines' : ''))
+  line('  The list right now:     ' + fmt(per.contextListingChars || 0) + ' characters of descriptions, about ' + fmt(per.contextListingTokens || 0) + ' tokens' +
+    (per.commandListingTokens ? ', plus ' + fmt(per.commandListingTokens) + ' tokens of name lines' : ''))
   line('  Sent with every message: about ' + fmt(per.totalListingTokens || 0) + ' tokens')
   if (per.fitsBudget === false) {
     line('  ' + paint.red('Over the allowance by ' + fmt(per.overBudgetBy || 0) + ' characters (' + trimNum(per.overBudgetRatio) + 'x).') +
@@ -85,9 +85,9 @@ export function renderText (report, { color = false, top = 15 } = {}) {
 
   // the three counts
   line()
-  const never = eco.neverCalledPassive || {}
+  const never = eco.neverCalledContext || {}
   const unroutable = eco.overflowUnroutable || {}
-  const summoned = eco.summonedOnlyPassive || {}
+  const summoned = eco.summonedOnlyContext || {}
   line('  ' + padEnd(fmt(never.count || 0), 5) + ' never used, but described on every message' + paint.dim('  ' + fmt(never.tokens || 0) + ' tokens per message'))
   line('  ' + padEnd(fmt(unroutable.count || 0), 5) + ' cannot be reached (their description is being dropped to fit)')
   line('  ' + padEnd(fmt(summoned.count || 0), 5) + ' only ever started by you typing their name' + paint.dim('  ' + fmt(summoned.tokens || 0) + ' tokens per message'))
@@ -156,7 +156,7 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   head('RECOMMENDED')
   const counts = summary.recommendedActions || {}
   line('  ' + ACTION_ORDER.filter((k) => counts[k]).map((k) => fmt(counts[k]) + ' ' + actionLabel(k)).join(', ') || '  nothing to do')
-  line(paint.dim('  active = start only when you type its name, optimize = rewrite the description shorter, review = it already starts only when you type its name, so this one is your call'))
+  line(paint.dim('  command = start only when you type its name, optimize = rewrite the description shorter, review = it already starts only when you type its name, so this one is your call'))
   const shown = skills.slice(0, top)
   if (shown.length) {
     line()
@@ -191,19 +191,19 @@ export function renderText (report, { color = false, top = 15 } = {}) {
 
   // NEVER CALLED
   head('NEVER CALLED')
-  const neverPassive = skills.filter((s) => s.calls === 0 && s.mode !== 'active').map(nameOf)
-  const neverActive = skills.filter((s) => s.calls === 0 && s.mode === 'active').map(nameOf)
-  line('  Described on every message (' + fmt(neverPassive.length) + '):')
-  line('    ' + wrap(neverPassive.length ? neverPassive.join(', ') : 'none', 100, '    '))
-  line('  Already start only when you type their name (' + fmt(neverActive.length) + '):')
-  line('    ' + wrap(neverActive.length ? neverActive.join(', ') : 'none', 100, '    '))
+  const neverContext = skills.filter((s) => s.calls === 0 && s.mode !== 'command').map(nameOf)
+  const neverCommand = skills.filter((s) => s.calls === 0 && s.mode === 'command').map(nameOf)
+  line('  Described on every message (' + fmt(neverContext.length) + '):')
+  line('    ' + wrap(neverContext.length ? neverContext.join(', ') : 'none', 100, '    '))
+  line('  Already start only when you type their name (' + fmt(neverCommand.length) + '):')
+  line('    ' + wrap(neverCommand.length ? neverCommand.join(', ') : 'none', 100, '    '))
 
   // CALLED
   head('CALLED')
   const called = skills.filter((s) => s.calls > 0).sort((a, b) => b.calls - a.calls || (nameOf(a) < nameOf(b) ? -1 : 1))
   if (!called.length) line('  none in the sessions read')
   else {
-    const rows = called.map((s) => [nameOf(s), fmt(s.calls), fmt(s.passiveCalls), fmt(s.activeCalls), s.lastSeen || '', s.mode === 'active' ? 'starts only when you type it' : ''])
+    const rows = called.map((s) => [nameOf(s), fmt(s.calls), fmt(s.contextCalls), fmt(s.commandCalls), s.lastSeen || '', s.mode === 'command' ? 'starts only when you type it' : ''])
     for (const l of table([['skill', 'uses', 'agent picked', 'you typed', 'last seen', ''], ...rows], [1, 2, 3])) line('  ' + l)
   }
 
@@ -249,7 +249,7 @@ function painter (color) {
   }
   p.action = (a) => {
     if (a === 'delete') return p.red(a)
-    if (a === 'active' || a === 'optimize') return p.yellow(a)
+    if (a === 'command' || a === 'optimize') return p.yellow(a)
     if (a === 'keep') return p.green(a)
     return p.cyan(a)
   }
@@ -263,7 +263,7 @@ function describeBudget (b) {
 }
 
 function actionLabel (k) {
-  return { active: 'to gate (active)', delete: 'to delete', optimize: 'to rewrite (optimize)', review: 'to review', keep: 'to keep', passive: 'to open up (passive)' }[k] || k
+  return { command: 'to make a command', delete: 'to delete', optimize: 'to rewrite (optimize)', review: 'to review', keep: 'to keep', context: 'to open up (context)' }[k] || k
 }
 
 function baseName (s) { return (Array.isArray(s.names) && s.names[0]) || s.name || '' }

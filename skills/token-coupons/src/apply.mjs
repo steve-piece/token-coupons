@@ -16,7 +16,21 @@ import { readText, safeReal, isSymlink, setFrontmatterKey, timeStamp } from './l
 import { homeDir, trashDir as defaultTrashDir, tildify } from './paths.mjs'
 
 /** The actions a decisions file may ask for. `keep` means do nothing at all. */
-export const ACTIONS = ['keep', 'active', 'passive', 'optimize', 'delete']
+export const ACTIONS = ['keep', 'command', 'context', 'optimize', 'delete']
+
+/**
+ * The two words these actions used to be called. A page rendered before the
+ * rename is still sitting in someone's browser, and the decisions file it
+ * produces has to keep working, so the old words are read as the new ones and
+ * nothing is said about it.
+ */
+const ACTION_ALIASES = { active: 'command', passive: 'context' }
+
+/** The action a decisions entry asks for, with the old vocabulary folded in. */
+export function normalizeAction (raw) {
+  const a = String(raw === null || raw === undefined ? '' : raw).trim().toLowerCase()
+  return ACTION_ALIASES[a] || a
+}
 
 /** Fallback when the caller passes no thresholds. Matches the contract default. */
 export const DEFAULT_OPTIMIZE_TARGET_CHARS = 350
@@ -108,11 +122,11 @@ export function planApply (decisions, { skills = [], thresholds = {} } = {}) {
   }
 
   for (const d of list) {
-    const action = str(d && d.action).toLowerCase()
+    const action = normalizeAction(d && d.action)
     const label = str(d && d.name) || str(d && d.path) || '(unnamed)'
     if (action === 'keep' || action === '') continue
     if (!ACTIONS.includes(action)) {
-      refuse(label, action, str(d.path), '"' + action + '" is not an action this tool knows. Use keep, active, passive, optimize, or delete.')
+      refuse(label, action, str(d.path), '"' + action + '" is not an action this tool knows. Use keep, command, context, optimize, or delete.')
       continue
     }
 
@@ -170,14 +184,14 @@ export function planApply (decisions, { skills = [], thresholds = {} } = {}) {
       continue
     }
 
-    // active and passive both edit one line at the top of SKILL.md
-    const wantValue = action === 'active' ? 'true' : null
+    // command and context both edit one line at the top of SKILL.md
+    const wantValue = action === 'command' ? 'true' : null
     const text = readText(skillMd)
     if (text === null) { refuse(name, action, skillMd, 'could not read ' + tildify(skillMd) + ', so nothing was changed'); continue }
     const trial = setFrontmatterKey(text, GATE_KEY, wantValue)
     if (!trial.ok) { refuse(name, action, skillMd, 'the settings block at the top of ' + tildify(skillMd) + ' cannot be edited safely: ' + trial.reason); continue }
 
-    if (action === 'active') {
+    if (action === 'command') {
       if (String(skill.gateValue).toLowerCase() === 'true') {
         noop(name, action, skillMd, 'already set to run only when you ask for it by name, so there is nothing to change')
         continue

@@ -87,8 +87,8 @@ function round (n, places = 1) { return +(Number(n) || 0).toFixed(places) }
  * straight from the counts.
  */
 export function headline (summary, economics, scored) {
-  const never = Number((economics.neverCalledPassive || {}).count) || 0
-  const summoned = Number((economics.summonedOnlyPassive || {}).count) || 0
+  const never = Number((economics.neverCalledContext || {}).count) || 0
+  const summoned = Number((economics.summonedOnlyContext || {}).count) || 0
   const wasted = scored.tokens.wasted
 
   if (wasted <= 0 || (never === 0 && summoned === 0)) {

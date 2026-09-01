@@ -91,8 +91,9 @@ saying which it was is the difference between a report they trust and one they a
 
 Say this, near enough word for word:
 
-> Every row is already set to what I recommend. Change any row you disagree with, using Keep,
-> Passive, Active, Optimize, or Delete. Click a skill name if you want to see its full description.
+> Every row is already set to what I recommend. Change any row you disagree with: its type (Context
+> or Command) and what to do with it (Keep, Shorten, or Delete). Click a skill name if you want to
+> see its full description.
 > When you are done, press Copy on the decisions box at the bottom (or the Copy button at the top if
 > you are happy with everything) and paste the JSON into your next message with the words "proceed
 > with these decisions". Nothing has changed on disk yet, and nothing will until you say so.

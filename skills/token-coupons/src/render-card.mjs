@@ -39,6 +39,97 @@ export const MONO = "'SF Mono', SFMono-Regular, Menlo, Monaco, Consolas, 'Libera
 const w = (text, size) => String(text).length * size * 0.6
 
 /**
+ * The four numbers the card is made of, and where they came from.
+ *
+ * There are two different stories a card can tell, and telling the wrong one is
+ * how this went wrong before. Straight after a report, nothing has been applied
+ * yet, so the only honest story is the forecast: what the recommendations WOULD
+ * save. Straight after a pass, the recommendations have been carried out and
+ * are therefore empty, so the forecast collapses to zero and the card would
+ * claim the pass saved nothing. The truth in that case is in the run record the
+ * previous report left behind.
+ *
+ * So: use the measured drop whenever a previous run shows the listing actually
+ * got smaller, and fall back to the forecast otherwise. `realised` says which.
+ *
+ * @param report a Report from report.mjs
+ */
+export function cardNumbers (report) {
+  const r = report || {}
+  const s = r.summary || {}
+  const prev = r.previous || null
+  const prevSummary = (prev && prev.summary) || {}
+
+  const listing = Number(s.listingTokensPerCall) || 0
+  const before = Number(prevSummary.listingTokensPerCall) || 0
+  const realised = before > listing
+
+  if (realised) {
+    const savedTokens = before - listing
+    return {
+      realised: true,
+      savedTokens,
+      listing: before,
+      after: listing,
+      acts: changeBreakdown(prev.skills, r.skills),
+      touched: changeBreakdown(prev.skills, r.skills).total,
+      savedMonth: moneyFor(savedTokens, prevSummary),
+    }
+  }
+
+  const saved = s.savedOnYourModel || null
+  const savedTokens = Number(s.savedTokensPerCallIfApplied) || 0
+  const acts = s.recommendedActions || {}
+  return {
+    realised: false,
+    savedTokens,
+    listing,
+    after: Math.max(0, listing - savedTokens),
+    acts,
+    touched: (acts.command || 0) + (acts.delete || 0) + (acts.optimize || 0),
+    savedMonth: saved && typeof saved.dollarsPerMonth === 'number' ? saved.dollarsPerMonth : null,
+  }
+}
+
+/**
+ * What a saving of `tokens` per call is worth a month, priced from the run that
+ * measured the before number. Scaling the previous run's own figure keeps the
+ * card and that report on the same prices, and returns null rather than a guess
+ * when no price was ever found for the model in use.
+ */
+function moneyFor (tokens, prevSummary) {
+  for (const [dollars, per] of [
+    [(prevSummary.savedOnYourModel || {}).dollarsPerMonth, (prevSummary.savedOnYourModel || {}).tokens],
+    [(prevSummary.wastedPerWeekOnYourModel || {}).dollarsPerMonth, prevSummary.wastedTokensPerCall],
+  ]) {
+    if (typeof dollars === 'number' && Number(per) > 0) return +(dollars * (tokens / Number(per))).toFixed(4)
+  }
+  return null
+}
+
+/**
+ * What actually happened between the two runs, in the same three buckets the
+ * tiles are labelled with: skills that became commands, skills that are gone,
+ * and descriptions that got shorter. One skill counts once, under the first
+ * bucket that fits, so the three always add up to the total.
+ */
+function changeBreakdown (previousSkills, currentSkills) {
+  const was = Array.isArray(previousSkills) ? previousSkills : []
+  const now = new Map((Array.isArray(currentSkills) ? currentSkills : [])
+    .map((s) => [(Array.isArray(s.names) && s.names[0]) || s.name, s]))
+  const out = { command: 0, delete: 0, optimize: 0, total: 0 }
+  for (const p of was) {
+    const cur = now.get(p.name)
+    if (!cur) out.delete++
+    else if (cur.mode !== p.mode && cur.mode === 'command') out.command++
+    else if ((Number(cur.descriptionChars) || 0) < (Number(p.chars) || 0)) out.optimize++
+    else continue
+    out.total++
+  }
+  return out
+}
+
+/**
  * @param report a Report from report.mjs
  * @returns {string} the card as one <svg> element
  */
@@ -48,13 +139,7 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
   const cost = r.cost || {}
   const vol = cost.volume || {}
 
-  const saved = s.savedOnYourModel || null
-  const savedMonth = saved && typeof saved.dollarsPerMonth === 'number' ? saved.dollarsPerMonth : null
-  const savedTokens = Number(s.savedTokensPerCallIfApplied) || 0
-  const listing = Number(s.listingTokensPerCall) || 0
-  const after = Math.max(0, listing - savedTokens)
-  const acts = s.recommendedActions || {}
-  const touched = (acts.active || 0) + (acts.delete || 0) + (acts.optimize || 0)
+  const { savedMonth, savedTokens, listing, after, touched, acts } = cardNumbers(r)
 
   const P = 76                       // page padding
   const CW = CARD_WIDTH - P * 2      // content width
@@ -103,10 +188,10 @@ export function renderCardSvg (report, { repoUrl = REPO } = {}) {
 
   /* -------------------------------------------------------- what moved */
   const tiles = [
-    // Active is the mode where a skill waits to be named, so its description
-    // leaves the listing. The decision list defines the two words the same way,
-    // and the two documents are read side by side.
-    { n: fmt(acts.active || 0), k: 'skills set to active', c: IN.emerald },
+    // A command skill waits to be named, so its description leaves the
+    // listing. The decision list defines the two words the same way, and the
+    // two documents are read side by side.
+    { n: fmt(acts.command || 0), k: 'skills made commands', c: IN.emerald },
     { n: fmt(acts.delete || 0), k: 'unused skills removed', c: IN.rose },
     { n: fmt(acts.optimize || 0), k: 'descriptions optimized', c: IN.text },
   ]
@@ -205,12 +290,7 @@ const ICON_LINKEDIN = '<svg class="ico" viewBox="0 0 24 24" width="15" height="1
  * the picture would be worse than no button.
  */
 export function linkedinHref (report) {
-  const s = (report || {}).summary || {}
-  const saved = s.savedOnYourModel || null
-  const month = saved && typeof saved.dollarsPerMonth === 'number' ? saved.dollarsPerMonth : null
-  const tokens = Number(s.savedTokensPerCallIfApplied) || 0
-  const acts = s.recommendedActions || {}
-  const touched = (acts.active || 0) + (acts.delete || 0) + (acts.optimize || 0)
+  const { savedMonth: month, savedTokens: tokens, touched } = cardNumbers(report)
 
   const lines = [
     `I cut ${fmt(tokens)} tokens off every message I send in Claude Code.`,

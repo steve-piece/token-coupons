@@ -20,20 +20,22 @@ tells them to add "proceed with these decisions"). Save it verbatim to a file, p
   "generatedOn": "2026-08-15",
   "source": "token-coupons html report",
   "decisions": [
-    { "name": "bytheslice:box-it-up", "path": "~/.claude/plugins/marketplaces/bytheslice/skills/box-it-up", "action": "active", "note": "" }
+    { "name": "bytheslice:box-it-up", "path": "~/.claude/plugins/marketplaces/bytheslice/skills/box-it-up", "action": "command", "note": "" }
   ]
 }
 ```
 
 `path` is matched first, against the skill's real path with `~` expanded. `name` is the fallback when the path no longer exists. `note` is free text and is carried through untouched.
 
+These two actions were called `active` and `passive` until recently. Both words are still read as `command` and `context`, so a decisions file copied from a page rendered before the rename still applies without a word being said about it.
+
 ## The five actions
 
 | Action | What apply does | Step kind |
 |---|---|---|
 | `keep` | nothing; dropped from the plan entirely | `noop` |
-| `active` | writes `disable-model-invocation: true` into the frontmatter, so only a slash can start it | `set-gate` |
-| `passive` | removes that key, so the router may start it again | `unset-gate` |
+| `command` | writes `disable-model-invocation: true` into the frontmatter, so only a slash can start it | `set-gate` |
+| `context` | removes that key, so the router may start it again | `unset-gate` |
 | `optimize` | changes no file; the skill lands in `worklist` for a description rewrite | `worklist` |
 | `delete` | unlinks the symlink, or moves the real folder to trash | `unlink` or `trash` |
 
@@ -43,7 +45,7 @@ and the real folder is left alone, so a skill living in a git repository is neve
 ## Plugin skills edit their source copy
 
 A plugin skill lives in `.claude/plugins/cache/`, which the next update overwrites. When the row carries a `sourcePath` (the
-page badges it "source on disk"), `active`, `passive` and `optimize` edit `<sourcePath>/SKILL.md` instead, and the step
+page badges it "source on disk"), `command`, `context` and `optimize` edit `<sourcePath>/SKILL.md` instead, and the step
 `detail` says the installed copy picks the change up on the next `claude plugin update <plugin@marketplace>`. Say that update
 line out loud: until it runs, the listing still carries the old description. With no source copy the cache file itself is
 edited and the `detail` warns the next update wipes it, so say the fix belongs in the plugin's own repository. `delete` is refused on a cache row either way.

@@ -8,14 +8,24 @@ const report = sampleReport()
 const html = renderList(report, { cardHref: 'card.html' })
 
 describe('the decision list', () => {
-  test('opens by explaining the two modes, before asking for any decision', () => {
-    const modesAt = html.indexOf('The two modes, and the whole idea')
+  test('explains the two kinds of skill directly above the list that asks about them', () => {
+    const modesAt = html.indexOf('Two kinds of skill, and the whole idea')
     const tableAt = html.indexOf('id="rows-section"')
+    const figuresAt = html.indexOf('id="figures"')
     assert.ok(modesAt > 0, 'the explainer exists')
-    assert.ok(modesAt < tableAt, 'and it comes before the table')
-    assert.ok(html.includes("Descriptions injected in the model's context, used as needed."), 'passive, in one line')
-    assert.ok(html.includes('Skills activated through direct reference within the prompt.'), 'active, in one line')
+    assert.ok(modesAt < tableAt, 'and it comes before the table it explains')
+    assert.ok(figuresAt > 0 && figuresAt < modesAt, 'sitting below the figures, not above them')
+    assert.ok(html.includes("Descriptions injected in the model's context, used as needed."), 'context, in one line')
+    assert.ok(html.includes('Skills activated through direct reference within the prompt.'), 'command, in one line')
     assert.ok(html.includes('One line in the YAML: <code>disable-model-invocation: true</code>'))
+  })
+
+  test('names the two kinds context and command, and never the old two words', () => {
+    const ours = html.split('report-data')[0]
+    assert.match(ours, /<option value="context"/)
+    assert.match(ours, /<option value="command"/)
+    assert.equal(/<option value="(passive|active)"/.test(ours), false)
+    assert.equal(/\bPassive\b/.test(ours), false, 'the old word is gone from the copy too')
   })
 
   test('leads with money, and prices every row the same way', () => {
@@ -33,7 +43,7 @@ describe('the decision list', () => {
   test('gives two controls per skill, one per question, each preset to the suggestion', () => {
     const rows = (html.match(/<tr data-index=/g) || []).length
     assert.equal(rows, report.skills.length)
-    // passive or active is one question, keep or shorten or delete is another,
+    // context or command is one question, keep or shorten or delete is another,
     // so a row carries one control for each
     assert.equal((html.match(/select class="action"/g) || []).length, rows)
     assert.equal((html.match(/select class="mode"/g) || []).length, rows)
@@ -44,14 +54,36 @@ describe('the decision list', () => {
       const block = html.split('data-index="' + review + '"').slice(1).join('data-index="')
       assert.match(block.slice(0, 1400), /data-rec="keep"/)
     }
-    // a gating suggestion belongs to the mode control, and never to the other
-    const gate = report.skills.findIndex((s) => (s.recommendation || {}).action === 'active')
-    if (gate !== -1) {
-      const block = html.split('data-index="' + gate + '"').slice(1).join('data-index="').slice(0, 1400)
-      assert.match(block, /class="mode"[^>]*data-rec="active"/)
-      assert.match(block, /class="action"[^>]*data-rec="keep"/)
-      assert.match(block, /Active \(suggested\)/)
+    // a suggestion to make it a command belongs to the type control, never the other
+    const gate = report.skills.findIndex((s) => (s.recommendation || {}).action === 'command')
+    assert.notEqual(gate, -1, 'the fixture has at least one of these')
+    const block = html.split('data-index="' + gate + '"').slice(1).join('data-index="').slice(0, 1600)
+    assert.match(block, /class="mode"[^>]*data-rec="command"/)
+    assert.match(block, /class="action"[^>]*data-rec="keep"/)
+  })
+
+  test('says which choice is a suggestion, without hiding what the skill is today', () => {
+    const gate = report.skills.findIndex((s) => (s.recommendation || {}).action === 'command')
+    const block = html.split('data-index="' + gate + '"').slice(1).join('data-index="').slice(0, 1600)
+    // the option text is the value alone: the state is not smuggled into the word
+    assert.equal(/\(suggested\)/.test(html), false, 'no parenthetical inside an option')
+    assert.match(block, /<span class="ctl" data-state="suggested"><select class="mode"/)
+    assert.match(block, /<span class="state">suggested, Context today<\/span>/)
+    // and a row the tool would leave alone carries no state at all
+    const keep = report.skills.findIndex((s) => (s.recommendation || {}).action === 'keep')
+    if (keep !== -1) {
+      const quiet = html.split('data-index="' + keep + '"').slice(1).join('data-index="').slice(0, 1600)
+      assert.match(quiet, /<span class="ctl" data-state=""><select class="mode"/)
     }
+  })
+
+  test('keys the tags under a name, since a hover tooltip is not discoverable', () => {
+    assert.match(html, /<span class="legendk">Tags<\/span>/)
+    assert.match(html, /class="legendtext">dropped from the list to fit the budget/)
+    // and the location line says where in words, not in a label needing its own key
+    assert.match(html, /class="where" title="where this skill lives on this machine">/)
+    assert.match(html, /in your skills folder/)
+    assert.equal(/>linked in</.test(html), false, 'the old label read as a company name')
   })
 
   test('refuses to offer delete where the folder is not the person to fix', () => {
@@ -83,7 +115,7 @@ describe('the decision list', () => {
     assert.ok(Array.isArray(json.decisions))
     for (const d of json.decisions) {
       assert.ok(d.name && typeof d.path === 'string')
-      assert.ok(['active', 'passive', 'optimize', 'delete'].includes(d.action), 'keep is never exported')
+      assert.ok(['command', 'context', 'optimize', 'delete'].includes(d.action), 'keep is never exported')
     }
   })
 

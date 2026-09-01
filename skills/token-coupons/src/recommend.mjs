@@ -31,12 +31,12 @@ const DELETABLE_LOCATIONS = new Set(['user', 'user-symlink', 'project'])
 /** The order flags are reported in, so output is stable for tests and the page. */
 const FLAG_ORDER = [
   'never-called', 'summoned-only', 'heavy-description', 'thin-description',
-  'capped', 'unroutable', 'dormant-active', 'not-editable', 'stale', 'too-new',
+  'capped', 'unroutable', 'dormant-command', 'not-editable', 'stale', 'too-new',
 ]
 
 /**
- * @param rows RankedRow inputs: a Skill joined with calls, activeCalls,
- *             passiveCalls, and (optionally) the listingCost fields. Missing
+ * @param rows RankedRow inputs: a Skill joined with calls, commandCalls,
+ *             contextCalls, and (optionally) the listingCost fields. Missing
  *             listing fields are derived here so hand built rows work.
  * @param opts { economics, budget, thresholds, today }
  */
@@ -57,7 +57,7 @@ export function recommend (rows = [], opts = {}) {
   ))
   ranked.forEach((r, i) => { r.recommendation.rank = i + 1 })
 
-  const counts = { keep: 0, active: 0, passive: 0, optimize: 0, delete: 0, review: 0 }
+  const counts = { keep: 0, command: 0, context: 0, optimize: 0, delete: 0, review: 0 }
   for (const r of ranked) {
     const a = r.recommendation.action
     if (counts[a] === undefined) counts[a] = 0
@@ -65,7 +65,7 @@ export function recommend (rows = [], opts = {}) {
   }
 
   const heaviest = ranked
-    .filter((r) => r.mode !== 'active')
+    .filter((r) => r.mode !== 'command')
     .sort((a, b) => (Number(b.descriptionChars) || 0) - (Number(a.descriptionChars) || 0) || compare(nameOf(a), nameOf(b)))
     .slice(0, thresholds.heaviestListSize)
 
@@ -77,10 +77,10 @@ export function recommend (rows = [], opts = {}) {
 function decide (row, { thresholds, cap, now, unroutable }) {
   const out = Object.assign({}, row)
   const name = nameOf(out)
-  const mode = out.mode === 'active' ? 'active' : 'passive'
+  const mode = out.mode === 'command' ? 'command' : 'context'
   const descriptionChars = Number(out.descriptionChars) || 0
   const calls = Number(out.calls) || 0
-  const passiveCalls = Number(out.passiveCalls) || 0
+  const contextCalls = Number(out.contextCalls) || 0
 
   // Derive the listing fields when the caller did not join them on already.
   const cost = listingCost(descriptionChars, name, cap)
@@ -98,10 +98,10 @@ function decide (row, { thresholds, cap, now, unroutable }) {
   const stale = calls === 0 && ageDays !== null && ageDays > thresholds.staleDays
   // Freshly installed and never used is not evidence of anything yet.
   const tooNew = calls === 0 && ageDays !== null && ageDays <= thresholds.newSkillDays
-  const heavy = mode === 'passive' && descriptionChars > thresholds.heavyChars
-  const thin = mode === 'passive' && calls === 0 && descriptionChars < thresholds.thinChars
-  const capped = mode === 'passive' && out.capped === true
-  const summonedOnly = mode === 'passive' && calls > 0 && passiveCalls === 0
+  const heavy = mode === 'context' && descriptionChars > thresholds.heavyChars
+  const thin = mode === 'context' && calls === 0 && descriptionChars < thresholds.thinChars
+  const capped = mode === 'context' && out.capped === true
+  const summonedOnly = mode === 'context' && calls > 0 && contextCalls === 0
   const isUnroutable = unroutable.has(name) || (Array.isArray(out.names) && out.names.some((n) => unroutable.has(n)))
   const notEditable = out.editable === false
 
@@ -112,7 +112,7 @@ function decide (row, { thresholds, cap, now, unroutable }) {
   if (thin) flagSet.add('thin-description')
   if (capped) flagSet.add('capped')
   if (isUnroutable) flagSet.add('unroutable')
-  if (mode === 'active' && calls === 0) flagSet.add('dormant-active')
+  if (mode === 'command' && calls === 0) flagSet.add('dormant-command')
   if (notEditable) flagSet.add('not-editable')
   if (stale) flagSet.add('stale')
   if (tooNew) flagSet.add('too-new')
@@ -120,31 +120,31 @@ function decide (row, { thresholds, cap, now, unroutable }) {
 
   let action = 'keep'
   let rule = 'keep'
-  if (mode === 'active' && calls === 0) {
-    action = 'review'; rule = 'dormant-active'
-  } else if (mode === 'passive' && calls === 0 && descriptionChars < thresholds.thinChars) {
+  if (mode === 'command' && calls === 0) {
+    action = 'review'; rule = 'dormant-command'
+  } else if (mode === 'context' && calls === 0 && descriptionChars < thresholds.thinChars) {
     action = 'optimize'; rule = 'thin'
-  } else if (mode === 'passive' && tooNew) {
+  } else if (mode === 'context' && tooNew) {
     action = 'keep'; rule = 'too-new'
-  } else if (mode === 'passive' && calls === 0 && DELETABLE_LOCATIONS.has(out.location) && ageDays !== null && ageDays > thresholds.staleDays) {
+  } else if (mode === 'context' && calls === 0 && DELETABLE_LOCATIONS.has(out.location) && ageDays !== null && ageDays > thresholds.staleDays) {
     action = 'delete'; rule = 'stale'
-  } else if (mode === 'passive' && calls === 0) {
-    action = 'active'; rule = 'never-called'
+  } else if (mode === 'context' && calls === 0) {
+    action = 'command'; rule = 'never-called'
   } else if (summonedOnly) {
-    action = 'active'; rule = 'summoned-only'
-  } else if (mode === 'passive' && passiveCalls > 0 && (heavy || out.capped === true)) {
+    action = 'command'; rule = 'summoned-only'
+  } else if (mode === 'context' && contextCalls > 0 && (heavy || out.capped === true)) {
     action = 'optimize'; rule = capped ? 'capped' : 'heavy'
   }
 
   let impactTokensPerCall = 0
-  if (action === 'active' || action === 'delete') {
+  if (action === 'command' || action === 'delete') {
     impactTokensPerCall = listingTokens - nameTokens
   } else if (action === 'optimize') {
     impactTokensPerCall = Math.max(0, listingTokens - toTokens(thresholds.optimizeTargetChars + nameChars))
   }
 
   const reason = reasonFor(rule, {
-    mode, calls, passiveCalls, descriptionChars, listingTokens, nameTokens,
+    mode, calls, contextCalls, descriptionChars, listingTokens, nameTokens,
     ageDays, cap, impactTokensPerCall, thresholds, flags, sourcePath: out.sourcePath || null,
   })
 
@@ -165,7 +165,7 @@ function reasonFor (rule, c) {
   const target = 'about ' + fmt(c.thresholds.optimizeTargetChars) + ' chars'
   let base
 
-  if (rule === 'dormant-active') {
+  if (rule === 'dormant-command') {
     base = 'Never used, and it already waits for you to type its name (' + fmt(c.nameTokens) + ' tokens a message). Keep or delete, your call'
   } else if (rule === 'thin') {
     base = 'Never used, and its description is only ' + desc + ': probably too short for the agent to know when it applies. Rewrite it first'
@@ -178,14 +178,14 @@ function reasonFor (rule, c) {
   } else if (rule === 'capped') {
     base = fmt(c.descriptionChars) + ' chars, past the ' + fmt(c.cap) + ' char cap, so the tail is thrown away unread. Cutting to ' + target + ' loses nothing and ' + gain
   } else if (rule === 'heavy') {
-    base = 'The agent picks it on its own (' + fmt(c.passiveCalls) + ' of ' + uses + '), but ' + desc + ' costs ' + cost + '. Cutting to ' + target + ' ' + gain
+    base = 'The agent picks it on its own (' + fmt(c.contextCalls) + ' of ' + uses + '), but ' + desc + ' costs ' + cost + '. Cutting to ' + target + ' ' + gain
   } else if (rule === 'too-new') {
     base = 'Installed ' + (c.ageDays === 0 ? 'today' : c.ageDays === 1 ? 'yesterday' : fmt(c.ageDays) + ' days ago') +
       ' and not used yet, which is expected. Its ' + desc + ' description costs ' + cost + '. Check back in a couple of weeks'
-  } else if (c.mode === 'active') {
+  } else if (c.mode === 'command') {
     base = 'Used ' + uses + ' and already waits for its name, so it costs ' + fmt(c.nameTokens) + ' tokens a message. Leave it'
   } else {
-    base = 'The agent picks it on its own (' + fmt(c.passiveCalls) + ' of ' + uses + ') and it costs ' + cost + ', a fair price. Leave it'
+    base = 'The agent picks it on its own (' + fmt(c.contextCalls) + ' of ' + uses + ') and it costs ' + cost + ', a fair price. Leave it'
   }
 
   if (c.flags.includes('not-editable')) {

@@ -12,7 +12,7 @@ import { tmpdir } from 'node:os'
  *   settings: { model: 'opus[1m]' },
  * }) -> { home, cleanup, skillPath(name) }
  */
-export function makeFixtureHome ({ skills = [], transcripts = [], settings = { model: 'opus[1m]' }, installed = null, knownMarketplaces = null } = {}) {
+export function makeFixtureHome ({ skills = [], transcripts = [], settings = { model: 'opus[1m]' }, installed = null, knownMarketplaces = null, today = null } = {}) {
   const home = mkdtempSync(join(tmpdir(), 'token-coupons-'))
   const paths = {}
   mkdirSync(join(home, '.claude', 'skills'), { recursive: true })
@@ -49,7 +49,13 @@ export function makeFixtureHome ({ skills = [], transcripts = [], settings = { m
       symlinkSync(dir, join(home, '.claude', 'skills', s.symlinkAs))
     }
     if (s.mtimeDaysAgo) {
-      const t = new Date(Date.now() - s.mtimeDaysAgo * 86400000)
+      // Counted back from the same day the report is told it is, not from the
+      // real clock. Anchoring these to Date.now() while a test pins `today` to
+      // a fixed date makes the gap between them shrink as real time passes,
+      // so a skill that was stale when the test was written silently becomes
+      // too-new later and the test fails on a day nobody changed anything.
+      const from = today ? Date.parse(today + 'T12:00:00Z') : Date.now()
+      const t = new Date(from - s.mtimeDaysAgo * 86400000)
       utimesSync(join(dir, 'SKILL.md'), t, t)
     }
     paths[s.name] = dir

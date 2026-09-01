@@ -13,7 +13,7 @@ can be installed, correct, and unreachable with no error anywhere.
 `token-coupons` reads the skills on disk and the session transcripts already
 on disk, and reports: what the listing costs, which skills the agent has never
 read, what that waste costs in dollars per chat and per week on current
-models, and a ranked recommendation per skill (keep, active, optimize, delete).
+models, and a ranked recommendation per skill (keep, command, optimize, delete).
 The HTML report lets a person mark decisions; `apply` carries them out.
 
 Listed versus on disk: not every skill folder on the machine is in that
@@ -109,7 +109,7 @@ tests/dash-scan.mjs        fails on any forbidden dash in the repo
   loadedReason: 'enabled plugin x@y',   // one plain sentence, set either way
   sourcePath: '/abs/editable/copy' | null,        // loaded plugin-cache rows whose source is on this machine
   copies: [{ path, location, sameDescription }],  // source copies folded into this row
-  mode: 'passive' | 'active',           // active iff disable-model-invocation is true; absent = passive
+  mode: 'context' | 'command',          // command iff disable-model-invocation is true; absent = context|mode: 'context' | 'command',          // command iff disable-model-invocation is true; absent = context
   gateDeclared: bool, gateValue: 'true' | 'false' | null,
   description: '...', descriptionChars: 412,
   modifiedOn: 'YYYY-MM-DD' | null,
@@ -138,7 +138,7 @@ the returned list, so one plugin skill is one row.
 
 ### Row (Skill joined with calls, produced in report.mjs)
 
-Skill plus: `calls, activeCalls, passiveCalls, firstSeen, lastSeen`
+Skill plus: `calls, commandCalls, contextCalls, firstSeen, lastSeen`
 (YYYY-MM-DD or null), `listingChars, listingTokens, descriptionTokens,
 capped` from `listingCost`, and `path`: `realPath` run through `tildify`, which
 is the value the HTML page writes into the decisions file.
@@ -154,9 +154,9 @@ Row plus:
 
 ```js
 recommendation: {
-  action: 'keep' | 'active' | 'passive' | 'optimize' | 'delete' | 'review',
+  action: 'keep' | 'command' | 'context' | 'optimize' | 'delete' | 'review',
   reason: 'short, numbers first, at most two sentences (see the style rule below)',
-  flags: ['never-called', 'summoned-only', 'heavy-description', 'thin-description', 'capped', 'unroutable', 'dormant-active', 'not-editable', 'stale', 'too-new'],
+  flags: ['never-called', 'summoned-only', 'heavy-description', 'thin-description', 'capped', 'unroutable', 'dormant-command', 'not-editable', 'stale', 'too-new'],
   impactTokensPerCall: 118,      // tokens saved per API call if the action is taken (0 for keep)
   rank: 1,                       // 1 = most impactful
 }
@@ -164,13 +164,13 @@ recommendation: {
 
 Rules, in priority order (first match wins; flags accumulate regardless):
 
-1. `mode === 'active'` and `calls === 0`: action `review`, flag `dormant-active`. Costs one line; nothing to save; the person decides whether it still exists for a reason.
-2. `mode === 'passive'`, `calls === 0`, `descriptionChars < thresholds.thinChars`: action `optimize`, flags `never-called`, `thin-description`. The description may be too thin to route to; rewrite before deciding anything else. (The thin flag is only meaningful when the invocation count is zero. A thin description that gets routed to is fine.)
-3. `mode === 'passive'`, `calls === 0`, and `modifiedOn` within `thresholds.newSkillDays`: action `keep`, flag `too-new`. A skill installed days ago has had no chance to be chosen, so a zero call count is not evidence. It outranks the stale and never-called rules; a thin description still wins over it, because that is worth fixing on day one.
-4. `mode === 'passive'`, `calls === 0`, `location` in `user`, `user-symlink`, `project`, and `modifiedOn` older than `thresholds.staleDays`: action `delete`, flags `never-called`, `stale`. Alternative offered in the UI: `active`.
-5. `mode === 'passive'`, `calls === 0`: action `active`, flag `never-called`.
-6. `mode === 'passive'`, `calls > 0`, `passiveCalls === 0`: action `active`, flag `summoned-only`.
-7. `mode === 'passive'`, `passiveCalls > 0`, (`descriptionChars > thresholds.heavyChars` or `capped`): action `optimize`, flag `heavy-description` (and `capped` when over the per-entry cap).
+1. `mode === 'command'` and `calls === 0`: action `review`, flag `dormant-command`. Costs one line; nothing to save; the person decides whether it still exists for a reason.
+2. `mode === 'context'`, `calls === 0`, `descriptionChars < thresholds.thinChars`: action `optimize`, flags `never-called`, `thin-description`. The description may be too thin to route to; rewrite before deciding anything else. (The thin flag is only meaningful when the invocation count is zero. A thin description that gets routed to is fine.)
+3. `mode === 'context'`, `calls === 0`, and `modifiedOn` within `thresholds.newSkillDays`: action `keep`, flag `too-new`. A skill installed days ago has had no chance to be chosen, so a zero call count is not evidence. It outranks the stale and never-called rules; a thin description still wins over it, because that is worth fixing on day one.
+4. `mode === 'context'`, `calls === 0`, `location` in `user`, `user-symlink`, `project`, and `modifiedOn` older than `thresholds.staleDays`: action `delete`, flags `never-called`, `stale`. Alternative offered in the UI: `command`.
+5. `mode === 'context'`, `calls === 0`: action `command`, flag `never-called`.
+6. `mode === 'context'`, `calls > 0`, `contextCalls === 0`: action `command`, flag `summoned-only`.
+7. `mode === 'context'`, `contextCalls > 0`, (`descriptionChars > thresholds.heavyChars` or `capped`): action `optimize`, flag `heavy-description` (and `capped` when over the per-entry cap).
 8. otherwise `keep`.
 
 Extra flags: `unroutable` if the name is in `economics.overflowUnroutable.names`; `not-editable` if `editable === false`.
@@ -182,13 +182,13 @@ one clause: with a `sourcePath` it says to edit the source copy because the
 installed copy refreshes on the next plugin update, and without one it says the
 change belongs in the plugin's own repository.
 
-`impactTokensPerCall`: for `active` and `delete`, `listingTokens - ceil(nameLineChars/4)`; for `optimize`, `max(0, listingTokens - ceil((thresholds.optimizeTargetChars + nameLineChars)/4))`; for `review` and `keep`, 0. Sort by impact desc, then descriptionTokens desc, then name.
+`impactTokensPerCall`: for `command` and `delete`, `listingTokens - ceil(nameLineChars/4)`; for `optimize`, `max(0, listingTokens - ceil((thresholds.optimizeTargetChars + nameLineChars)/4))`; for `review` and `keep`, 0. Sort by impact desc, then descriptionTokens desc, then name.
 
 Default thresholds (exported, overridable): `thinChars: 60`, `heavyChars: 600`,
 `optimizeTargetChars: 350`, `staleDays: 90`, `newSkillDays: 14`,
 `heaviestListSize: 15`.
 
-`heaviest`: top `heaviestListSize` passive rows by `descriptionChars`, each with
+`heaviest`: top `heaviestListSize` context rows by `descriptionChars`, each with
 `calls` shown, regardless of recommendation. `thin`: every row carrying
 `thin-description`.
 
@@ -292,16 +292,26 @@ measured sessions per day and per week.
   skills: RankedRow[],           // every LISTED skill, sorted by rank
   heaviest: RankedRow[], thin: RankedRow[],
   notLoaded: [{ name, path, location, reason, plugin, installKey, mode,
-                descriptionChars, calls, activeCalls, passiveCalls, lastSeen }],
+                descriptionChars, calls, commandCalls, contextCalls, lastSeen }],
   unmatchedCalls: [{skill, calls}],
   summary: {                     // the thirteen fields the agent reads first
-    skills, notListed, listingTokensPerCall, overBudgetRatio, neverCalledPassive, unroutable, summonedOnly,
+    skills, notListed, listingTokensPerCall, overBudgetRatio, neverCalledContext, unroutable, summonedOnly,
     wastedTokensPerCall, savedTokensPerCallIfApplied, fitsAfter,
     wastedPerWeekOnYourModel: { model, dollars, dollarsPerMonth } | null,
-    recommendedActions: { active: n, delete: n, optimize: n, review: n, keep: n, passive: n }
+    recommendedActions: { command: n, delete: n, optimize: n, review: n, keep: n, context: n }
+  },
+  previous: {                    // null on a first run, or when no record is readable
+    ranAt, generatedOn, cwd, flags,
+    summary,                     // the whole summary the run before produced
+    skills: [{ name, mode, chars, calls }],   // one line per skill, as the record stored it
+    drift: [note]                // compareRuns output, the SINCE YOUR LAST RUN block
   }
 }
 ```
+
+`previous.skills` is carried through rather than summarised because it is the
+only record of what the listing looked like before the last pass, and the share
+card diffs it to say what actually changed.
 
 `skills`, `heaviest`, `thin`, `economics`, `cost` and every recommendation cover
 listed rows only. `notLoaded` is everything else found on disk, sorted by
@@ -314,9 +324,9 @@ Every listed skill carries a recommendation, ranks run 1 to N with no gaps,
 `recommendedActions` add up to `totals.skills`. `summary` has thirteen keys, and
 `pickSummary(report)` returns all thirteen with `null` for anything unknown.
 
-`totals` keeps the fields the old report had: `skills, declaredActive,
-declaredPassive, gateDeclaredAnywhere, transcriptsRead, callsTotal,
-callsMatched, calledSkills, neverCalled, neverCalledActive, neverCalledPassive`,
+`totals` keeps the fields the old report had: `skills, declaredCommand,
+declaredContext, gateDeclaredAnywhere, transcriptsRead, callsTotal,
+callsMatched, calledSkills, neverCalled, neverCalledCommand, neverCalledContext`,
 and adds three: `onDiskNotListed` (the length of `notLoaded`),
 `notListedByReason` (`{reason: count}`) and `withSourceCopy` (listed rows
 carrying a `sourcePath`). `skills` and every never-called count are over listed
@@ -330,12 +340,12 @@ rows; `callsMatched` counts calls on listed and unlisted rows together.
   "generatedOn": "YYYY-MM-DD",
   "source": "token-coupons html report",
   "decisions": [
-    { "name": "bytheslice:box-it-up", "path": "~/.claude/plugins/marketplaces/bytheslice/skills/box-it-up", "action": "active", "note": "" }
+    { "name": "bytheslice:box-it-up", "path": "~/.claude/plugins/marketplaces/bytheslice/skills/box-it-up", "action": "command", "note": "" }
   ]
 }
 ```
 
-Actions: `keep` (no-op, omitted from plans), `active`, `passive`, `optimize`,
+Actions: `keep` (no-op, omitted from plans), `command`, `context`, `optimize`,
 `delete`. `path` is matched to a discovered skill by realPath (after ~
 expansion); `name` is the fallback match.
 
@@ -356,14 +366,14 @@ applyPlan(plan, {yes, trashDir, now}) -> {
 ```
 
 - Which file gets edited: for a `plugin-cache` row carrying a `sourcePath`,
-  `active`, `passive` and `optimize` all target `<sourcePath>/SKILL.md`, and the
+  `command`, `context` and `optimize` all target `<sourcePath>/SKILL.md`, and the
   step `detail` adds that the installed copy picks the change up on the next
   plugin update (`claude plugin update <installKey>` when the key is known).
   Without a source copy the cache file itself is edited, and the `detail` warns
   that the next plugin update overwrites it, so the same change belongs in the
   plugin's repository too. Every other location edits its own `skillMd`.
-- `active`: `setFrontmatterKey(text, 'disable-model-invocation', 'true')`.
-- `passive`: remove the key (`null`). Undo is the reverse call.
+- `command`: `setFrontmatterKey(text, 'disable-model-invocation', 'true')`.
+- `context`: remove the key (`null`). Undo is the reverse call.
 - `delete`: if the row has symlinks under `~/.claude/skills`, unlink those and leave the target (undo: `ln -s`); else if `location === 'plugin-cache'` refuse with the `claude plugin uninstall` hint; else move the real directory to `<trashDir>/<YYYYMMDD-HHMMSS>/<name>` (undo: `mv` back). Deletes also refuse when the skill directory is inside a git work tree that is not clean for that path? No: keep it simple, trash is the safety net.
 - `optimize`: no file change; goes to `worklist` with `targetChars = thresholds.optimizeTargetChars`.
 - Without `--yes` nothing is written; the plan is printed. With `--yes` steps run and each prints its undo line.
@@ -411,7 +421,7 @@ report; apply exits 1 if any step errored.
   cost strip (per model cards, wasted per chat and per week, cached by default
   with an uncached toggle, plus the share-of-input line for subscription users);
   recommendations table (every skill, sorted by rank, per-row action control
-  Keep / Passive / Active / Optimize / Delete preselected to the recommendation,
+  Context or Command, and Keep / Shorten / Delete, both preselected to the recommendation,
   filters never-called / summoned-only / heavy / thin / unroutable / all, text
   search, plugin column, calls split routed and summoned, description tokens);
   heaviest descriptions list; thin descriptions list; unroutable list;
@@ -520,7 +530,27 @@ posting, and a button that turns it into a PNG.
 The card is the **after** picture, and carries only good news: what the changes
 saved, in dollars at API prices, with the before and after token figures and
 what moved. It ends with the repo, bottom right, so a card that travels can be
-traced back. The **score** does not appear on it. A score is a diagnosis, and it
+traced back.
+
+`cardNumbers(report)` decides which of two stories the card tells, and every
+part of the card (the picture, the alt text, the post draft) reads it, so they
+cannot disagree:
+
+- **Measured**, when `report.previous.summary.listingTokensPerCall` is larger
+  than the current one. Before and after are the two real listing figures, the
+  saving is the difference, the three tiles are counted by diffing
+  `previous.skills` against the current rows (gone, became a command,
+  description got shorter), and the dollar figure scales the previous run's own
+  price so both documents quote the same rates.
+- **Forecast**, otherwise: `savedTokensPerCallIfApplied`, `listingTokensPerCall`
+  and `recommendedActions`, which is what the recommendations still standing
+  would be worth.
+
+The split exists because step 7 renders the card *after* the decisions are
+carried out. By then nothing is recommended any more, so reading only the
+forecast made the card announce a saving of zero from zero skills, with a post
+draft to match, on the very run that had just saved the most. `previous` is the
+only place the before number survives. The **score** does not appear on it. A score is a diagnosis, and it
 belongs beside the list of things it is telling you to change, which is why it
 renders on the decision list instead. Nobody shares a D.
 
@@ -564,7 +594,7 @@ row is priced per month from `cost.dollarsPerTokenPerMonth`, the single rate
 and the list can never disagree about what a skill costs. When no priced model
 matches, rows fall back to token counts rather than a guessed price.
 
-**Passive and active first.** The page opens by explaining the two modes and
+**Context and command, right above the list.** The page explains the two kinds and
 nothing else, because nobody can make these decisions without knowing what they
 are, and that difference is the only lever the tool pulls. A test asserts the
 explainer sits above the table.

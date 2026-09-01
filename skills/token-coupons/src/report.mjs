@@ -114,6 +114,9 @@ export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null
           cwd: previous.cwd || null,
           flags: previous.flags || {},
           summary: previous.summary || {},
+          // One line per skill, carried through so the card can count what
+          // actually changed rather than what was once recommended.
+          skills: Array.isArray(previous.skills) ? previous.skills : [],
           drift: compareRuns(previous, run),
         }
       : null,
@@ -132,8 +135,8 @@ function briefUnlisted (r) {
     mode: r.mode,
     descriptionChars: r.descriptionChars,
     calls: r.calls,
-    activeCalls: r.activeCalls,
-    passiveCalls: r.passiveCalls,
+    commandCalls: r.commandCalls,
+    contextCalls: r.contextCalls,
     lastSeen: r.lastSeen,
   }
 }
@@ -162,10 +165,10 @@ export function joinCalls (skills, calls, budget) {
       continue
     }
     let t = tally.get(target)
-    if (!t) { t = { calls: 0, activeCalls: 0, passiveCalls: 0, firstSeen: null, lastSeen: null }; tally.set(target, t) }
+    if (!t) { t = { calls: 0, commandCalls: 0, contextCalls: 0, firstSeen: null, lastSeen: null }; tally.set(target, t) }
     t.calls++
-    if (c.mode === 'active') t.activeCalls++
-    else t.passiveCalls++
+    if (c.mode === 'command') t.commandCalls++
+    else t.contextCalls++
     const day = c.ts ? String(c.ts).slice(0, 10) : null
     if (day) {
       if (!t.firstSeen || day < t.firstSeen) t.firstSeen = day
@@ -174,14 +177,14 @@ export function joinCalls (skills, calls, budget) {
   }
   const cap = budget && budget.perEntryCap
   const rows = skills.map((s) => {
-    const t = tally.get(s) || { calls: 0, activeCalls: 0, passiveCalls: 0, firstSeen: null, lastSeen: null }
+    const t = tally.get(s) || { calls: 0, commandCalls: 0, contextCalls: 0, firstSeen: null, lastSeen: null }
     const name = (Array.isArray(s.names) && s.names[0]) || s.name
     const cost = listingCost(Number(s.descriptionChars) || 0, name, cap)
     return Object.assign({}, s, {
       path: tildify(s.realPath),
       calls: t.calls,
-      activeCalls: t.activeCalls,
-      passiveCalls: t.passiveCalls,
+      commandCalls: t.commandCalls,
+      contextCalls: t.contextCalls,
       firstSeen: t.firstSeen,
       lastSeen: t.lastSeen,
       listingChars: cost.chars,
@@ -211,8 +214,8 @@ function dollarsPerTokenPerMonth (cost, economics) {
 }
 
 function buildTotals (rows, sessions, calls, notLoaded = []) {
-  const active = rows.filter((r) => r.mode === 'active')
-  const passive = rows.filter((r) => r.mode !== 'active')
+  const command = rows.filter((r) => r.mode === 'command')
+  const context = rows.filter((r) => r.mode !== 'command')
   const matched = rows.reduce((n, r) => n + r.calls, 0) + notLoaded.reduce((n, r) => n + r.calls, 0)
   const byReason = {}
   for (const r of notLoaded) byReason[r.reason] = (byReason[r.reason] || 0) + 1
@@ -221,16 +224,16 @@ function buildTotals (rows, sessions, calls, notLoaded = []) {
     onDiskNotListed: notLoaded.length,
     notListedByReason: byReason,
     withSourceCopy: rows.filter((r) => r.sourcePath).length,
-    declaredActive: active.length,
-    declaredPassive: passive.length,
+    declaredCommand: command.length,
+    declaredContext: context.length,
     gateDeclaredAnywhere: rows.filter((r) => r.gateDeclared).length,
     transcriptsRead: sessions.length,
     callsTotal: calls.length,
     callsMatched: matched,
     calledSkills: rows.filter((r) => r.calls > 0).length,
     neverCalled: rows.filter((r) => r.calls === 0).length,
-    neverCalledActive: active.filter((r) => r.calls === 0).length,
-    neverCalledPassive: passive.filter((r) => r.calls === 0).length,
+    neverCalledCommand: command.filter((r) => r.calls === 0).length,
+    neverCalledContext: context.filter((r) => r.calls === 0).length,
   }
 }
 
@@ -258,15 +261,15 @@ function buildSummary ({ rows, economics, stats, pricing, cost, counts, notLoade
       }
     }
   }
-  const actions = Object.assign({ active: 0, delete: 0, optimize: 0, review: 0, keep: 0, passive: 0 }, counts || {})
+  const actions = Object.assign({ command: 0, delete: 0, optimize: 0, review: 0, keep: 0, context: 0 }, counts || {})
   return {
     skills: rows.length,
     notListed: notLoaded.length,
     listingTokensPerCall: nullable(per.totalListingTokens),
     overBudgetRatio: nullable(per.overBudgetRatio),
-    neverCalledPassive: nullable(economics.neverCalledPassive.count),
+    neverCalledContext: nullable(economics.neverCalledContext.count),
     unroutable: nullable(economics.overflowUnroutable.count),
-    summonedOnly: nullable(economics.summonedOnlyPassive.count),
+    summonedOnly: nullable(economics.summonedOnlyContext.count),
     wastedTokensPerCall: nullable(economics.wastedPerCall.tokens),
     savedTokensPerCallIfApplied: nullable(economics.ifGated.savedTokensPerSession),
     fitsAfter: typeof economics.ifGated.fitsBudgetAfter === 'boolean' ? economics.ifGated.fitsBudgetAfter : null,
@@ -277,7 +280,7 @@ function buildSummary ({ rows, economics, stats, pricing, cost, counts, notLoade
 }
 
 const SUMMARY_KEYS = [
-  'skills', 'notListed', 'listingTokensPerCall', 'overBudgetRatio', 'neverCalledPassive', 'unroutable', 'summonedOnly',
+  'skills', 'notListed', 'listingTokensPerCall', 'overBudgetRatio', 'neverCalledContext', 'unroutable', 'summonedOnly',
   'wastedTokensPerCall', 'savedTokensPerCallIfApplied', 'fitsAfter', 'wastedPerWeekOnYourModel', 'savedOnYourModel',
   'recommendedActions',
 ]
@@ -291,7 +294,7 @@ export function pickSummary (report) {
   const s = (report && report.summary) || {}
   const out = {}
   for (const k of SUMMARY_KEYS) out[k] = s[k] === undefined ? null : s[k]
-  out.recommendedActions = Object.assign({ active: 0, delete: 0, optimize: 0, review: 0, keep: 0, passive: 0 }, out.recommendedActions || {})
+  out.recommendedActions = Object.assign({ command: 0, delete: 0, optimize: 0, review: 0, keep: 0, context: 0 }, out.recommendedActions || {})
   return out
 }
 

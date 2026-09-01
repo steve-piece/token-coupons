@@ -118,7 +118,7 @@ describe('cli: report', () => {
       assert.ok(existsSync(out))
       const page = readFileSync(html, 'utf8')
       assert.equal(page.split('id="report-data"').length - 1, 1)
-      assert.equal(page.split('<select').length - 1, 8, 'two selects per skill: passive or active, and what to do')
+      assert.equal(page.split('<select').length - 1, 8, 'two selects per skill: context or command, and what to do')
       const report = JSON.parse(readFileSync(out, 'utf8'))
       assert.equal(report.budget.contextWindow, 200000)
       assert.equal(report.budget.windowSource, '--window flag')
@@ -226,7 +226,7 @@ describe('cli: apply', () => {
         source: 'token-coupons html report',
         decisions: [
           { name: 'alpha', path: fx.skillPath('alpha'), action: 'keep', note: '' },
-          { name: 'beta', path: fx.skillPath('beta'), action: 'active', note: '' },
+          { name: 'beta', path: fx.skillPath('beta'), action: 'command', note: '' },
           { name: 'plug:gamma', path: fx.skillPath('gamma'), action: 'delete', note: '' },
         ],
       }))
@@ -257,7 +257,7 @@ describe('cli: apply', () => {
       writeFileSync(f, JSON.stringify({
         version: 1,
         decisions: [
-          { name: 'beta', path: fx.skillPath('beta'), action: 'active' },
+          { name: 'beta', path: fx.skillPath('beta'), action: 'command' },
           { name: 'alpha', path: fx.skillPath('alpha'), action: 'delete' },
         ],
       }))

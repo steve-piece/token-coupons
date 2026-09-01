@@ -7,7 +7,7 @@ import { makeFixtureHome, withHome } from './helpers.mjs'
 const fresh = () => import('../skills/token-coupons/src/discover.mjs?' + Math.random())
 
 describe('discover', () => {
-  test('finds skills across roots, defaults mode to passive, dedupes symlinks, classifies location', async () => {
+  test('finds skills across roots, defaults mode to context, dedupes symlinks, classifies location', async () => {
     const fx = makeFixtureHome({
       skills: [
         { name: 'alpha', description: 'Alpha does A.' },
@@ -23,10 +23,10 @@ describe('discover', () => {
         const skills = discoverSkills({ cwd: fx.home })
         const by = Object.fromEntries(skills.map((s) => [s.name, s]))
         assert.equal(skills.length, 5)
-        assert.equal(by.alpha.mode, 'passive')
+        assert.equal(by.alpha.mode, 'context')
         assert.equal(by.alpha.gateDeclared, false)
         assert.equal(by.alpha.loaded, true)
-        assert.equal(by.beta.mode, 'active')
+        assert.equal(by.beta.mode, 'command')
         assert.equal(by.gamma.location, 'plugin-cache')
         assert.equal(by.gamma.editable, false)
         assert.equal(by.gamma.names[0], 'plug:gamma')

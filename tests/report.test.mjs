@@ -15,6 +15,9 @@ const LONG = 'Use this whenever someone wants the alpha treatment for a file, a 
 
 function fixture () {
   return makeFixtureHome({
+    // Ages count back from the day the report is told it is, so these stay
+    // fixed no matter when the suite runs.
+    today: TODAY,
     skills: [
       // Ages are set on purpose: a skill installed in the last 14 days reads as
       // "too new to judge", which would mask the rule each of these exercises.
@@ -58,15 +61,15 @@ describe('buildReport', () => {
         assert.equal(r.since, '2026-08-01')
         assert.equal(r.skills.length, 6)
         assert.equal(r.totals.skills, 6)
-        assert.equal(r.totals.declaredActive, 1)
-        assert.equal(r.totals.declaredPassive, 5)
+        assert.equal(r.totals.declaredCommand, 1)
+        assert.equal(r.totals.declaredContext, 5)
         assert.equal(r.totals.transcriptsRead, 2)
         assert.equal(r.totals.callsTotal, 4)
         assert.equal(r.totals.callsMatched, 3)
         assert.equal(r.totals.calledSkills, 2)
         assert.equal(r.totals.neverCalled, 4)
-        assert.equal(r.totals.neverCalledActive, 1)
-        assert.equal(r.totals.neverCalledPassive, 3)
+        assert.equal(r.totals.neverCalledCommand, 1)
+        assert.equal(r.totals.neverCalledContext, 3)
         assert.deepEqual(r.unmatchedCalls, [{ skill: 'ghost', calls: 1 }])
         assert.equal(r.budget.contextWindow, 1000000)
         assert.ok(r.economics && r.economics.perSession && r.stats && r.cost)
@@ -82,13 +85,13 @@ describe('buildReport', () => {
         const r = buildReport({ today: TODAY })
         const by = Object.fromEntries(r.skills.map((s) => [s.name, s]))
         assert.equal(by.alpha.calls, 2)
-        assert.equal(by.alpha.passiveCalls, 2)
-        assert.equal(by.alpha.activeCalls, 0)
+        assert.equal(by.alpha.contextCalls, 2)
+        assert.equal(by.alpha.commandCalls, 0)
         assert.equal(by.alpha.firstSeen, '2026-08-10')
         assert.equal(by.alpha.lastSeen, '2026-08-10')
         assert.equal(by.eps.calls, 1)
-        assert.equal(by.eps.activeCalls, 1)
-        assert.equal(by.eps.passiveCalls, 0)
+        assert.equal(by.eps.commandCalls, 1)
+        assert.equal(by.eps.contextCalls, 0)
         assert.equal(by.beta.calls, 0)
         assert.equal(by.beta.firstSeen, null)
         assert.equal(by.alpha.listingTokens, Math.ceil((LONG.length + 'alpha'.length + 4) / 4))
@@ -111,16 +114,16 @@ describe('buildReport', () => {
         assert.equal(by.alpha.recommendation.action, 'keep')
         assert.equal(by.beta.recommendation.action, 'delete')
         assert.ok(by.beta.recommendation.flags.includes('stale'))
-        assert.equal(by.gamma.recommendation.action, 'active')
+        assert.equal(by.gamma.recommendation.action, 'command')
         assert.ok(by.gamma.recommendation.flags.includes('not-editable'))
         assert.equal(by.delta.recommendation.action, 'review')
-        assert.equal(by.eps.recommendation.action, 'active')
+        assert.equal(by.eps.recommendation.action, 'command')
         assert.ok(by.eps.recommendation.flags.includes('summoned-only'))
         assert.equal(by.zeta.recommendation.action, 'optimize')
         assert.ok(by.zeta.recommendation.flags.includes('thin-description'))
         assert.equal(r.thin.length, 1)
         assert.equal(r.heaviest[0].name, 'alpha')
-        assert.deepEqual(r.summary.recommendedActions, { active: 2, delete: 1, optimize: 1, review: 1, keep: 1, passive: 0 })
+        assert.deepEqual(r.summary.recommendedActions, { command: 2, delete: 1, optimize: 1, review: 1, keep: 1, context: 0 })
       })
     } finally { fx.cleanup() }
   })
@@ -131,12 +134,12 @@ describe('buildReport', () => {
       await withHome(fx.home, () => {
         const r = buildReport({ today: TODAY })
         const s = r.summary
-        for (const k of ['skills', 'listingTokensPerCall', 'overBudgetRatio', 'neverCalledPassive', 'unroutable', 'summonedOnly',
+        for (const k of ['skills', 'listingTokensPerCall', 'overBudgetRatio', 'neverCalledContext', 'unroutable', 'summonedOnly',
           'wastedTokensPerCall', 'savedTokensPerCallIfApplied', 'fitsAfter', 'wastedPerWeekOnYourModel', 'recommendedActions']) {
           assert.ok(k in s, 'summary is missing ' + k)
         }
         assert.equal(s.skills, 6)
-        assert.equal(s.neverCalledPassive, 3)
+        assert.equal(s.neverCalledContext, 3)
         assert.equal(s.summonedOnly, 1)
         assert.equal(s.unroutable, 0)
         assert.equal(s.listingTokensPerCall, r.economics.perSession.totalListingTokens)
@@ -225,18 +228,18 @@ describe('joinCalls', () => {
   ]
   test('canonical names win over aliases and unmatched calls are tallied', () => {
     const calls = [
-      { skill: 'plug:x', bare: 'x', ts: '2026-08-01T00:00:00Z', mode: 'passive' },
-      { skill: 'x', bare: 'x', ts: '2026-08-02T00:00:00Z', mode: 'active' },
-      { skill: 'x', bare: 'x', ts: '2026-08-03T00:00:00Z', mode: 'passive' },
-      { skill: 'nope', bare: 'nope', ts: '2026-08-03T00:00:00Z', mode: 'passive' },
-      { skill: 'nope', bare: 'nope', ts: '2026-08-04T00:00:00Z', mode: 'passive' },
-      { skill: 'other:y', bare: 'y', ts: '2026-08-04T00:00:00Z', mode: 'passive' },
+      { skill: 'plug:x', bare: 'x', ts: '2026-08-01T00:00:00Z', mode: 'context' },
+      { skill: 'x', bare: 'x', ts: '2026-08-02T00:00:00Z', mode: 'command' },
+      { skill: 'x', bare: 'x', ts: '2026-08-03T00:00:00Z', mode: 'context' },
+      { skill: 'nope', bare: 'nope', ts: '2026-08-03T00:00:00Z', mode: 'context' },
+      { skill: 'nope', bare: 'nope', ts: '2026-08-04T00:00:00Z', mode: 'context' },
+      { skill: 'other:y', bare: 'y', ts: '2026-08-04T00:00:00Z', mode: 'context' },
     ]
     const { rows, unmatchedCalls } = joinCalls(skills, calls, { perEntryCap: 1536 })
     assert.equal(rows[0].calls, 1, 'plug:x gets its own call')
     assert.equal(rows[1].calls, 2, 'bare x goes to the skill whose canonical name is x')
-    assert.equal(rows[1].activeCalls, 1)
-    assert.equal(rows[1].passiveCalls, 1)
+    assert.equal(rows[1].commandCalls, 1)
+    assert.equal(rows[1].contextCalls, 1)
     assert.equal(rows[1].firstSeen, '2026-08-02')
     assert.equal(rows[1].lastSeen, '2026-08-03')
     assert.equal(rows[2].calls, 1, 'a plugin prefixed call falls back to the bare name')
@@ -249,7 +252,7 @@ describe('pickSummary', () => {
     const s = pickSummary({})
     assert.equal(s.skills, null)
     assert.equal(s.wastedPerWeekOnYourModel, null)
-    assert.deepEqual(s.recommendedActions, { active: 0, delete: 0, optimize: 0, review: 0, keep: 0, passive: 0 })
+    assert.deepEqual(s.recommendedActions, { command: 0, delete: 0, optimize: 0, review: 0, keep: 0, context: 0 })
     assert.equal(Object.keys(s).length, 13)
   })
 })

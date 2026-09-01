@@ -160,7 +160,7 @@ export function discoverSkills ({ cwd = process.cwd() } = {}) {
       const plugin = pluginNameFor(real)
       const invocable = plugin ? plugin + ':' + basename(dir) : basename(dir)
       const gate = fm.ok ? fm.data['disable-model-invocation'] : undefined
-      const mode = String(gate).toLowerCase() === 'true' ? 'active' : 'passive'
+      const mode = String(gate).toLowerCase() === 'true' ? 'command' : 'context'
       const description = fm.ok ? String(fm.data.description || '') : ''
       const loc = classifyLocation(real, dir)
       const existing = byReal.get(real)
