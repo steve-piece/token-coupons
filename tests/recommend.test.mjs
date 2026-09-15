@@ -21,7 +21,7 @@ function row (over = {}) {
     plugin: null,
     location: 'user',
     editable: true,
-    mode: 'passive',
+    mode: 'context',
     gateDeclared: false,
     gateValue: null,
     description: 'x'.repeat(chars),
@@ -30,8 +30,8 @@ function row (over = {}) {
     // only trips those rules when a test asks for it by passing modifiedOn.
     modifiedOn: daysAgo(60),
     calls: 0,
-    activeCalls: 0,
-    passiveCalls: 0,
+    commandCalls: 0,
+    contextCalls: 0,
     firstSeen: null,
     lastSeen: null,
   }, over, { descriptionChars: chars })
@@ -52,11 +52,11 @@ function sentences (text) { return (String(text).match(/\./g) || []).length }
 function short (text) { return String(text).split(/\s+/).length <= 30 }
 
 describe('recommend: rules in priority order', () => {
-  test('rule 1: an active skill nobody has used is left for the person to review', () => {
-    const rec = only(run([row({ name: 'alpha', mode: 'active', calls: 0 })]))
+  test('rule 1: a command skill nobody has used is left for the person to review', () => {
+    const rec = only(run([row({ name: 'alpha', mode: 'command', calls: 0 })]))
     assert.equal(rec.action, 'review')
-    assert.ok(rec.flags.includes('dormant-active'))
-    assert.equal(rec.impactTokensPerCall, 0, 'an active skill already costs only its name line')
+    assert.ok(rec.flags.includes('dormant-command'))
+    assert.equal(rec.impactTokensPerCall, 0, 'a command skill already costs only its name line')
     assert.match(rec.reason, /Never used/)
     assert.ok(sentences(rec.reason) <= 2 && short(rec.reason), 'short: ' + rec.reason)
   })
@@ -88,23 +88,23 @@ describe('recommend: rules in priority order', () => {
     const notYours = only(run([row({
       name: 'alpha', calls: 0, location: 'plugin-cache', editable: false, modifiedOn: daysAgo(300),
     })]))
-    assert.equal(notYours.action, 'active', 'a plugin cache skill is never proposed for deletion')
+    assert.equal(notYours.action, 'command', 'a plugin cache skill is never proposed for deletion')
 
     const fresh = only(run([row({ name: 'alpha', calls: 0, modifiedOn: daysAgo(89) })]))
-    assert.equal(fresh.action, 'active')
+    assert.equal(fresh.action, 'command')
     assert.ok(!fresh.flags.includes('stale'))
   })
 
   test('staleDays is an exclusive boundary: 90 days is fine, 91 is stale', () => {
     const at = only(run([row({ name: 'alpha', calls: 0, modifiedOn: daysAgo(90) })]))
-    assert.equal(at.action, 'active')
+    assert.equal(at.action, 'command')
     const past = only(run([row({ name: 'alpha', calls: 0, modifiedOn: daysAgo(91) })]))
     assert.equal(past.action, 'delete')
   })
 
   test('rule 4: never called becomes name only, which keeps the skill and stops the rent', () => {
     const rec = only(run([row({ name: 'alpha', calls: 0, descriptionChars: 200 })]))
-    assert.equal(rec.action, 'active')
+    assert.equal(rec.action, 'command')
     assert.deepEqual(rec.flags, ['never-called'])
     assert.equal(rec.impactTokensPerCall, 50)
     assert.match(rec.reason, /200 chars/)
@@ -114,9 +114,9 @@ describe('recommend: rules in priority order', () => {
 
   test('rule 5: used only when the person types its name becomes name only', () => {
     const rec = only(run([row({
-      name: 'alpha', calls: 4, activeCalls: 4, passiveCalls: 0, descriptionChars: 200,
+      name: 'alpha', calls: 4, commandCalls: 4, contextCalls: 0, descriptionChars: 200,
     })]))
-    assert.equal(rec.action, 'active')
+    assert.equal(rec.action, 'command')
     assert.deepEqual(rec.flags, ['summoned-only'])
     assert.equal(rec.impactTokensPerCall, 50)
     assert.match(rec.reason, /4 times/)
@@ -125,7 +125,7 @@ describe('recommend: rules in priority order', () => {
 
   test('rule 6: routed to but heavy gets a rewrite, not a gate', () => {
     const rec = only(run([row({
-      name: 'alpha', calls: 6, activeCalls: 2, passiveCalls: 4, descriptionChars: 800,
+      name: 'alpha', calls: 6, commandCalls: 2, contextCalls: 4, descriptionChars: 800,
     })]))
     assert.equal(rec.action, 'optimize')
     assert.deepEqual(rec.flags, ['heavy-description'])
@@ -137,7 +137,7 @@ describe('recommend: rules in priority order', () => {
 
   test('rule 6: over the per entry cap is an optimize even when the length is under heavyChars', () => {
     const rec = only(run([row({
-      name: 'alpha', calls: 3, passiveCalls: 3, descriptionChars: 2000,
+      name: 'alpha', calls: 3, contextCalls: 3, descriptionChars: 2000,
     })], { thresholds: { heavyChars: 5000 } }))
     assert.equal(rec.action, 'optimize')
     assert.deepEqual(rec.flags, ['capped'])
@@ -148,8 +148,8 @@ describe('recommend: rules in priority order', () => {
 
   test('rule 7: everything else is left alone, for both modes', () => {
     const res = run([
-      row({ name: 'alpha', calls: 9, activeCalls: 2, passiveCalls: 7, descriptionChars: 300 }),
-      row({ name: 'beta', mode: 'active', calls: 5, activeCalls: 5, passiveCalls: 0, descriptionChars: 900 }),
+      row({ name: 'alpha', calls: 9, commandCalls: 2, contextCalls: 7, descriptionChars: 300 }),
+      row({ name: 'beta', mode: 'command', calls: 5, commandCalls: 5, contextCalls: 0, descriptionChars: 900 }),
     ])
     const by = byName(res)
     assert.equal(by.alpha.recommendation.action, 'keep')
@@ -157,7 +157,7 @@ describe('recommend: rules in priority order', () => {
     assert.equal(by.alpha.recommendation.impactTokensPerCall, 0)
     assert.match(by.alpha.recommendation.reason, /7 of 9 times/)
 
-    assert.equal(by.beta.recommendation.action, 'keep', 'an active skill that gets used is fine as it is')
+    assert.equal(by.beta.recommendation.action, 'keep', 'a command skill that gets used is fine as it is')
     assert.deepEqual(by.beta.recommendation.flags, [], 'length flags are meaningless once the description is out of the listing')
     assert.equal(by.beta.recommendation.impactTokensPerCall, 0)
   })
@@ -176,9 +176,9 @@ describe('recommend: flags', () => {
 
   test('a heavy description on a summoned only skill carries both flags', () => {
     const rec = only(run([row({
-      name: 'alpha', calls: 4, activeCalls: 4, passiveCalls: 0, descriptionChars: 800,
+      name: 'alpha', calls: 4, commandCalls: 4, contextCalls: 0, descriptionChars: 800,
     })]))
-    assert.equal(rec.action, 'active')
+    assert.equal(rec.action, 'command')
     assert.deepEqual(rec.flags, ['summoned-only', 'heavy-description'])
     assert.equal(rec.impactTokensPerCall, 200)
   })
@@ -194,8 +194,8 @@ describe('recommend: flags', () => {
 
   test('unroutable is read from the economics overflow list and matches any invocable name', () => {
     const res = run([
-      row({ name: 'plug:alpha', names: ['plug:alpha', 'alpha'], calls: 2, passiveCalls: 2, descriptionChars: 300 }),
-      row({ name: 'beta', calls: 2, passiveCalls: 2, descriptionChars: 300 }),
+      row({ name: 'plug:alpha', names: ['plug:alpha', 'alpha'], calls: 2, contextCalls: 2, descriptionChars: 300 }),
+      row({ name: 'beta', calls: 2, contextCalls: 2, descriptionChars: 300 }),
     ], { economics: { overflowUnroutable: { names: ['alpha'] } } })
     const by = byName(res)
     assert.ok(by['plug:alpha'].recommendation.flags.includes('unroutable'))
@@ -217,7 +217,7 @@ describe('recommend: impact math', () => {
   })
 
   test('optimizing leaves the target length plus the name line behind', () => {
-    const res = run([row({ name: 'alpha', calls: 6, passiveCalls: 6, descriptionChars: 800 })])
+    const res = run([row({ name: 'alpha', calls: 6, contextCalls: 6, descriptionChars: 800 })])
     const expected = listingCost(800, 'alpha').tokens - toTokens(DEFAULT_THRESHOLDS.optimizeTargetChars + nameLineChars('alpha'))
     assert.equal(res.rows[0].recommendation.impactTokensPerCall, expected)
     assert.equal(expected, 113)
@@ -230,15 +230,15 @@ describe('recommend: impact math', () => {
   })
 
   test('the per entry cap bounds the impact of a very long description', () => {
-    const res = run([row({ name: 'alpha', calls: 3, passiveCalls: 3, descriptionChars: 9000 })])
+    const res = run([row({ name: 'alpha', calls: 3, contextCalls: 3, descriptionChars: 9000 })])
     assert.equal(res.rows[0].capped, true)
     assert.equal(res.rows[0].recommendation.impactTokensPerCall, 297, 'anything past 1536 chars was never charged for')
   })
 
   test('keep and review are always zero', () => {
     const res = run([
-      row({ name: 'alpha', calls: 9, passiveCalls: 9, descriptionChars: 300 }),
-      row({ name: 'beta', mode: 'active', calls: 0, descriptionChars: 900 }),
+      row({ name: 'alpha', calls: 9, contextCalls: 9, descriptionChars: 300 }),
+      row({ name: 'beta', mode: 'command', calls: 0, descriptionChars: 900 }),
     ])
     for (const r of res.rows) assert.equal(r.recommendation.impactTokensPerCall, 0)
   })
@@ -247,10 +247,10 @@ describe('recommend: impact math', () => {
 describe('recommend: ordering and lists', () => {
   test('rank is impact first, then description size, then name', () => {
     const res = run([
-      row({ name: 'zzz', calls: 5, passiveCalls: 5, descriptionChars: 100 }),
-      row({ name: 'ddd', calls: 5, passiveCalls: 5, descriptionChars: 100 }),
-      row({ name: 'eee', calls: 5, passiveCalls: 5, descriptionChars: 100 }),
-      row({ name: 'aaa', calls: 5, passiveCalls: 5, descriptionChars: 300 }),
+      row({ name: 'zzz', calls: 5, contextCalls: 5, descriptionChars: 100 }),
+      row({ name: 'ddd', calls: 5, contextCalls: 5, descriptionChars: 100 }),
+      row({ name: 'eee', calls: 5, contextCalls: 5, descriptionChars: 100 }),
+      row({ name: 'aaa', calls: 5, contextCalls: 5, descriptionChars: 300 }),
       row({ name: 'bbb', calls: 0, descriptionChars: 200 }),
       row({ name: 'ccc', calls: 0, descriptionChars: 800 }),
     ])
@@ -259,16 +259,16 @@ describe('recommend: ordering and lists', () => {
     assert.deepEqual(res.rows.map((r) => r.recommendation.impactTokensPerCall), [200, 50, 0, 0, 0, 0])
   })
 
-  test('heaviest is the biggest passive descriptions, capped at heaviestListSize', () => {
+  test('heaviest is the biggest context descriptions, capped at heaviestListSize', () => {
     const res = run([
       row({ name: 'big', calls: 0, descriptionChars: 900 }),
-      row({ name: 'mid', calls: 4, passiveCalls: 4, descriptionChars: 800 }),
-      row({ name: 'small', calls: 4, passiveCalls: 4, descriptionChars: 100 }),
-      row({ name: 'gated', mode: 'active', calls: 4, activeCalls: 4, descriptionChars: 5000 }),
+      row({ name: 'mid', calls: 4, contextCalls: 4, descriptionChars: 800 }),
+      row({ name: 'small', calls: 4, contextCalls: 4, descriptionChars: 100 }),
+      row({ name: 'gated', mode: 'command', calls: 4, commandCalls: 4, descriptionChars: 5000 }),
     ], { thresholds: { heaviestListSize: 2 } })
     assert.deepEqual(res.heaviest.map((r) => r.name), ['big', 'mid'])
     assert.equal(res.heaviest[0].calls, 0, 'calls travel with the row')
-    assert.ok(!res.heaviest.some((r) => r.name === 'gated'), 'active skills pay for a name line only')
+    assert.ok(!res.heaviest.some((r) => r.name === 'gated'), 'command skills pay for a name line only')
   })
 
   test('thin is every row carrying the thin flag, in rank order', () => {
@@ -276,7 +276,7 @@ describe('recommend: ordering and lists', () => {
       row({ name: 'aaa', calls: 0, descriptionChars: 10 }),
       row({ name: 'bbb', calls: 0, descriptionChars: 59 }),
       row({ name: 'ccc', calls: 0, descriptionChars: 60 }),
-      row({ name: 'ddd', calls: 3, passiveCalls: 3, descriptionChars: 10 }),
+      row({ name: 'ddd', calls: 3, contextCalls: 3, descriptionChars: 10 }),
     ])
     assert.deepEqual(res.thin.map((r) => r.name), ['bbb', 'aaa'])
     assert.ok(res.thin.every((r) => r.recommendation.flags.includes('thin-description')))
@@ -284,13 +284,13 @@ describe('recommend: ordering and lists', () => {
 
   test('counts always carry all six actions, including the ones nothing produced', () => {
     const res = run([
-      row({ name: 'a-keep', calls: 9, passiveCalls: 9, descriptionChars: 300 }),
-      row({ name: 'b-active', calls: 0, descriptionChars: 200 }),
-      row({ name: 'c-optimize', calls: 6, passiveCalls: 6, descriptionChars: 800 }),
+      row({ name: 'a-keep', calls: 9, contextCalls: 9, descriptionChars: 300 }),
+      row({ name: 'b-command', calls: 0, descriptionChars: 200 }),
+      row({ name: 'c-optimize', calls: 6, contextCalls: 6, descriptionChars: 800 }),
       row({ name: 'd-delete', calls: 0, descriptionChars: 200, modifiedOn: daysAgo(200) }),
-      row({ name: 'e-review', mode: 'active', calls: 0, descriptionChars: 200 }),
+      row({ name: 'e-review', mode: 'command', calls: 0, descriptionChars: 200 }),
     ])
-    assert.deepEqual(res.counts, { keep: 1, active: 1, passive: 0, optimize: 1, delete: 1, review: 1 })
+    assert.deepEqual(res.counts, { keep: 1, command: 1, context: 0, optimize: 1, delete: 1, review: 1 })
     assert.equal(Object.values(res.counts).reduce((a, b) => a + b, 0), res.rows.length)
   })
 })
@@ -305,7 +305,7 @@ describe('recommend: thresholds', () => {
 
   test('every threshold can be overridden, and the rest keep their defaults', () => {
     const rows = [
-      row({ name: 'aaa', calls: 4, passiveCalls: 4, descriptionChars: 200 }),
+      row({ name: 'aaa', calls: 4, contextCalls: 4, descriptionChars: 200 }),
       row({ name: 'bbb', calls: 0, descriptionChars: 200 }),
       // 30 days: old enough that a lowered staleDays can reach it, and past the
       // new-skill window, so "too new to judge" does not shadow the stale rule.
@@ -332,14 +332,14 @@ describe('recommend: thresholds', () => {
   })
 
   test('optimizeTargetChars changes what an optimize is worth', () => {
-    const rows = [row({ name: 'alpha', calls: 6, passiveCalls: 6, descriptionChars: 800 })]
+    const rows = [row({ name: 'alpha', calls: 6, contextCalls: 6, descriptionChars: 800 })]
     const tight = run(rows, { thresholds: { optimizeTargetChars: 100 } })
     assert.equal(tight.rows[0].recommendation.impactTokensPerCall, 175)
     assert.match(tight.rows[0].recommendation.reason, /100 chars/)
   })
 
   test('the per entry cap follows the budget when one is passed', () => {
-    const rows = [row({ name: 'alpha', calls: 3, passiveCalls: 3, descriptionChars: 800 })]
+    const rows = [row({ name: 'alpha', calls: 3, contextCalls: 3, descriptionChars: 800 })]
     const res = run(rows, { budget: { perEntryCap: 400 }, thresholds: { heavyChars: 5000 } })
     assert.equal(res.rows[0].capped, true)
     assert.equal(res.rows[0].recommendation.action, 'optimize')
@@ -366,12 +366,12 @@ describe('recommend: inputs', () => {
     assert.deepEqual(res.rows, [])
     assert.deepEqual(res.heaviest, [])
     assert.deepEqual(res.thin, [])
-    assert.deepEqual(res.counts, { keep: 0, active: 0, passive: 0, optimize: 0, delete: 0, review: 0 })
+    assert.deepEqual(res.counts, { keep: 0, command: 0, context: 0, optimize: 0, delete: 0, review: 0 })
   })
 
   test('today defaults to now, and a missing file date never reads as stale', () => {
     const res = recommend([row({ name: 'alpha', calls: 0, modifiedOn: null })])
-    assert.equal(res.rows[0].recommendation.action, 'active')
+    assert.equal(res.rows[0].recommendation.action, 'command')
     assert.ok(!res.rows[0].recommendation.flags.includes('stale'))
   })
 })
@@ -393,7 +393,7 @@ describe('recommend: a freshly installed skill is not dead weight', () => {
 
   test('past the new-skill window the never-called rule takes over again', () => {
     const rec = only(run([row({ name: 'archify', calls: 0, descriptionChars: 375, modifiedOn: daysAgo(20) })]))
-    assert.equal(rec.action, 'active')
+    assert.equal(rec.action, 'command')
     assert.ok(!rec.flags.includes('too-new'))
   })
 
@@ -406,6 +406,6 @@ describe('recommend: a freshly installed skill is not dead weight', () => {
   test('newSkillDays is overridable', () => {
     const rows = [row({ name: 'x', calls: 0, descriptionChars: 375, modifiedOn: daysAgo(20) })]
     assert.equal(only(run(rows, { thresholds: { newSkillDays: 30 } })).action, 'keep')
-    assert.equal(only(run(rows, { thresholds: { newSkillDays: 3 } })).action, 'active')
+    assert.equal(only(run(rows, { thresholds: { newSkillDays: 3 } })).action, 'command')
   })
 })

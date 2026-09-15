@@ -49,7 +49,7 @@ export function listingBudget ({ contextWindow = null, fraction = DEFAULT_FRACTI
   }
 }
 
-/** Chars the name line alone costs when a description is shed or the skill is active. */
+/** Chars the name line alone costs when a description is shed or the skill is a command. */
 export function nameLineChars (name) { return String(name).length + 4 }
 
 /**

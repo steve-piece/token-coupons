@@ -6,12 +6,12 @@ import { listingCost, nameLineChars, CHARS_PER_TOKEN } from './budget.mjs'
 
 /**
  * @param rows   skills joined with call counts: needs mode, names, descriptionChars,
- *               calls, activeCalls, passiveCalls
+ *               calls, commandCalls, contextCalls
  * @param budget from listingBudget()
  */
 export function economics (rows, budget) {
-  const passive = rows.filter((r) => r.mode === 'passive')
-  const costed = passive.map((r) => Object.assign({}, r, listingCost(r.descriptionChars, r.names[0], budget.perEntryCap)))
+  const context = rows.filter((r) => r.mode === 'context')
+  const costed = context.map((r) => Object.assign({}, r, listingCost(r.descriptionChars, r.names[0], budget.perEntryCap)))
   const spend = costed.reduce((n, r) => n + r.chars, 0)
 
   // 1. Never called, yet in the listing every session.
@@ -31,12 +31,12 @@ export function economics (rows, budget) {
   }
 
   // 3. Summoned only: the user always reaches these by slash, the router never
-  //    chose them, yet they are declared passive and pay routing rent.
-  const summonedOnly = costed.filter((r) => r.calls > 0 && r.passiveCalls === 0 && r.activeCalls > 0)
+  //    chose them, yet they are declared context skills and pay routing rent.
+  const summonedOnly = costed.filter((r) => r.calls > 0 && r.contextCalls === 0 && r.commandCalls > 0)
   const summonedChars = summonedOnly.reduce((n, r) => n + r.chars, 0)
 
-  const activeNow = rows.filter((r) => r.mode === 'active')
-  const activeCost = activeNow.reduce((n, r) => n + nameLineChars(r.names[0]), 0)
+  const commandNow = rows.filter((r) => r.mode === 'command')
+  const commandCost = commandNow.reduce((n, r) => n + nameLineChars(r.names[0]), 0)
 
   const gatedCount = deadWeight.length + summonedOnly.length
   const gatedNameLines = [...deadWeight, ...summonedOnly].reduce((n, r) => n + nameLineChars(r.names[0]), 0)
@@ -45,16 +45,16 @@ export function economics (rows, budget) {
   return {
     budget,
     perSession: {
-      passiveListingChars: spend,
-      passiveListingTokens: Math.ceil(spend / CHARS_PER_TOKEN),
-      activeListingChars: activeCost,
-      activeListingTokens: Math.ceil(activeCost / CHARS_PER_TOKEN),
-      totalListingTokens: Math.ceil((spend + activeCost) / CHARS_PER_TOKEN),
+      contextListingChars: spend,
+      contextListingTokens: Math.ceil(spend / CHARS_PER_TOKEN),
+      commandListingChars: commandCost,
+      commandListingTokens: Math.ceil(commandCost / CHARS_PER_TOKEN),
+      totalListingTokens: Math.ceil((spend + commandCost) / CHARS_PER_TOKEN),
       overBudgetBy: Math.max(0, spend - budget.chars),
       overBudgetRatio: budget.chars ? +(spend / budget.chars).toFixed(2) : null,
       fitsBudget: spend <= budget.chars,
     },
-    neverCalledPassive: {
+    neverCalledContext: {
       count: deadWeight.length,
       names: deadWeight.map((r) => r.names[0]),
       chars: deadChars,
@@ -66,14 +66,14 @@ export function economics (rows, budget) {
       names: overflow.map((r) => r.names[0]),
       note: overflow.length
         ? 'listed by name only: Claude Code drops descriptions least-invoked first when the budget overflows, so these cannot be routed to and no error says so'
-        : 'the passive listing fits the budget, nothing is being dropped',
+        : 'the context listing fits the budget, nothing is being dropped',
     },
-    summonedOnlyPassive: {
+    summonedOnlyContext: {
       count: summonedOnly.length,
       names: summonedOnly.map((r) => r.names[0]),
       chars: summonedChars,
       tokens: Math.ceil(summonedChars / CHARS_PER_TOKEN),
-      note: 'always summoned by slash, never chosen by the router, yet declared passive and paying routing rent',
+      note: 'always summoned by slash, never chosen by the router, yet declared a context skill and paying routing rent',
     },
     // Pure waste: tokens spent every API call on descriptions that have never
     // once helped the router. This is the number the cost model prices.

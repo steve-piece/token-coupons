@@ -42,6 +42,12 @@ WHAT IT COSTS IN DOLLARS
   Assumes 135 messages per chat and 15.7 chats per week, measured from your sessions.
 
 RECOMMENDED
+  41 to make a command, 25 to delete, 10 to rewrite (optimize), 23 to keep
+
+   #  action    saves/msg  skill
+   1  delete          384  typescript-e2e-testing
+       Never used, last edited 151 days ago, 2,327 chars sent every message.
+   2  command         286  app-review
   46 to gate (active), 25 to delete, 10 to rewrite (optimize), 18 to keep
 
    #  action    saves/msg  skill
@@ -122,25 +128,25 @@ Nothing on disk changes while it waits for you. The agent runs `apply` without `
 
 ## What it can change, and how to undo it
 
-Two modes, a distinction this tool draws, and the whole job is deciding which one each skill belongs in.
+Two kinds of skill, a distinction this tool draws, and the whole job is deciding which one each skill belongs in.
 
 <p align="center">
-  <img src="./assets/readme/modes.svg" width="100%" alt="Passive, the default: the skill's name and its whole description are sent with every message, and the agent picks it up as needed. Active: only the name is sent, and you start it by typing its name. One line in SKILL.md, disable-model-invocation: true, is the switch.">
+  <img src="./assets/readme/modes.svg" width="100%" alt="Context, the default: the skill's name and its whole description are sent with every message, and the agent picks it up as needed. Command: only the name is sent, and you start it by typing its name. One line in SKILL.md, disable-model-invocation: true, is the switch.">
 </p>
 
-| Mode | SKILL.md line | Sent every message |
+| Kind | SKILL.md line | Sent every message |
 | --- | --- | --- |
-| **Passive** (default) | none | name and full description; the agent picks it up as needed |
-| **Active** | `disable-model-invocation: true` | name only; a workflow you start by typing its name |
+| **Context** (default) | none | name and full description; the agent picks it up as needed |
+| **Command** | `disable-model-invocation: true` | name only; a workflow you start by typing its name |
 
 | Action | When | What it does | Undo |
 | --- | --- | --- | --- |
 | `keep` | used, description a fair size | nothing | nothing |
-| `active` | never used, or only started by name | adds the line | delete the line |
-| `passive` | you want the agent picking it again | removes the line | add it back |
+| `command` | never used, or only started by name | adds the line | delete the line |
+| `context` | you want the agent picking it again | removes the line | add it back |
 | `optimize` | used, but oversized or past the cap | queues it for `describe` | `cp` the copy `describe` kept |
 | `delete` | never used, yours, untouched 90 days | unlinks the shortcut, or moves the folder to trash | `ln -s` or move it back |
-| `review` | already active, never used | nothing: pick one of the five above | nothing |
+| `review` | already a command, never used | nothing: pick one of the five above | nothing |
 
 Nothing is unrecoverable. Shortcuts are unlinked rather than followed. Folders move to `~/.token-coupons/trash/<timestamp>` rather than being erased. A file about to have its description replaced is copied there first. Copies owned by the plugin cache are refused outright, with the `claude plugin uninstall` command to run instead. Every step prints its own undo line.
 

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="300" viewBox="0 0 1200 300" role="img" aria-labelledby="modes-title modes-desc">
-  <title id="modes-title">Passive and active skills, side by side</title>
-  <desc id="modes-desc">Two panels. Passive, the default: the skill's name and its whole description are sent with every message, and the agent picks the skill up when it fits. Active: only the name is sent, and you start the skill by typing its name, like a workflow. The one line that switches a skill from passive to active is disable-model-invocation: true in its SKILL.md.</desc>
+  <title id="modes-title">Context and command skills, side by side</title>
+  <desc id="modes-desc">Two panels. Context, the default: the skill's name and its whole description are sent with every message, and the agent picks the skill up when it fits. Command: only the name is sent, and you start the skill by typing its name, like a workflow. The one line that switches a skill from context to command is disable-model-invocation: true in its SKILL.md.</desc>
 
   <defs>
     <pattern id="mg" width="40" height="40" patternUnits="userSpaceOnUse">
@@ -12,10 +12,10 @@
   <rect width="1200" height="300" rx="26" fill="url(#mg)"/>
   <rect x="0.5" y="0.5" width="1199" height="299" rx="26" fill="none" stroke="#1E2739"/>
 
-  <!-- passive panel -->
+  <!-- context panel -->
   <g transform="translate(48 40)">
     <rect x="0" y="0" width="520" height="220" rx="16" fill="#0E1422" stroke="#1E2739"/>
-    <text x="24" y="36" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#7E8CA6" letter-spacing="2.4">PASSIVE, THE DEFAULT</text>
+    <text x="24" y="36" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#7E8CA6" letter-spacing="2.4">CONTEXT, THE DEFAULT</text>
     <text x="496" y="36" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7E8CA6">the agent picks it up</text>
     <rect x="24" y="50" width="472" height="1" fill="#1E2739"/>
 
@@ -35,10 +35,10 @@
     <text x="32" y="86" text-anchor="middle" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#7E8CA6">1 line</text>
   </g>
 
-  <!-- active panel -->
+  <!-- command panel -->
   <g transform="translate(632 40)">
     <rect x="0" y="0" width="520" height="220" rx="16" fill="#0E1422" stroke="#35E3A1" stroke-opacity="0.45"/>
-    <text x="24" y="36" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#35E3A1" letter-spacing="2.4">ACTIVE</text>
+    <text x="24" y="36" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="17" fill="#35E3A1" letter-spacing="2.4">COMMAND</text>
     <text x="496" y="36" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7E8CA6">you type its name</text>
     <rect x="24" y="50" width="472" height="1" fill="#1E2739"/>
 

@@ -2,7 +2,7 @@ import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
 
 import { scoreReport, GRADES, WEIGHTS } from '../skills/token-coupons/src/score.mjs'
-import { renderCardSvg, renderCardPage, linkedinHref, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT, REPO } from '../skills/token-coupons/src/render-card.mjs'
+import { renderCardSvg, renderCardPage, linkedinHref, cardNumbers, wrap, bigNum, CARD_WIDTH, CARD_HEIGHT, REPO } from '../skills/token-coupons/src/render-card.mjs'
 import { headline } from '../skills/token-coupons/src/score.mjs'
 import { sampleReport } from './fixtures/sample-report.mjs'
 
@@ -16,10 +16,10 @@ function report ({ listing, wasted, over = 1, unroutable = 0 }) {
       unroutable,
       skills: 90,
       notListed: 40,
-      neverCalledPassive: 60,
+      neverCalledContext: 60,
       savedTokensPerCallIfApplied: wasted - 400,
       fitsAfter: true,
-      recommendedActions: { active: 41, delete: 25, optimize: 8, review: 0, keep: 20, passive: 0 },
+      recommendedActions: { command: 41, delete: 25, optimize: 8, review: 0, keep: 20, context: 0 },
       wastedPerWeekOnYourModel: { model: 'Claude Opus 5', dollars: 8.97, dollarsPerMonth: 38.88 },
       savedOnYourModel: { model: 'Claude Opus 5', dollars: 8.29, dollarsPerMonth: 35.93, tokens: wasted - 400 },
     },
@@ -126,10 +126,10 @@ describe('card', () => {
   })
 
   test('the tiles name what changed, in the words the card owner chose', () => {
-    // Active is the mode that takes a description out of the listing, and the
+    // A command skill takes its description out of the listing, and the
     // decision list says the same, so the two documents cannot disagree.
-    assert.ok(svg.includes('skills set to active'))
-    assert.equal(svg.includes('set to passive'), false)
+    assert.ok(svg.includes('skills made commands'))
+    assert.equal(svg.includes('made contexts'), false)
     assert.ok(svg.includes('unused skills removed'))
     assert.ok(svg.includes('descriptions optimized'))
     // removed is the only count drawn in the warning colour
@@ -182,8 +182,8 @@ describe('card helpers', () => {
 describe('headline', () => {
   test('names what is buying nothing and what it costs', () => {
     const lines = headline({}, {
-      neverCalledPassive: { count: 65 },
-      summonedOnlyPassive: { count: 7 },
+      neverCalledContext: { count: 65 },
+      summonedOnlyContext: { count: 7 },
     }, { tokens: { wasted: 7777 } })
     assert.equal(lines.length, 2)
     assert.equal(lines[0], '65 skills have never been used. 7 more you only type yourself.')
@@ -192,16 +192,121 @@ describe('headline', () => {
   })
 
   test('drops the clause it has no number for, and reads right at one', () => {
-    const only = headline({}, { neverCalledPassive: { count: 1 }, summonedOnlyPassive: { count: 0 } }, { tokens: { wasted: 300 } })
+    const only = headline({}, { neverCalledContext: { count: 1 }, summonedOnlyContext: { count: 0 } }, { tokens: { wasted: 300 } })
     assert.equal(only[0], '1 skill has never been used.')
-    const summonedOnly = headline({}, { neverCalledPassive: { count: 0 }, summonedOnlyPassive: { count: 4 } }, { tokens: { wasted: 300 } })
+    const summonedOnly = headline({}, { neverCalledContext: { count: 0 }, summonedOnlyContext: { count: 4 } }, { tokens: { wasted: 300 } })
     assert.equal(summonedOnly[0], '4 more you only type yourself.')
   })
 
   test('says so plainly when nothing is wasted', () => {
-    const clean = headline({}, { neverCalledPassive: { count: 0 }, summonedOnlyPassive: { count: 0 } }, { tokens: { wasted: 0 } })
+    const clean = headline({}, { neverCalledContext: { count: 0 }, summonedOnlyContext: { count: 0 } }, { tokens: { wasted: 0 } })
     assert.equal(clean.length, 1)
     assert.match(clean[0], /read at least once/)
+  })
+})
+
+describe('the card after a pass has actually landed', () => {
+  // The sequence the procedure asks for: apply the decisions, run the report
+  // again, render the card from THAT report. By then there is nothing left to
+  // recommend, so every forward looking number is zero. The card used to read
+  // those and announce that the pass saved nothing.
+  function afterReport () {
+    return {
+      generatedOn: '2026-08-18',
+      summary: {
+        listingTokensPerCall: 40,
+        wastedTokensPerCall: 0,
+        unroutable: 0,
+        skills: 6,
+        notListed: 1,
+        neverCalledContext: 0,
+        savedTokensPerCallIfApplied: 0,
+        fitsAfter: true,
+        recommendedActions: { command: 0, delete: 0, optimize: 0, review: 3, keep: 3, context: 0 },
+        wastedPerWeekOnYourModel: null,
+        savedOnYourModel: null,
+      },
+      economics: { perSession: { overBudgetRatio: 0.1 } },
+      cost: { volume: {} },
+      skills: [
+        { names: ['code-review'], mode: 'context', descriptionChars: 79 },
+        { names: ['release'], mode: 'command', descriptionChars: 32 },
+        { names: ['standup'], mode: 'command', descriptionChars: 81 },
+        { names: ['notes'], mode: 'command', descriptionChars: 6 },
+        { names: ['payments-e2e'], mode: 'context', descriptionChars: 200 },
+      ],
+      previous: {
+        ranAt: '2026-08-17T10:00:00.000Z',
+        generatedOn: '2026-08-17',
+        summary: {
+          listingTokensPerCall: 183,
+          wastedTokensPerCall: 157,
+          savedOnYourModel: { model: 'Claude Opus 5', dollars: 1.0, dollarsPerMonth: 4.0, tokens: 100 },
+          wastedPerWeekOnYourModel: { model: 'Claude Opus 5', dollars: 1.2, dollarsPerMonth: 5.0 },
+        },
+        skills: [
+          { name: 'code-review', mode: 'context', chars: 79 },
+          { name: 'release', mode: 'command', chars: 32 },
+          { name: 'standup', mode: 'context', chars: 81 },
+          { name: 'notes', mode: 'context', chars: 6 },
+          { name: 'payments-e2e', mode: 'context', chars: 435 },
+          { name: 'legacy-deploy', mode: 'context', chars: 52 },
+        ],
+        drift: [],
+      },
+    }
+  }
+
+  test('reports the drop that was measured, not the nothing that is left to do', () => {
+    const n = cardNumbers(afterReport())
+    assert.equal(n.realised, true, 'the previous run is what makes this measurable')
+    assert.equal(n.listing, 183, 'before comes from the run before the changes')
+    assert.equal(n.after, 40, 'after is where the listing sits now')
+    assert.equal(n.savedTokens, 143)
+  })
+
+  test('counts what changed, in the three buckets the tiles are labelled with', () => {
+    const n = cardNumbers(afterReport())
+    assert.equal(n.acts.delete, 1, 'legacy-deploy is gone')
+    assert.equal(n.acts.command, 2, 'standup and notes became commands')
+    assert.equal(n.acts.optimize, 1, 'payments-e2e kept its kind and lost characters')
+    assert.equal(n.touched, 4, 'and one skill is counted once')
+  })
+
+  test('prices the measured saving instead of dropping the dollar figure', () => {
+    // 143 tokens at the rate the previous run measured, 4.00 a month per 100.
+    assert.equal(cardNumbers(afterReport()).savedMonth, 5.72)
+  })
+
+  test('the drawn card says the same thing, and never claims a pass saved nothing', () => {
+    const svg = renderCardSvg(afterReport())
+    assert.match(svg, /143 tokens off every message you send, from 4 skills\./)
+    assert.match(svg, />183 tokens</)
+    assert.match(svg, />40 tokens</)
+    assert.equal(/0 tokens off every message/.test(svg), false, 'the bug this test exists for')
+    assert.equal(/from 0 skills/.test(svg), false)
+  })
+
+  test('the post draft carries the measured number, not a zero', () => {
+    const text = decodeURIComponent(linkedinHref(afterReport()).split('text=')[1] || '')
+    assert.match(text, /I cut 143 tokens off every message/)
+    assert.equal(/I cut 0 tokens/.test(text), false)
+  })
+
+  test('the after bar is drawn shorter than the before bar here too', () => {
+    const widths = [...renderCardSvg(afterReport()).matchAll(/<rect x="76" y="\d+" width="(\d+)" height="34"/g)].map((m) => Number(m[1]))
+    assert.equal(widths.length, 2)
+    assert.ok(widths[1] < widths[0], 'after is shorter than before')
+  })
+
+  test('with no history, and with a listing that did not move, it forecasts as before', () => {
+    const fresh = afterReport()
+    fresh.previous = null
+    assert.equal(cardNumbers(fresh).realised, false, 'a first run can only forecast')
+
+    const unchanged = afterReport()
+    unchanged.previous.summary.listingTokensPerCall = 40
+    assert.equal(cardNumbers(unchanged).realised, false, 'nothing got smaller, so there is nothing to claim')
   })
 })
 

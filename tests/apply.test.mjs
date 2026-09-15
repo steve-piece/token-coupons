@@ -33,8 +33,8 @@ const decisionsFile = {
   source: 'token-coupons html report',
   decisions: [
     { name: 'alpha', path: '~/.claude/skills/alpha', action: 'delete', note: '' },
-    { name: 'beta', action: 'active', note: '' },
-    { name: 'zeta', action: 'passive', note: '' },
+    { name: 'beta', action: 'command', note: '' },
+    { name: 'zeta', action: 'context', note: '' },
     { name: 'theta', action: 'keep', note: '' },
     { name: 'plug:gamma', action: 'delete', note: '' },
     { name: 'delta', action: 'optimize', note: '' },
@@ -72,13 +72,37 @@ describe('parseDecisions', () => {
     assert.equal(res.ok, true)
     assert.equal(res.reason, null)
     assert.equal(res.decisions.length, 8)
-    assert.deepEqual(res.decisions[1], { name: 'beta', path: '', action: 'active', note: '' })
+    assert.deepEqual(res.decisions[1], { name: 'beta', path: '', action: 'command', note: '' })
   })
 
   test('accepts a bare list of decisions', () => {
     const res = parseDecisions(JSON.stringify(decisionsFile.decisions))
     assert.equal(res.ok, true)
     assert.equal(res.decisions.length, 8)
+  })
+
+  test('reads the two words these actions used to be called', async () => {
+    // A page rendered before the rename is still open in somebody's browser,
+    // and the decisions file it produces has to keep working.
+    const fx = fixture()
+    try {
+      await withHome(fx.home, () => {
+        const skills = discoverSkills()
+        const old = { version: 1, decisions: [
+          { name: 'beta', path: '', action: 'active', note: '' },
+          { name: 'zeta', path: '', action: 'passive', note: '' },
+        ] }
+        const res = parseDecisions(JSON.stringify(old))
+        assert.equal(res.ok, true)
+        assert.equal(res.decisions[0].action, 'active', 'parse keeps what was written')
+
+        const plan = planApply(old, { skills })
+        assert.equal(plan.refused.length, 0, 'and nothing is refused for using them')
+        const kinds = plan.steps.map((s) => s.kind)
+        assert.ok(kinds.includes('set-gate'), 'active still means make it a command')
+        assert.ok(kinds.includes('unset-gate'), 'passive still means open it back up')
+      })
+    } finally { fx.cleanup() }
   })
 
   test('rejects what it cannot use, in plain words', () => {
@@ -174,8 +198,8 @@ describe('planApply', () => {
       await withHome(fx.home, () => {
         const skills = discoverSkills()
         const plan = planApply([
-          { name: 'zeta', action: 'active' },
-          { name: 'alpha', action: 'passive' },
+          { name: 'zeta', action: 'command' },
+          { name: 'alpha', action: 'context' },
         ], { skills })
         assert.deepEqual(plan.steps.map((s) => s.kind), ['noop', 'noop'])
       })
@@ -225,7 +249,7 @@ describe('applyPlan', () => {
         const plan = planApply(decisionsFile, { skills })
         applyPlan(plan, { yes: true, trashDir: join(fx.home, 'trashcan'), now: NOW })
 
-        // active: exactly one line differs, and it is the gate line
+        // command: exactly one line differs, and it is the gate line
         const betaAfter = readFileSync(betaMd, 'utf8')
         const a = betaBefore.split('\n')
         const b = betaAfter.split('\n')
@@ -233,7 +257,7 @@ describe('applyPlan', () => {
         const changed = a.map((line, i) => [line, b[i]]).filter(([x, y]) => x !== y)
         assert.deepEqual(changed, [['disable-model-invocation: false', 'disable-model-invocation: true']])
 
-        // passive: the gate line is gone and nothing else moved
+        // context: the gate line is gone and nothing else moved
         const zetaAfter = readFileSync(zetaMd, 'utf8')
         assert.equal(zetaAfter.includes('disable-model-invocation'), false)
         assert.equal(zetaAfter, zetaBefore.split('\n').filter((l) => !l.startsWith('disable-model-invocation:')).join('\n'))
@@ -325,7 +349,7 @@ describe('applyPlan', () => {
     try {
       await withHome(fx.home, () => {
         const skills = discoverSkills().map((s) => (s.name === 'alpha' ? Object.assign({}, s, { skillMd: join(s.realPath, 'MISSING.md') }) : s))
-        const plan = planApply([{ name: 'alpha', action: 'active' }], { skills })
+        const plan = planApply([{ name: 'alpha', action: 'command' }], { skills })
         assert.equal(plan.steps[0].kind, 'refuse')
         assert.match(plan.refused[0].reason, /could not read/)
       })
@@ -379,7 +403,7 @@ describe('trashStamp', () => {
 describe('the prompt cache warning', () => {
   test('a plan that writes says the listing change costs one re-send, and a plan that does not stays quiet', async () => {
     const { summarizeApply, cacheNote } = await import('../skills/token-coupons/src/apply.mjs')
-    const writes = { dryRun: true, applied: 0, steps: [{ name: 'a', action: 'active', kind: 'set-gate', detail: 'd', undo: 'u' }], worklist: [], refused: [] }
+    const writes = { dryRun: true, applied: 0, steps: [{ name: 'a', action: 'command', kind: 'set-gate', detail: 'd', undo: 'u' }], worklist: [], refused: [] }
     assert.match(summarizeApply(writes), /re-send its whole conversation at full price/)
     assert.match(summarizeApply(writes), /\/clear/)
 

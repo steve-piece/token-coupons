@@ -2,7 +2,7 @@
 // instrumentation. Two things come out of the same walk:
 //
 //   calls     every Skill tool invocation, attributed by exact name and
-//             classified active (the user typed /<skill>) or passive (the
+//             classified command (the user typed /<skill>) or context (the
 //             router chose it)
 //   sessions  every top-level session: how many API calls it made, on which
 //             models, and how many input tokens it sent. Every API call
@@ -57,8 +57,8 @@ function escapeRe (s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
 /**
  * Walk each transcript in order. Track the most recent human turn. When a
  * Skill tool call appears, look for /<name> or /<plugin:name> as literal text
- * in that turn: present means the human summoned it (active), absent means
- * the agent chose it (passive). Skill-backed slashes are recorded this way;
+ * in that turn: present means the human summoned it (command), absent means
+ * the agent chose it (context). Skill-backed slashes are recorded this way;
  * the <command-name> marker exists only for standalone command stubs.
  */
 export function collectCalls (since = null) {
@@ -164,7 +164,7 @@ export function scanTranscripts (since = null, { cacheTtlMinutes = DEFAULT_CACHE
         if (!skill) continue
         const bare = skill.split(':').pop()
         const summoned = new RegExp('(^|[\\s(`"\'])/(' + escapeRe(skill) + '|' + escapeRe(bare) + ')(?![A-Za-z0-9_-])').test(lastUser)
-        calls.push({ skill, bare, ts, mode: summoned ? 'active' : 'passive', file: basename(file), session: s.id })
+        calls.push({ skill, bare, ts, mode: summoned ? 'command' : 'context', file: basename(file), session: s.id })
         s.skillCalls++
       }
     }

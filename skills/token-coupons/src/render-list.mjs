@@ -1,6 +1,6 @@
-// The decision list. The companion to the share card: same dark ground, same
-// mono voice, but where the card carries one number this page carries every
-// row behind it and lets a person change any of them.
+// The decision list. The companion to the share card: where the card carries
+// one number, this page carries every row behind it and lets a person change
+// any of them.
 //
 // Three things shape it:
 //
@@ -8,11 +8,13 @@
 //   row is priced per month at the same rate the card quotes, so the two
 //   documents can never disagree about what a skill costs.
 //
-//   Passive and active first. Nobody can make these decisions without knowing
-//   what the two modes are, so the page opens by explaining them and nothing
-//   else. That difference is the only lever the tool pulls.
+//   Context and command, explained right above the list. Nobody can make these
+//   decisions without knowing what the two kinds of skill are, so the explainer
+//   sits where the decisions start. That difference is the only lever the tool
+//   pulls.
 //
-//   One dark look, no light variant, matching the card it ships beside.
+//   The current state is never hidden behind a suggestion. A control that holds
+//   the tool's proposal says so underneath, and says what the skill is today.
 //
 // Nothing here writes to disk. The page produces a decisions file the person
 // pastes back to their agent, which is what actually applies anything.
@@ -27,12 +29,13 @@ const SANS = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helv
 const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 
 // Two independent questions, so two controls. Blending them into one select
-// made the reader choose between "make it active" and "shorten it" when those
+// made the reader choose between "make it a command" and "shorten it" when those
 // are not alternatives: a skill can be both.
 const MODES = [
-  ['passive', 'Passive', 'the agent can pick it, so its description is sent in every message'],
-  ['active', 'Active', 'the description stops being sent; you reach it by typing its name'],
+  ['context', 'Context', 'the agent can pick it, so its description is sent in every message'],
+  ['command', 'Command', 'the description stops being sent; you reach it by typing its name'],
 ]
+const MODE_LABEL = Object.fromEntries(MODES.map(([value, label]) => [value, label]))
 
 const DISPOSITIONS = [
   ['keep', 'Keep', 'leave the skill as it is'],
@@ -40,8 +43,8 @@ const DISPOSITIONS = [
   ['delete', 'Delete', 'remove it, moving the folder to a trash directory so you can put it back'],
 ]
 
-const MODE_TIP = 'Passive: the agent can pick it on its own, so its description rides in every message. ' +
-  'Active: the description is not sent, and you start it by typing its name.'
+const MODE_TIP = 'Context: the agent can pick it on its own, so its description rides in every message. ' +
+  'Command: the description is not sent, and you start it by typing its name.'
 
 const FILTERS = [
   ['all', 'All'],
@@ -72,8 +75,8 @@ export function renderList (report, { cardHref = null } = {}) {
     '<div class="wrap">',
     header(r, s, cardHref),
     score(r, s),
-    modes(),
     figures(s, r.cost),
+    modes(),
     table(skills, r),
     exportFooter(r, skills),
     '</div>',
@@ -104,27 +107,28 @@ function header (r, s, cardHref) {
 }
 
 /**
- * The segmentation, stated before anything asks the reader to use it. Two
- * modes, one line each on what each costs, because that difference is the
- * whole lever.
+ * The two kinds of skill, stated directly above the list that asks the reader
+ * to choose between them. One line each on what each costs, because that
+ * difference is the whole lever.
  */
 function modes () {
   return [
     '<section class="section" id="modes">',
-    '<h2 class="eyebrow">The two modes, and the whole idea</h2>',
+    '<h2 class="eyebrow">Two kinds of skill, and the whole idea</h2>',
     '<div class="modes">',
     '<article class="mode">',
-    '<div class="modehead"><span class="pill warn">Passive</span></div>',
+    '<div class="modehead"><span class="pill warn">Context</span><span class="modecost">the default</span></div>',
     '<p>Descriptions injected in the model\'s context, used as needed.</p>',
+    '<p class="modefine">Its description is sent with every message, used or not.</p>',
     '</article>',
     '<article class="mode">',
-    '<div class="modehead"><span class="pill good">Active</span></div>',
+    '<div class="modehead"><span class="pill good">Command</span><span class="modecost">you run it</span></div>',
     '<p>Skills activated through direct reference within the prompt.</p>',
     '<p class="modefine">One line in the YAML: <code>disable-model-invocation: true</code></p>',
     '</article>',
     '</div>',
     '<p class="note">Every row below is that one question: <strong>does the agent need to find this by itself, or do you ' +
-      'always reach for it yourself?</strong> If you always type it, make it active and it stops costing you anything.</p>',
+      'always reach for it yourself?</strong> If you always type it, make it a command and it stops costing you anything.</p>',
     '</section>',
   ].join('\n')
 }
@@ -173,7 +177,7 @@ function figures (s, cost) {
   // figure sits between them and needs no colour of its own.
   if (saved) cells.push(fig(money(saved.dollarsPerMonth), 'a month, back', 'good'))
   if (wasted) cells.push(fig(money(wasted.dollarsPerMonth), 'a month, wasted', 'plain'))
-  cells.push(fig(fmt(s.neverCalledPassive || 0), 'skills never used', 'bad'))
+  cells.push(fig(fmt(s.neverCalledContext || 0), 'skills never used', 'bad'))
   if (!cells.length) return ''
   // Two things a reader will otherwise get wrong: why the two dollar figures
   // differ, and whether a flat plan actually bills any of this.
@@ -203,9 +207,18 @@ function fig (value, label, tone) {
 
 /* ----------------------------------------------------------------- table */
 
+// The tags a row can carry, in one place, so the key above the table and the
+// pills inside it can never disagree about what a tag means.
+const TAGS = [
+  ['unroutable', 'danger', 'out of reach', 'dropped from the list to fit the budget, so the agent cannot pick it and nothing warns you'],
+  ['capped', 'warn', 'cut off', 'longer than the agent will read, so the tail is thrown away'],
+  ['source', 'plain', 'source on disk', 'an editable copy exists outside the plugin cache, and that is the one a change is written to'],
+]
+
 function table (skills, r) {
   const priced = skills.some((x) => typeof x.dollarsPerMonth === 'number')
   const maxCost = skills.reduce((n, x) => Math.max(n, Number(x.dollarsPerMonth) || 0), 0) || 1
+  const tagsUsed = new Set()
 
   const rows = skills.map((x, i) => {
     const rec = x.recommendation || {}
@@ -214,21 +227,21 @@ function table (skills, r) {
     const preset = presetFor(rec.action, x.location)
     const cost = Number(x.dollarsPerMonth) || 0
     const bar = Math.max(2, Math.round((cost / maxCost) * 100))
-    const marks = []
-    if (flags.includes('unroutable')) marks.push(mark('danger', 'out of reach', 'your agent is dropping this description to fit, so it cannot pick this skill and nothing warns you'))
-    if (flags.includes('capped')) marks.push(mark('warn', 'cut off', 'longer than your agent will read, so the tail is thrown away'))
-    if (x.sourcePath) marks.push(mark('plain', 'source on disk', 'the editable copy is at ' + x.sourcePath))
+    const tags = TAGS.filter(([key]) => key === 'source' ? !!x.sourcePath : flags.includes(key))
+    tags.forEach(([key]) => tagsUsed.add(key))
+    const marks = tags.map(([key, tone, label, tip]) =>
+      mark(tone, label, key === 'source' ? 'the editable copy is at ' + x.sourcePath : tip))
 
     return [
       '<tr data-index="' + i + '" data-flags="' + attr(flags.join(' ')) + '" data-changed="no">',
       '<td class="num rank">' + esc(String(rec.rank || i + 1)) + '</td>',
       '<td class="skill">',
       '<button type="button" class="sname" data-detail="' + i + '" aria-expanded="false">' + esc(name) + '</button>',
-      '<span class="where">' + esc([x.plugin ? 'from ' + x.plugin : '', locationLabel(x.location)].filter(Boolean).join(', ')) + '</span>',
+      '<span class="where" title="where this skill lives on this machine">' + esc(whereLabel(x)) + '</span>',
       marks.length ? '<span class="marks">' + marks.join('') + '</span>' : '',
       '</td>',
       '<td class="act">' + modeSelect(x, i, name) + '</td>',
-      '<td class="num used"><span>' + fmt(x.passiveCalls || 0) + '</span><span class="slash">/</span><span>' + fmt(x.activeCalls || 0) + '</span></td>',
+      '<td class="num used"><span>' + fmt(x.contextCalls || 0) + '</span><span class="slash">/</span><span>' + fmt(x.commandCalls || 0) + '</span></td>',
       '<td class="num cost">' + (priced
         ? '<span>' + esc(money(cost)) + '</span><span class="bar" aria-hidden="true"><i style="width:' + bar + '%"></i></span>'
         : '<span>' + fmt(x.descriptionTokens || 0) + '</span>') + '</td>',
@@ -242,11 +255,19 @@ function table (skills, r) {
   return [
     '<section class="section" id="rows-section">',
     '<div class="sechead"><h2>The list</h2><span class="count" id="row-count">' + skills.length + ' skills</span></div>',
+    // The one convention the controls use, stated once before the reader
+    // meets it: what is suggested and what is current are never the same mark.
+    '<p class="note key">Every control starts on what the tool suggests. ' +
+      '<span class="ctl inline" data-state="suggested"><span class="state">suggested</span></span> under a control is a change the ' +
+      'tool proposes, with what the skill is today beside it: leave it to accept it, or pick something else and it reads ' +
+      '<span class="ctl inline" data-state="yours"><span class="state">your change</span></span>. ' +
+      'A control with nothing under it is a row the tool would leave alone.</p>',
     '<div class="chips" role="group" aria-label="filters">',
     FILTERS.map(([v, label]) => '<button type="button" class="chip' + (v === 'all' ? ' on' : '') +
       '" data-filter="' + attr(v) + '" aria-pressed="' + (v === 'all' ? 'true' : 'false') + '">' + esc(label) + '</button>').join(''),
     '</div>',
     '<input type="search" id="search" placeholder="Search names, plugins, descriptions" aria-label="search the list">',
+    legend(tagsUsed),
     '<div class="tablewrap">',
     '<table>',
     '<thead><tr>',
@@ -261,29 +282,37 @@ function table (skills, r) {
     '<tbody id="rows">' + rows + '</tbody>',
     '</table>',
     '</div>',
-    '<p class="note">Click a skill name to see its full description and path.' +
+    '<p class="note">Click a skill name to see its full description and path. The grey line under a name is where its folder lives.' +
       (unroutable ? ' The rows marked out of reach are already being dropped: installed, correct, and still unreachable.' : '') + '</p>',
     '</section>',
   ].join('\n')
 }
 
-/**
- * Passive or active. It starts on whichever the tool suggests, which is only
- * different from today's value when the suggestion is to gate the skill, and
- * the option labels carry the suggestion so the column that used to hold it is
- * no longer needed.
- */
-function modeSelect (x, i, name) {
-  const today = x.mode === 'active' ? 'active' : 'passive'
-  const rec = ((x.recommendation || {}).action === 'active') ? 'active' : today
-  const opts = MODES.map(([value, label, tip]) =>
-    '<option value="' + value + '"' + (value === rec ? ' selected' : '') + ' title="' + attr(tip) + '">' +
-    esc(label + (value === rec && rec !== today ? ' (suggested)' : '')) + '</option>').join('')
-  return '<select class="mode" data-index="' + i + '" data-rec="' + attr(rec) + '" data-today="' + attr(today) +
-    '" data-name="' + attr(name) + '" aria-label="' + attr('passive or active for ' + name) + '">' + opts + '</select>'
+/** The key to the tags, showing only the ones that appear in this list. */
+function legend (used) {
+  const items = TAGS.filter(([key]) => used.has(key))
+  if (!items.length) return ''
+  return '<p class="legend"><span class="legendk">Tags</span>' + items.map(([, tone, label, tip]) =>
+    '<span class="legenditem">' + mark(tone, label, tip) + '<span class="legendtext">' + esc(tip) + '</span></span>').join('') + '</p>'
 }
 
-/** Keep, shorten or delete. Orthogonal to the mode above: a skill can be both active and shortened. */
+/**
+ * Context or command. It starts on whichever the tool suggests, which is only
+ * different from today's value when the suggestion is to make it a command.
+ * The current value is never hidden behind that: a control holding a
+ * suggestion says so underneath, and says what the skill is today.
+ */
+function modeSelect (x, i, name) {
+  const today = x.mode === 'command' ? 'command' : 'context'
+  const rec = ((x.recommendation || {}).action === 'command') ? 'command' : today
+  const opts = MODES.map(([value, label, tip]) =>
+    '<option value="' + value + '"' + (value === rec ? ' selected' : '') + ' title="' + attr(tip) + '">' + esc(label) + '</option>').join('')
+  const select = '<select class="mode" data-index="' + i + '" data-rec="' + attr(rec) + '" data-today="' + attr(today) +
+    '" data-name="' + attr(name) + '" aria-label="' + attr('context or command for ' + name) + '">' + opts + '</select>'
+  return control(select, rec === today ? '' : 'suggested', rec === today ? '' : 'suggested, ' + MODE_LABEL[today] + ' today')
+}
+
+/** Keep, shorten or delete. Orthogonal to the kind above: a skill can be both a command and shortened. */
 function dispositionSelect (x, i, name, preset) {
   const locked = x.location === 'plugin-cache'
   const rec = DISPOSITIONS.some(([v]) => v === preset) ? preset : 'keep'
@@ -291,16 +320,23 @@ function dispositionSelect (x, i, name, preset) {
     const disabled = value === 'delete' && locked
     return '<option value="' + value + '"' + (value === rec ? ' selected' : '') + (disabled ? ' disabled' : '') +
       ' title="' + attr(disabled ? 'this lives in a plugin cache folder; remove it with claude plugin uninstall instead' : tip) + '">' +
-      esc(label + (value === rec && rec !== 'keep' ? ' (suggested)' : '')) + '</option>'
+      esc(label) + '</option>'
   }).join('')
-  return '<select class="action" data-index="' + i + '" data-rec="' + attr(rec) + '" data-name="' + attr(name) +
+  const select = '<select class="action" data-index="' + i + '" data-rec="' + attr(rec) + '" data-name="' + attr(name) +
     '" aria-label="' + attr('what to do with ' + name) + '">' + opts + '</select>'
+  return control(select, rec === 'keep' ? '' : 'suggested', rec === 'keep' ? '' : 'suggested')
+}
+
+/** A select and the words under it that say whose choice it is holding. */
+function control (select, state, text) {
+  return '<span class="ctl" data-state="' + attr(state) + '">' + select + '<span class="state">' + esc(text) + '</span></span>'
 }
 
 /**
- * The disposition control starts on the suggestion. Gating suggestions live in
- * the mode control instead, so 'active' and 'passive' land on Keep here, as do
- * 'review' and a delete the plugin system would undo.
+ * The disposition control starts on the suggestion. Suggestions to make a
+ * skill a command live in the type control instead, so 'command' and
+ * 'context' land on Keep here, as do 'review' and a delete the plugin system
+ * would undo.
  */
 export function presetFor (action, location) {
   if (action === 'delete' && location === 'plugin-cache') return 'keep'
@@ -337,14 +373,15 @@ function decisionsOf (r, skills) {
     version: 1,
     generatedOn: r.generatedOn || null,
     source: 'token-coupons html report',
-    // One row can produce two entries, because mode and disposition are
-    // separate questions: gating a skill and shortening it are not exclusive.
+    // One row can produce two entries, because kind and disposition are
+    // separate questions: making a skill a command and shortening it are not
+    // exclusive.
     decisions: skills.flatMap((x) => {
       const name = (x.names && x.names[0]) || x.name
       const path = x.path || x.realPath || ''
       const out = []
-      const today = x.mode === 'active' ? 'active' : 'passive'
-      if ((x.recommendation || {}).action === 'active' && today !== 'active') out.push({ name, path, action: 'active', note: '' })
+      const today = x.mode === 'command' ? 'command' : 'context'
+      if ((x.recommendation || {}).action === 'command' && today !== 'command') out.push({ name, path, action: 'command', note: '' })
       const disposition = presetFor((x.recommendation || {}).action, x.location)
       if (disposition !== 'keep') out.push({ name, path, action: disposition, note: '' })
       return out
@@ -359,13 +396,20 @@ function island (report) {
 /* ---------------------------------------------------------------- pieces */
 
 // Only the locations discover can actually produce. The folders other tools
-// keep their skills in are not scanned, so no row can carry one of them.
+// keep their skills in are not scanned, so no row can carry one of them. The
+// words are whole phrases on purpose: an earlier 'linked in' read as a
+// company name next to the tag beside it.
 function locationLabel (loc) {
   return {
-    user: 'your folder', 'user-symlink': 'linked in', project: 'this project',
-    'project-source': 'this project', marketplace: 'marketplace', 'plugin-cache': 'plugin cache',
-    other: 'elsewhere',
+    user: 'in your skills folder', 'user-symlink': 'a shortcut in your skills folder', project: 'in this project',
+    'project-source': 'in this project', marketplace: 'a marketplace checkout', 'plugin-cache': 'in the plugin cache',
+    other: 'elsewhere on disk',
   }[loc] || String(loc || '')
+}
+
+/** The grey line under a name: which plugin it belongs to, then where its folder is. */
+function whereLabel (x) {
+  return [x.plugin ? 'part of the ' + x.plugin + ' plugin' : '', locationLabel(x.location)].filter(Boolean).join(', ')
 }
 
 function esc (v) {
@@ -522,7 +566,7 @@ a { color: var(--accent); }
 .go { background: var(--ok); border-color: var(--ok); color: #052A1D; font-weight: 700; }
 .go:hover { filter: brightness(1.08); }
 .chip:hover, .ghost:hover { border-color: var(--accent); color: var(--accent); }
-.chip.on { background: rgba(77,216,255,.14); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+.chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; }
 button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 
@@ -553,7 +597,20 @@ td.why { min-width: 180px; max-width: 320px; color: var(--muted); font-size: 12.
 td.used .slash { color: var(--muted); margin: 0 3px; }
 td.act select { max-width: 150px; }
 td.act select { font: inherit; font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); }
-tr[data-changed="yes"] td.act select[data-changed-mark], tr[data-changed="yes"] td.act select { border-color: var(--accent); color: var(--accent); }
+/* whose choice a control is holding. The select itself never changes its
+   words, so the state has to be visible beside it. */
+.ctl { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.ctl.inline { display: inline; }
+.ctl .state { font-size: 11px; line-height: 1.3; color: var(--muted); white-space: nowrap; }
+.ctl .state:empty { display: none; }
+.ctl[data-state="suggested"] select { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.ctl[data-state="suggested"] .state { color: var(--accent); font-weight: 600; }
+.ctl[data-state="yours"] select { border-color: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+.ctl[data-state="yours"] .state { color: var(--ok); font-weight: 600; }
+.note.key { margin-bottom: 14px; }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
+.legendk { font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; }
+.legenditem { display: inline-flex; align-items: center; gap: 6px; }
 tr.detail td { background: var(--surface-2); padding: 14px 18px 16px 58px; }
 tr.detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; max-width: 96ch; font-size: 12.5px; }
 tr.detail dt { color: var(--muted); }
@@ -605,6 +662,27 @@ function script () {
   var note = document.getElementById('export-note');
   var filter = 'all';
   var openDetail = {};
+  var MODE_LABEL = { context: 'Context', command: 'Command' };
+
+  /* whose choice a control is holding: the tool's, yours, or nobody's. A type
+     control also says what the skill is today, because the select hides it. */
+  function stateOf (sel) {
+    var isMode = sel.classList.contains('mode');
+    var base = isMode ? sel.getAttribute('data-today') : 'keep';
+    var rec = sel.getAttribute('data-rec');
+    var today = isMode ? ', ' + (MODE_LABEL[base] || base) + ' today' : '';
+    if (sel.value === rec) return rec === base ? ['', ''] : ['suggested', 'suggested' + today];
+    if (sel.value === base) return ['declined', 'kept as is'];
+    return ['yours', 'your change' + today];
+  }
+  function paint (sel) {
+    var ctl = sel.parentNode;
+    if (!ctl || !ctl.classList || !ctl.classList.contains('ctl')) return;
+    var st = stateOf(sel);
+    ctl.setAttribute('data-state', st[0]);
+    var label = ctl.querySelector('.state');
+    if (label) label.textContent = st[1];
+  }
 
   var index = skills.map(function (s) {
     var rec = s.recommendation || {};
@@ -650,7 +728,7 @@ function script () {
     return s.path || s.realPath || '';
   }
 
-  /* A row can send two entries: the mode only when it differs from today's
+  /* A row can send two entries: the kind only when it differs from today's
      value, and the disposition whenever it is not Keep. */
   function decisions () {
     var out = [];
@@ -669,6 +747,7 @@ function script () {
     var touched = {};
     allSelects.forEach(function (sel) {
       var i = Number(sel.getAttribute('data-index'));
+      paint(sel);
       if (sel.value !== sel.getAttribute('data-rec')) touched[i] = true;
     });
     var n = 0;
@@ -728,7 +807,7 @@ function script () {
       var d = document.createElement('tr');
       d.className = 'detail';
       var td = document.createElement('td');
-      td.colSpan = 9;
+      td.colSpan = 7;
       var dl = document.createElement('dl');
       function add (k, v, cls) {
         var dt = document.createElement('dt'); dt.textContent = k;
@@ -740,7 +819,7 @@ function script () {
       if (typeof s.dollarsPerMonth === 'number') add('Costs', '$' + s.dollarsPerMonth.toFixed(2) + ' a month');
       add('Where', s.path || s.realPath || '');
       if (s.sourcePath) add('Source copy', s.sourcePath);
-      add('Used', (s.calls || 0) + ' times: ' + (s.passiveCalls || 0) + ' picked by the agent, ' + (s.activeCalls || 0) + ' typed by you' + (s.lastSeen ? ', last on ' + s.lastSeen : ''));
+      add('Used', (s.calls || 0) + ' times: ' + (s.contextCalls || 0) + ' picked by the agent, ' + (s.commandCalls || 0) + ' typed by you' + (s.lastSeen ? ', last on ' + s.lastSeen : ''));
       add('Why', rec.reason || '');
       td.appendChild(dl); d.appendChild(td);
       tr.parentNode.insertBefore(d, tr.nextSibling);

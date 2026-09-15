@@ -30,7 +30,7 @@ function record (over = {}) {
     flags: { since: '2026-06-01' },
     summary: { listingTokensPerCall: 10000, wastedTokensPerCall: 7000, wastedPerWeekOnYourModel: 10 },
     counts: { keep: 1 },
-    skills: [{ name: 'alpha', mode: 'passive', chars: 100, calls: 2 }],
+    skills: [{ name: 'alpha', mode: 'context', chars: 100, calls: 2 }],
   }, over)
 }
 
@@ -50,9 +50,9 @@ describe('runs: the record', () => {
       generatedOn: '2026-08-17',
       summary: { listingTokensPerCall: 10 },
       totals: { recommendedActions: { keep: 2 } },
-      skills: [{ names: ['alpha'], mode: 'passive', descriptionChars: 120, calls: 3, recommendation: { reason: 'a long sentence' } }],
+      skills: [{ names: ['alpha'], mode: 'context', descriptionChars: 120, calls: 3, recommendation: { reason: 'a long sentence' } }],
     }, { flags: { since: '2026-06-01' }, cwd: '/x', ranAt: '2026-08-17T00:00:00.000Z' })
-    assert.deepEqual(rec.skills, [{ name: 'alpha', mode: 'passive', chars: 120, calls: 3 }])
+    assert.deepEqual(rec.skills, [{ name: 'alpha', mode: 'context', chars: 120, calls: 3 }])
     assert.equal(rec.counts.keep, 2)
     assert.equal(rec.cwd, '/x')
     assert.equal(rec.flags.since, '2026-06-01')
@@ -137,8 +137,8 @@ describe('runs: drift', () => {
   test('skills coming and going are named, up to three', () => {
     const after = record({
       skills: [
-        { name: 'beta', mode: 'passive', chars: 1, calls: 0 },
-        { name: 'gamma', mode: 'passive', chars: 1, calls: 0 },
+        { name: 'beta', mode: 'context', chars: 1, calls: 0 },
+        { name: 'gamma', mode: 'context', chars: 1, calls: 0 },
       ],
     })
     const notes = compareRuns(record(), after)
