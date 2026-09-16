@@ -126,7 +126,7 @@ function tools (r) {
     const cov = c.coverage || {}
     const notes = (Array.isArray(cov.notes) ? cov.notes : []).map((n) => '<span class="toolnote">' + esc(n) + '</span>').join('')
     const budget = c.budget ? ', room for about ' + fmt(c.budget.tokens) : ''
-    return '<li><b>' + esc(c.label) + '</b> lists ' + fmt(c.skills) + ' skills, about ' + fmt(c.listingTokens) + ' tokens a message' + esc(budget) +
+    return '<li><b>' + esc(c.label) + '</b> lists ' + fmt(c.skills) + (c.skills === 1 ? ' skill' : ' skills') + ', about ' + fmt(c.listingTokens) + ' tokens a message' + esc(budget) +
       (c.overBudget ? ' <span class="pill danger xs">over its allowance</span>' : '') +
       '. ' + fmt(c.sessions) + ' chats read, ' + fmt(c.skillCalls) + ' skill uses' +
       (c.honoursGate ? '. Reads the command line, so a command here applies there.' : '. Ignores the command line.') + notes + '</li>'

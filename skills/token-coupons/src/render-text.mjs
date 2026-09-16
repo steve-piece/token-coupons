@@ -226,7 +226,7 @@ export function renderText (report, { color = false, top = 15 } = {}) {
     for (const c of others) {
       line()
       line('  ' + paint.bold(c.label))
-      line('    In its list: ' + fmt(c.skills) + ' skills, about ' + fmt(c.listingTokens) + ' tokens per message' +
+      line('    In its list: ' + fmt(c.skills) + (c.skills === 1 ? ' skill' : ' skills') + ', about ' + fmt(c.listingTokens) + ' tokens per message' +
         (c.budget ? ' (room for about ' + fmt(c.budget.tokens) + ': ' + c.budget.source + ')' : ' (it publishes no allowance)') +
         (c.overBudget ? ' ' + paint.red('over its allowance') : ''))
       if (Array.isArray(c.onlyHere) && c.onlyHere.length) {

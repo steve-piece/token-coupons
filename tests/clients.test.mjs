@@ -326,7 +326,7 @@ describe('what the readers see', () => {
       await withHome(fx.home, () => {
         const html = renderList(buildReport({ today: TODAY }))
         assert.match(html, /Other tools on this machine/)
-        assert.match(html, /<b>Codex<\/b> lists 1 skills/)
+        assert.match(html, /<b>Codex<\/b> lists 1 skill, about/)
         assert.match(html, /also listed by Codex and Cursor/)
         assert.match(html, /class="elsewhere" title="also used in Codex 1 \(last 2026-08-10\), Cursor 1 \(last 2026-08-11\)">\+2</)
         assert.match(html, />used elsewhere</)
