@@ -4,7 +4,7 @@
 > Each summary links to its full write-up below. Entries are numbered in
 > capture order and numbers are stable once assigned; new entries append
 > at the bottom.
-> Last updated: 2026-08-18
+> Last updated: 2026-09-16
 
 ## Summary
 
@@ -17,6 +17,8 @@
 | 5 | **[Confirm the skill is indexed in the registry](#5-confirm-the-skill-is-indexed-in-the-registry)** - checked 2026-08-18, still not indexed; listing follows install telemetry, so recheck in a week | Low | Low |
 | 6 | **[Share the scorecard as a link, not an attachment](#6-share-the-scorecard-as-a-link-not-an-attachment)** - deferred by owner decision: a hosted card publishes personal usage data | Low | High |
 | 7 | **[Run the evals that ship with the skill](#7-run-the-evals-that-ship-with-the-skill)** - done: all three ran against a fixture home, 14 of 15 assertions passed, and the fixes they surfaced are in | Medium | Medium |
+| 8 | **[Offer decisions on skills only another tool lists](#8-offer-decisions-on-skills-only-another-tool-lists)** - the report now sees Codex, Cursor and Gemini CLI skills and their uses, but only Claude Code's list gets a decision row | Medium | Medium |
+| 9 | **[Verify the two rules taken on documentation alone](#9-verify-the-two-rules-taken-on-documentation-alone)** - Cursor's handling of nested skills and Gemini CLI's chat file shape were not observable on this machine | Low | Low |
 
 ---
 
@@ -91,3 +93,24 @@
 - **Recommendation:** Run them with the eval tooling in `skill-creator`, then fix whichever of the two artefacts is wrong: the skill if it does not do what the eval expects, or the eval if it describes a loop that no longer exists.
 - **Why it matters / impact if skipped:** The eval file currently claims a level of verification the project has not actually done. That is the one kind of dishonesty this codebase has otherwise been careful to avoid.
 - **Dependencies / notes:** Expect the run to surface wording changes in `SKILL.md` rather than code changes.
+
+### 8. Offer decisions on skills only another tool lists
+
+- **Status:** Open. Identified 2026-09-16 while adding the other tools' folders and chats to the report.
+- **Priority:** Medium
+- **Rough effort:** Medium
+- **Context:** Every skill on the machine is now a row, each row says which tools list it, and a use in Codex, Cursor or Gemini CLI counts. But the decision page and `apply` still work over Claude Code's list only; a skill Cursor alone lists (278 of them on the author's machine) appears under "on disk, not listed" with its uses and gets no row to decide on. The two actions that would carry over cleanly are `delete` for a skill no tool has used in months and `optimize` for a heavy description, since both are file operations any tool reads the result of. `command` does not carry: only Claude Code and Cursor read the gate line, and Codex's equivalent is a sidecar file.
+- **Recommendation:** Add a second table to the page, "Other tools' lists", with `keep`, `optimize` and `delete` only, fed by rows whose `listedIn` excludes Claude Code, and let `apply` accept them (it already refuses folders a tool owns). Price nothing there: each tool's tokens are its own.
+- **Why it matters / impact if skipped:** The largest list on the author's machine is Cursor's, at about 34,000 tokens a message, and nothing can be done about it from the page yet.
+- **Dependencies / notes:** Codex publishes an allowance (2 percent of the window) so an over budget warning is already possible for it; Cursor and Gemini CLI publish none.
+
+### 9. Verify the two rules taken on documentation alone
+
+- **Status:** Open. Identified 2026-09-16.
+- **Priority:** Low
+- **Rough effort:** Low
+- **Context:** Two behaviours could not be checked against files on this machine. Cursor publishes no rule for a skill nested inside another skill under `~/.agents/skills`, so those rows are not counted for Cursor and the reason says so; Codex was seen listing them. Gemini CLI's chat recording format was taken from its documentation (Gemini API content, `activate_skill` function calls) because no Gemini CLI chat existed here; the walker is lenient and claims nothing when it finds neither shape. Google's Antigravity IDE keeps its own conversations under `~/.gemini/antigravity` and is not read at all.
+- **Recommendation:** On a machine with Cursor and a nested skill, type its name and see whether Cursor attaches it. On a machine with Gemini CLI, run one chat that activates a skill and diff the file under `~/.gemini/tmp/<hash>/chats` against `calls-gemini.mjs`; add a fixture from the real file.
+- **Why it matters / impact if skipped:** A nested skill Cursor does list would be undercounted for Cursor; a Gemini CLI chat in a different shape would read as no usage, which the coverage note would at least say out loud.
+- **Dependencies / notes:** Neither changes Claude Code's own figures.
+

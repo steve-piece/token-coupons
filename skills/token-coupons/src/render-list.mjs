@@ -20,6 +20,7 @@
 // pastes back to their agent, which is what actually applies anything.
 
 import { fmt, money } from './lib/util.mjs'
+import { CLIENTS, clientLabel } from './clients.mjs'
 import { scoreReport, headline, GRADE_COLOR } from './score.mjs'
 
 // The page carries its own palette rather than the card's. The card is one
@@ -76,12 +77,13 @@ export function renderList (report, { cardHref = null } = {}) {
     header(r, s, cardHref),
     score(r, s),
     figures(s, r.cost),
+    tools(r),
     modes(),
     table(skills, r),
     exportFooter(r, skills),
     '</div>',
     island(r),
-    '<script>' + script() + '</script>',
+    '<script>' + script(Object.fromEntries(CLIENTS.map((c) => [c.id, c.label]))) + '</script>',
     '</body>',
     '</html>',
     '',
@@ -111,6 +113,34 @@ function header (r, s, cardHref) {
  * to choose between them. One line each on what each costs, because that
  * difference is the whole lever.
  */
+/**
+ * The other tools on the machine, one line each: what their list holds, what
+ * of their chats were read, how many uses came out. They send their own list
+ * with their own messages, so nothing here is added to the figures above; it
+ * is here so a row's +N and its "also listed by" have somewhere to point.
+ */
+function tools (r) {
+  const others = (Array.isArray(r.clients) ? r.clients : []).filter((c) => c.id !== 'claude')
+  if (!others.length) return ''
+  const items = others.map((c) => {
+    const cov = c.coverage || {}
+    const notes = (Array.isArray(cov.notes) ? cov.notes : []).map((n) => '<span class="toolnote">' + esc(n) + '</span>').join('')
+    const budget = c.budget ? ', room for about ' + fmt(c.budget.tokens) : ''
+    return '<li><b>' + esc(c.label) + '</b> lists ' + fmt(c.skills) + (c.skills === 1 ? ' skill' : ' skills') + ', about ' + fmt(c.listingTokens) + ' tokens a message' + esc(budget) +
+      (c.overBudget ? ' <span class="pill danger xs">over its allowance</span>' : '') +
+      '. ' + fmt(c.sessions) + ' chats read, ' + fmt(c.skillCalls) + ' skill uses' +
+      (c.honoursGate ? '. Reads the command line, so a command here applies there.' : '. Ignores the command line.') + notes + '</li>'
+  })
+  return [
+    '<section class="section" id="tools">',
+    '<h2 class="eyebrow">Other tools on this machine</h2>',
+    '<ul class="tools">' + items.join('') + '</ul>',
+    '<p class="note">Each sends its own skill list with its own messages, on its own model, so none of this is added to the figures above. ' +
+      'A <code>+N</code> in the Used column is uses in these tools, and the grey line under a name says which of them list it.</p>',
+    '</section>',
+  ].join('\n')
+}
+
 function modes () {
   return [
     '<section class="section" id="modes">',
@@ -125,6 +155,7 @@ function modes () {
     '<div class="modehead"><span class="pill good">Command</span><span class="modecost">you run it</span></div>',
     '<p>Skills activated through direct reference within the prompt.</p>',
     '<p class="modefine">One line in the YAML: <code>disable-model-invocation: true</code></p>',
+    '<p class="modefine">Cursor reads that line too. Codex and Gemini CLI do not.</p>',
     '</article>',
     '</div>',
     '<p class="note">Every row below is that one question: <strong>does the agent need to find this by itself, or do you ' +
@@ -213,6 +244,9 @@ const TAGS = [
   ['unroutable', 'danger', 'out of reach', 'dropped from the list to fit the budget, so the agent cannot pick it and nothing warns you'],
   ['capped', 'warn', 'cut off', 'longer than the agent will read, so the tail is thrown away'],
   ['source', 'plain', 'source on disk', 'an editable copy exists outside the plugin cache, and that is the one a change is written to'],
+  ['used-elsewhere', 'plain', 'used elsewhere', 'used in another tool on this machine; the folder stays whatever you decide here'],
+  ['picked-elsewhere', 'good', 'picked elsewhere', 'another tool that reads the same setting chose it on its own, so a command here would take it away there'],
+  ['usage-unmeasured', 'warn', 'usage unknown', 'listed by a tool whose chats this run could not read, so never used is not certain'],
 ]
 
 function table (skills, r) {
@@ -241,7 +275,8 @@ function table (skills, r) {
       marks.length ? '<span class="marks">' + marks.join('') + '</span>' : '',
       '</td>',
       '<td class="act">' + modeSelect(x, i, name) + '</td>',
-      '<td class="num used"><span>' + fmt(x.contextCalls || 0) + '</span><span class="slash">/</span><span>' + fmt(x.commandCalls || 0) + '</span></td>',
+      '<td class="num used"><span>' + fmt(x.contextCalls || 0) + '</span><span class="slash">/</span><span>' + fmt(x.commandCalls || 0) + '</span>' +
+        (x.callsElsewhere ? '<span class="elsewhere" title="' + attr(elsewhereTip(x)) + '">+' + fmt(x.callsElsewhere) + '</span>' : '') + '</td>',
       '<td class="num cost">' + (priced
         ? '<span>' + esc(money(cost)) + '</span><span class="bar" aria-hidden="true"><i style="width:' + bar + '%"></i></span>'
         : '<span>' + fmt(x.descriptionTokens || 0) + '</span>') + '</td>',
@@ -274,7 +309,7 @@ function table (skills, r) {
     '<th class="num rank">#</th>',
     '<th>Skill</th>',
     '<th title="' + attr(MODE_TIP) + '">Type</th>',
-    '<th class="num" title="how often it was used: times the agent picked it on its own, then times you typed its name">Used</th>',
+    '<th class="num" title="how often it was used in Claude Code: times the agent picked it on its own, then times you typed its name. A +N after them is uses in the other tools on this machine">Used</th>',
     '<th class="num">' + (priced ? 'Cost a month' : 'Desc. tokens') + '</th>',
     '<th>Why</th>',
     '<th title="every control starts on the suggestion, so changing nothing accepts all of them">Decision</th>',
@@ -395,21 +430,42 @@ function island (report) {
 
 /* ---------------------------------------------------------------- pieces */
 
-// Only the locations discover can actually produce. The folders other tools
-// keep their skills in are not scanned, so no row can carry one of them. The
-// words are whole phrases on purpose: an earlier 'linked in' read as a
+// Every location discover can produce, including the other tools' folders.
+// The words are whole phrases on purpose: an earlier 'linked in' read as a
 // company name next to the tag beside it.
 function locationLabel (loc) {
   return {
     user: 'in your skills folder', 'user-symlink': 'a shortcut in your skills folder', project: 'in this project',
     'project-source': 'in this project', marketplace: 'a marketplace checkout', 'plugin-cache': 'in the plugin cache',
+    agents: 'in the shared .agents skills folder',
+    codex: 'in the Codex skills folder', 'codex-system': 'ships with Codex', 'codex-plugin-cache': 'in the Codex plugin cache',
+    'codex-machine': 'in the machine wide Codex folder',
+    cursor: 'in the Cursor skills folder', 'cursor-builtin': 'ships with Cursor', 'cursor-plugin-cache': 'in the Cursor plugin cache',
+    'cursor-plugin-local': 'a Cursor plugin under development',
+    gemini: 'in the Gemini CLI skills folder', 'gemini-extension': 'in a Gemini CLI extension',
+    'project-agents': 'in this project, for every tool', 'project-codex': 'in this project, for Codex',
+    'project-cursor': 'in this project, for Cursor', 'project-gemini': 'in this project, for Gemini CLI',
     other: 'elsewhere on disk',
   }[loc] || String(loc || '')
 }
 
-/** The grey line under a name: which plugin it belongs to, then where its folder is. */
+/** The grey line under a name: which plugin it belongs to, where its folder is, and which other tools list it. */
 function whereLabel (x) {
-  return [x.plugin ? 'part of the ' + x.plugin + ' plugin' : '', locationLabel(x.location)].filter(Boolean).join(', ')
+  const others = (Array.isArray(x.listedIn) ? x.listedIn : []).filter((id) => id !== 'claude').map(clientLabel)
+  return [
+    x.plugin ? 'part of the ' + x.plugin + ' plugin' : '',
+    locationLabel(x.location),
+    others.length ? 'also listed by ' + others.join(' and ') : '',
+  ].filter(Boolean).join(', ')
+}
+
+/** "Codex 8, Cursor 3" for the +N in the Used column. */
+function elsewhereTip (x) {
+  const by = x.callsByClient && typeof x.callsByClient === 'object' ? x.callsByClient : {}
+  return 'also used in ' + Object.entries(by)
+    .filter(([id, t]) => id !== 'claude' && t && Number(t.calls) > 0)
+    .map(([id, t]) => clientLabel(id) + ' ' + fmt(t.calls) + (t.lastSeen ? ' (last ' + t.lastSeen + ')' : ''))
+    .join(', ')
 }
 
 function esc (v) {
@@ -595,6 +651,10 @@ td.cost .bar { display: block; height: 3px; background: var(--line); border-radi
 td.cost .bar i { display: block; height: 100%; background: var(--danger); }
 td.why { min-width: 180px; max-width: 320px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
 td.used .slash { color: var(--muted); margin: 0 3px; }
+td.used .elsewhere { color: var(--muted); margin-left: 6px; font-size: 11.5px; }
+.tools { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 8px; color: var(--muted); font-size: 13px; }
+.tools b { color: var(--text); font-weight: 600; }
+.toolnote { display: block; font-size: 12px; margin-top: 2px; }
 td.act select { max-width: 150px; }
 td.act select { font: inherit; font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); }
 /* whose choice a control is holding. The select itself never changes its
@@ -635,9 +695,11 @@ textarea {
 
 /* ------------------------------------------------------------------ code */
 
-function script () {
+function script (labels) {
   return `
 (function () {
+  var LABELS = ${JSON.stringify(labels || {})};
+  function labelOf (id) { return LABELS[id] || id; }
   var report = {};
   try { report = JSON.parse(document.getElementById('report-data').textContent); } catch (e) { report = {}; }
   var skills = report.skills || [];
@@ -819,7 +881,19 @@ function script () {
       if (typeof s.dollarsPerMonth === 'number') add('Costs', '$' + s.dollarsPerMonth.toFixed(2) + ' a month');
       add('Where', s.path || s.realPath || '');
       if (s.sourcePath) add('Source copy', s.sourcePath);
-      add('Used', (s.calls || 0) + ' times: ' + (s.contextCalls || 0) + ' picked by the agent, ' + (s.commandCalls || 0) + ' typed by you' + (s.lastSeen ? ', last on ' + s.lastSeen : ''));
+      add('Used', (s.calls || 0) + ' times in Claude Code: ' + (s.contextCalls || 0) + ' picked by the agent, ' + (s.commandCalls || 0) + ' typed by you' + (s.lastSeen ? ', last on ' + s.lastSeen : ''));
+      var by = s.callsByClient || {};
+      var elsewhere = Object.keys(by).filter(function (k) { return k !== 'claude' && by[k] && by[k].calls > 0; });
+      if (elsewhere.length) {
+        add('Used elsewhere', elsewhere.map(function (k) {
+          return labelOf(k) + ' ' + by[k].calls + ' (' + (by[k].contextCalls || 0) + ' picked, ' + (by[k].commandCalls || 0) + ' typed' + (by[k].lastSeen ? ', last on ' + by[k].lastSeen : '') + ')';
+        }).join('; '));
+      }
+      var listed = (s.listedIn || []).filter(function (k) { return k !== 'claude'; });
+      var unmeasured = s.unmeasuredClients || [];
+      if (listed.length) {
+        add('Also listed by', listed.map(labelOf).join(', ') + (unmeasured.length ? '. ' + unmeasured.map(labelOf).join(', ') + ': chats not read this run, so uses there are unknown' : ''));
+      }
       add('Why', rec.reason || '');
       td.appendChild(dl); d.appendChild(td);
       tr.parentNode.insertBefore(d, tr.nextSibling);

@@ -28,14 +28,23 @@ Three settings move it: `skillListingBudgetFraction` changes the 1 percent,
 Only three, per code.claude.com/docs/en/skills: `~/.claude/skills`, the `.claude/skills` of the
 project you started Claude Code in, and the skills of **enabled** plugins out of
 `~/.claude/plugins/cache/`. A symlink under `~/.claude/skills` counts, so a skill kept in a repo can
-be linked in. Those three are also the only folders this tool opens.
+be linked in.
 
-Some of what it finds on the way still costs nothing per message: marketplace checkouts, a plugin's
-source repository under `~/Projects`, another project's `.claude/skills`, disabled plugins, and older
-versions left in the cache. The report puts those under `notLoaded` and scores none. Folders that
-belong to other tools are not scanned at all, so they never appear, not even as an unlisted row. This
+Some of what the scan finds on the way still costs nothing per message: marketplace checkouts, a
+plugin's source repository under `~/Projects`, another project's `.claude/skills`, disabled plugins,
+and older versions left in the cache. The report puts those under `notLoaded` and scores none. This
 is why the run folder matters: the same machine reports different numbers inside a project than
 outside it.
+
+The folders the other tools read are scanned too, so a skill kept for Codex, Cursor or Gemini CLI is
+a row rather than a blind spot: `~/.agents/skills` (shared by Codex and Cursor), `~/.codex/skills`
+and Codex's plugin cache, `~/.cursor/skills`, Cursor's bundled skills and its plugin cache,
+`~/.gemini/skills` and its extensions, and each tool's folder inside a project. Each row says which
+tools list it, and the report's `clients` block says what each tool's own list costs in its own
+messages. Codex documents an allowance of 2 percent of the model's context window (8,000 characters
+when the window is unknown) and shortens descriptions, then drops skills, when it is over; Cursor and
+Gemini CLI publish none. None of those lists is added to Claude Code's figure: each tool sends its
+own list with its own messages, on its own model.
 
 ## Trimming without editing the skill
 

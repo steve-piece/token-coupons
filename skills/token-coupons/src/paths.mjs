@@ -16,6 +16,41 @@ export function settingsFiles () {
   return [join(claudeDir(), 'settings.json'), join(claudeDir(), 'settings.local.json')]
 }
 
+/**
+ * The other tools that read skills. Each keeps its skills, its config and its
+ * chat history under one dot folder, so every root here hangs off homeDir()
+ * and a fixture can stand in for the whole machine. CODEX_HOME is honoured
+ * the way Codex documents it, but only on the real home: inside a fixture it
+ * would point the scan back out of it.
+ */
+export function agentsDir () { return join(homeDir(), '.agents') }
+export function codexDir () {
+  const env = process.env.CODEX_HOME
+  return (env && !process.env.TOKEN_COUPONS_HOME) ? env : join(homeDir(), '.codex')
+}
+export function cursorDir () { return join(homeDir(), '.cursor') }
+export function geminiDir () { return join(homeDir(), '.gemini') }
+
+/** Codex's machine wide skills folder. Inside a fixture it sits under the fixture. */
+export function etcCodexSkillsDir () {
+  return process.env.TOKEN_COUPONS_HOME ? join(homeDir(), 'etc', 'codex', 'skills') : '/etc/codex/skills'
+}
+
+/**
+ * Where the Cursor app keeps its chats: one SQLite file, at a different place
+ * on each platform. A fixture puts one at cursor-app/state.vscdb in its home.
+ */
+export function cursorAppDbCandidates () {
+  const h = homeDir()
+  if (process.env.TOKEN_COUPONS_HOME) return [join(h, 'cursor-app', 'state.vscdb')]
+  const appData = process.env.APPDATA || join(h, 'AppData', 'Roaming')
+  return [
+    join(h, 'Library', 'Application Support', 'Cursor', 'User', 'globalStorage', 'state.vscdb'),
+    join(h, '.config', 'Cursor', 'User', 'globalStorage', 'state.vscdb'),
+    join(appData, 'Cursor', 'User', 'globalStorage', 'state.vscdb'),
+  ]
+}
+
 /** Where `apply` moves deleted skills so nothing is ever unrecoverable. */
 export function trashDir () {
   return process.env.TOKEN_COUPONS_TRASH || join(homeDir(), '.token-coupons', 'trash')

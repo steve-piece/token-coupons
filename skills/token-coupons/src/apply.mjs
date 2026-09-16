@@ -169,7 +169,7 @@ export function planApply (decisions, { skills = [], thresholds = {} } = {}) {
         continue
       }
       if (skill.location === 'plugin-cache' || skill.editable === false) {
-        refuse(name, action, skill.realPath, 'this folder is a copy the plugin system owns, so deleting it would come straight back on the next update. run: claude plugin uninstall ' + (skill.plugin || skill.name || name))
+        refuse(name, action, skill.realPath, ownedFolderHint(skill, name))
         continue
       }
       steps.push({
@@ -202,7 +202,7 @@ export function planApply (decisions, { skills = [], thresholds = {} } = {}) {
         path: skillMd,
         kind: 'set-gate',
         edit: { key: GATE_KEY, value: 'true', previous: skill.gateDeclared ? String(skill.gateValue) : null },
-        detail: 'stop the agent picking this skill on its own, which takes its description out of the list sent at the start of every session. You can still run it by name.' + refreshNote,
+        detail: 'stop the agent picking this skill on its own, which takes its description out of the list sent at the start of every session. You can still run it by name.' + refreshNote + gateElsewhereNote(skill),
         undo: skill.gateDeclared
           ? 'set the line ' + GATE_KEY + ': ' + skill.gateValue + ' in ' + tildify(skillMd)
           : 'delete the line ' + GATE_KEY + ': true from ' + tildify(skillMd),
@@ -226,6 +226,27 @@ export function planApply (decisions, { skills = [], thresholds = {} } = {}) {
   }
 
   return { steps, worklist, refused }
+}
+
+/**
+ * Cursor reads the same line Claude Code does, so a gate set here is set there
+ * too. Said on the step, not hidden, because the person may want it in one
+ * tool and not the other.
+ */
+function gateElsewhereNote (skill) {
+  const listing = skill && skill.listing && typeof skill.listing === 'object' ? skill.listing : {}
+  return listing.cursor && listing.cursor.listed
+    ? ' Cursor reads the same line, so it stops picking this skill on its own there as well.'
+    : ''
+}
+
+/** Why a folder some tool installs and refreshes itself is not the person's to delete, and what to do instead. */
+function ownedFolderHint (skill, name) {
+  const loc = String(skill.location || '')
+  if (loc.startsWith('cursor')) return 'this folder is a copy Cursor owns (' + (loc === 'cursor-builtin' ? 'it ships with Cursor' : 'its plugin cache') + '), so deleting it would come straight back. Remove the plugin from inside Cursor instead'
+  if (loc.startsWith('codex')) return 'this folder is a copy Codex owns (' + (loc === 'codex-system' ? 'it ships with Codex' : 'its plugin cache') + '), so deleting it would come straight back. Remove the plugin from inside Codex instead'
+  if (loc.startsWith('gemini')) return 'this folder is a Gemini CLI extension, so deleting it would come straight back. run: gemini extensions uninstall ' + (skill.plugin || name)
+  return 'this folder is a copy the plugin system owns, so deleting it would come straight back on the next update. run: claude plugin uninstall ' + (skill.plugin || skill.name || name)
 }
 
 export function firstName (skill) {

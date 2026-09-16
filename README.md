@@ -55,9 +55,26 @@ RECOMMENDED
        Never used, last edited 153 days ago, 2,327 chars sent every message.
    2  active          286  app-review
        Never used in these sessions, yet its 1,143 chars description costs 290 tokens a message.
+
+OTHER TOOLS
+  Codex
+    In its list: 57 skills, about 6,731 tokens per message (room for about 5,168: 2 percent of a
+    258400 token window, seen in its chats) over its allowance
+    Chats read: 23 (2026-02-11 to 2026-03-23), 35 skill uses, 32 matched to a skill on disk
+    Ignores disable-model-invocation: a command decision here changes nothing in Codex.
+  Cursor
+    In its list: 241 skills, about 23,102 tokens per message (it publishes no allowance)
+    Chats read: 3,185 (2026-01-28 to 2026-09-15), 1,269 skill uses, 1,109 matched to a skill on disk
+    read Cursor command line chats at ~/.cursor/projects (653)
+    read Cursor app chats at ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb (2,533)
+    Reads disable-model-invocation, so a command decision here applies there too.
+  Gemini CLI
+    In its list: 1 skills, about 58 tokens per message (it publishes no allowance)
+    Chats read: 0, 0 skill uses, 0 matched to a skill on disk
+    no Gemini CLI chats found under ~/.gemini/tmp
 ```
 
-Then it hands you a page where every row is already set to what it recommends, you change the ones you disagree with, and it carries out your decisions.
+Then it hands you a page where every row is already set to what it recommends, you change the ones you disagree with, and it carries out your decisions. A skill Codex or Cursor has been using is marked as such, so "never used" means never used in any tool on the machine, and a skill Cursor's agent picks on its own is never gated, because Cursor reads the same line.
 
 <p align="center">
   <img src="./assets/readme/decision-page.png" width="100%" alt="The decision page: a score of 43 out of 100 with the grade F, 66 skills never used, the two modes explained, $52.59 a month back against $55.72 wasted, and the ranked list where each row shows the skill, its mode today, how often the agent and you used it, its cost a month, the suggested action, why, and a dropdown for your call.">
@@ -158,6 +175,7 @@ Rewriting a description is the one job that needs a model, so it is the one job 
 - **Messages per chat and chats per week are measured**, not assumed. When no history is found, the report says so instead of guessing.
 - **On a subscription, dollars are the wrong unit**, so the report also gives the listing as a share of everything you send.
 - **Prices are a data file** with a verified-on date, never code, and the report warns you when that date is more than 60 days old.
+- **Every tool on the machine is read, not just Claude Code.** Codex, Cursor and Gemini CLI keep their skills in their own folders and their chats on disk. Those skills are rows too, a use in any of them counts, and the report says which chats it could and could not open. A skill Codex has been reading is not "never used", and a skill Cursor's agent picks on its own is not gated, because Cursor reads the same `disable-model-invocation` line. Only Claude Code's list is priced: each tool sends its own list with its own messages, on its own model, so the tokens are not added up across them.
 
 <details>
 <summary>Two runs a week apart should be comparable</summary>
@@ -227,7 +245,7 @@ token-coupons help
 
 ## Privacy
 
-- **Local files only**, and only the ones Claude Code itself reads: your skill folders, your session transcripts under `~/.claude/projects`, and `~/.claude/settings.json` for the model you run. Folders belonging to other tools are never opened.
+- **Local files only.** Your skill folders, and the chat history each tool already keeps on disk: Claude Code's under `~/.claude/projects`, Codex's under `~/.codex/sessions`, Cursor's under `~/.cursor/projects` and in the Cursor app's own chat database, Gemini CLI's under `~/.gemini/tmp`. Plus each tool's own config, for which plugins are on and which model you run. A tool whose folder is not on the machine is not looked for.
 - **No network access, ever.** Prices ship as a data file with a date on them; refreshing them is a human action, not a fetch.
 - **`report` writes nothing** beyond the paths you give it and its own run record.
 - Set `TOKEN_COUPONS_HOME` to point the whole tool at a different home directory.

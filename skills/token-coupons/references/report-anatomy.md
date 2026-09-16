@@ -64,9 +64,16 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 - `skills`: every skill as a ranked row. The page renders this. Do not paste it.
 - `heaviest` and `thin`: the longest descriptions, and the ones too short to route to.
 - `notLoaded`: every skill on disk that Claude Code does not list from this folder, each with a plain
-  `reason`, sorted by use. Nothing here is scored: an unlisted skill costs nothing per message.
-- `unmatchedCalls`: skill calls in the transcripts with no skill on disk to match, usually renamed or
-  uninstalled skills.
+  `reason`, sorted by use in any tool. A skill another tool lists says so in `listedIn`. Nothing here
+  is scored: an unlisted skill costs Claude Code nothing per message.
+- `clients`: one entry per tool on this machine (Claude Code, then Codex, Cursor, Gemini CLI as
+  present): how many skills its list holds and what that costs in its own messages, its allowance
+  where it publishes one, how many of its chats were read and how many skill uses came out, and a
+  `coverage` block saying which sources were and were not opened, with a plain sentence for each
+  gap. Quote the gap sentence whenever a per tool count is quoted: "Cursor usage is from its command
+  line chats only" changes what a zero means.
+- `unmatchedCalls`: skill calls in the chats with no skill on disk to match, usually renamed or
+  uninstalled skills, each stamped with the `client` that made the call.
 - `pricing`: which price file was read, the date on it, how old that is, and an `error` sentence when
   it could not be read at all. Quote the error rather than the missing dollars.
 - `thresholds`: the cutoffs the recommendations were made with, after any override. Useful when
@@ -86,6 +93,9 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 | `too-new` | installed inside the last 14 days and not used yet, which is expected; it is left alone and no saving is claimed |
 | `not-editable` | lives in a plugin cache; edit its source copy when one is on this machine, or the next update wipes the change |
 | `stale` | the file has not been touched in a long time |
+| `used-elsewhere` | another tool on this machine has used it, so the folder stays whatever Claude Code's list does |
+| `picked-elsewhere` | Cursor's agent chose it on its own, and Cursor reads the same gate line, so gating it here would take it away there; it is kept |
+| `usage-unmeasured` | a tool that lists it left no chats this run could read, so never used is not certain and a delete is held back |
 
 ## Actions the tool recommends
 
@@ -98,3 +108,6 @@ only the person can make.
 
 Any number resting on an assumption carries a `note` or `assumed: true`. Repeat those words when you
 repeat the number. Subagent transcripts are not read, so every count is a floor, never a ceiling.
+Every row's `calls` is Claude Code's; uses in the other tools sit in `callsByClient` and are summed
+in `callsElsewhere`. Before calling any skill never used, check `clients[].coverage`: a tool with
+`measured: false` was on the machine but left nothing to read, and that is a gap, not a zero.
