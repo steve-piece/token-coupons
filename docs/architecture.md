@@ -19,15 +19,25 @@ The HTML report lets a person mark decisions; `apply` carries them out.
 Listed versus on disk: not every skill folder on the machine is in that
 listing. Claude Code reads `~/.claude/skills`, the `.claude/skills` of the
 project you are working in, and the skills of enabled plugins out of the plugin
-cache, and those are the only folders this tool opens. Some of what it passes
-on the way is still not listed: marketplace checkouts, plugin source repos,
-other projects, disabled plugins and older versions left in the cache sit on
-disk without reaching the listing, so they cost nothing per message. Folders
-belonging to other tools are out of scope entirely. They are never scanned, so
-they are not rows in the report at all, not even unlisted ones.
-Every economic number, recommendation and dollar figure runs over listed skills
-only; everything else is reported separately as `notLoaded`, so nobody thinks
-it was missed.
+cache. Some of what the scan passes on the way is still not listed: marketplace
+checkouts, plugin source repos, other projects, disabled plugins and older
+versions left in the cache sit on disk without reaching the listing, so they
+cost nothing per message. Every economic number, recommendation and dollar
+figure runs over listed skills only; everything else is reported separately as
+`notLoaded`, so nobody thinks it was missed.
+
+The other tools on the machine are read as well. Codex, Cursor and Gemini CLI
+each keep skills in their own folders (and share `~/.agents/skills`), each put
+a listing in their own messages, and each leave their chats on disk. So every
+skill folder on the machine is a row, each row says which tools list it, a use
+in any tool counts as a use, and the report carries one `clients` entry per
+tool saying what its list holds and which of its chats were and were not read.
+Only Claude Code's list is priced: each tool sends its own list with its own
+messages on its own model, and adding those tokens together would describe no
+message anyone sends. Two rules follow from the reading. A skill another tool
+has used is never proposed for deletion. A skill another gate honouring tool
+(Cursor) picks on its own is never gated, because the gate would take it away
+there too.
 
 ## House rules (non-negotiable)
 
@@ -56,13 +66,21 @@ plugin manifests, and a private `package.json` that exists for `pnpm test`.
 ```
 bin/token-coupons.mjs      CLI: report (default) | apply | describe | pricing | help
 src/version.mjs            VERSION, the one place the number is written
-src/paths.mjs              homeDir(), claudeDir(), projectsDir(), pluginsDir(), trashDir(), runsDir(), tildify()
+src/paths.mjs              homeDir(), claudeDir(), projectsDir(), pluginsDir(), trashDir(), runsDir(), tildify(),
+                           agentsDir(), codexDir(), cursorDir(), geminiDir(), etcCodexSkillsDir(), cursorAppDbCandidates()
+src/clients.mjs            CLIENTS (id, label, sigil, honoursGate), presentClients(), otherToolRoots(), skillDirsUnder(root, depth),
+                           readCodexConfig(), codexImplicitPolicy(dir), readCursorPlugins(), listingVerdicts(row, {cwd, state, claude}),
+                           entryChars(client, row), listingBudgetFor(client, {contextWindow}), under(path, root), insideCwd(root, cwd)
 src/lib/util.mjs           readText, readJson, listDir, isDir, isSymlink, safeReal, walk,
                            parseFrontmatter (block scalars ok), setFrontmatterKey (one line values),
                            setFrontmatterText (paragraph values, writes a folded block), fmt, money
 src/budget.mjs             CHARS_PER_TOKEN=4, detectContextWindow, listingBudget, listingCost, nameLineChars, toTokens
-src/discover.mjs           discoverSkills({cwd}) -> Skill[]   (Claude Code folders only, see shape below; cwd decides which project skills are listed)
-src/calls.mjs              scanTranscripts(since, {cacheTtlMinutes}) -> {calls: Call[], sessions: Session[]}, sessionStats(sessions, {since, today, cacheTtlMinutes})
+src/discover.mjs           discoverSkills({cwd}) -> Skill[]   (every tool's folders, see shape below; cwd decides which project skills are listed)
+src/calls.mjs              scanTranscripts(since, {cacheTtlMinutes}) -> {calls: Call[], sessions: Session[]}, sessionStats(sessions, {since, today, cacheTtlMinutes}),
+                           scanAllClients(since, opts) -> {byClient: {claude, codex, cursor, gemini}, calls: Call[] stamped with client}
+src/calls-codex.mjs        scanCodex(since) -> {calls, sessions, coverage}   rollouts under ~/.codex/sessions and archived_sessions
+src/calls-cursor.mjs       scanCursor(since) -> {calls, sessions, coverage}  command line transcripts under ~/.cursor/projects, plus the app's state.vscdb through node:sqlite when available
+src/calls-gemini.mjs       scanGemini(since) -> {calls, sessions, coverage}  chats under ~/.gemini/tmp/<hash>/chats
 src/economics.mjs          economics(rows, budget) -> Economics
 src/recommend.mjs          recommend(rows, {economics, budget, thresholds, today}) -> {rows: RankedRow[], heaviest, thin, thresholds, counts}
 src/pricing.mjs            loadPricing(path?, {today}?) -> Pricing, costModel({wastedTokens, listingTokens, stats, pricing, cached, today}) -> Cost
@@ -103,10 +121,16 @@ tests/dash-scan.mjs        fails on any forbidden dash in the repo
   plugin: 'bytheslice' | null,
   marketplace: 'bytheslice' | null,     // the cache or checkout folder the row came out of
   installKey: 'bytheslice@steve-piece' | null,   // plugin@marketplace, from installed_plugins.json
-  location: 'user' | 'user-symlink' | 'project' | 'project-source' | 'marketplace' | 'plugin-cache' | 'other',
-  editable: true | false,               // false only for plugin-cache
+  location: 'user' | 'user-symlink' | 'project' | 'project-source' | 'marketplace' | 'plugin-cache' | 'other'
+          | 'agents' | 'codex' | 'codex-system' | 'codex-plugin-cache' | 'codex-machine'
+          | 'cursor' | 'cursor-builtin' | 'cursor-plugin-cache' | 'cursor-plugin-local'
+          | 'gemini' | 'gemini-extension' | 'project-agents' | 'project-codex' | 'project-cursor' | 'project-gemini',
+  editable: true | false,               // false for every copy a tool installs and refreshes itself: plugin caches, bundled skills, extensions
   loaded: true | false,                 // true iff Claude Code lists it from the cwd this run was given
   loadedReason: 'enabled plugin x@y',   // one plain sentence, set either way
+  listing: { claude: { listed, reason }, codex: {...}, cursor: {...}, gemini: {...} },  // one verdict per tool ON THIS MACHINE; absent tools have no key
+  listedIn: ['claude', 'codex'],        // the ids above whose listed is true, in CLIENTS order
+  codexImplicit: true | false | null,   // agents/openai.yaml policy.allow_implicit_invocation, null when there is no sidecar
   sourcePath: '/abs/editable/copy' | null,        // loaded plugin-cache rows whose source is on this machine
   copies: [{ path, location, sameDescription }],  // source copies folded into this row
   mode: 'context' | 'command',          // command iff disable-model-invocation is true; absent = context|mode: 'context' | 'command',          // command iff disable-model-invocation is true; absent = context
@@ -124,10 +148,29 @@ plugin cache (`~/.claude/plugins/installed_plugins.json` plus `enabledPlugins`
 in settings). Not loaded: marketplace checkouts, plugin source repos under
 `~/Projects` (`project-source`), another project's `.claude/skills`, disabled
 plugins, and older versions left behind in the cache. `loadedReason` says which
-of those it was. Folders no Claude Code install reads are not scanned, so they
-produce no row either way; `classifyLocation` still carries branches for other
-tools' skill folders, but no scanned root reaches them, so those values are dead
-and belong out of the code.
+of those it was, and for a folder Claude Code never reads it names the tool the
+folder belongs to ("a Codex skill; Claude Code does not read that folder").
+
+The other tools' verdicts come from `listingVerdicts` in clients.mjs, one per
+tool whose dot folder exists, each checked against the tool's own rules and
+config. Codex: `~/.codex/skills` (with its bundled `.system` tier),
+`~/.agents/skills` walked three levels down because Codex lists skills inside
+skills, `/etc/codex/skills`, a project's `.agents/skills` or `.codex/skills`
+when `cwd` is inside it, and its plugin cache for plugins `config.toml` marks
+enabled; a skill `config.toml` switches off by path, or whose
+`agents/openai.yaml` sets `allow_implicit_invocation: false`, is not listed.
+Cursor: `~/.cursor/skills`, its bundled `~/.cursor/skills-cursor`, the top level
+of `~/.agents/skills`, the top level of `~/.claude/skills` and `~/.codex/skills`
+as compatibility paths, the same four folders inside the project `cwd` is in,
+plugins under development in `~/.cursor/plugins/local`, and its plugin cache for
+the commit the manifest beside the cache marks installed and enabled (Cursor
+caches a plugin twice, and a `<commit>.installed` marker beside the copy it
+uses is what breaks the tie). A skill nested inside another skill is not counted
+for Cursor, because Cursor publishes no rule for those, and the reason says so.
+Gemini CLI: `~/.gemini/skills`, the skills of each folder under
+`~/.gemini/extensions`, and a project's `.gemini/skills`. Every alias of a row
+is checked, so a skill kept in `~/.agents/skills` and linked into
+`~/.cursor/skills` is listed by Cursor through the link.
 
 `linkCopies()` runs last and folds a source copy into the loaded row it is the
 source of: a marketplace checkout of a cached plugin skill, or a repo under
@@ -139,9 +182,19 @@ the returned list, so one plugin skill is one row.
 ### Row (Skill joined with calls, produced in report.mjs)
 
 Skill plus: `calls, commandCalls, contextCalls, firstSeen, lastSeen`
-(YYYY-MM-DD or null), `listingChars, listingTokens, descriptionTokens,
-capped` from `listingCost`, and `path`: `realPath` run through `tildify`, which
-is the value the HTML page writes into the decisions file.
+(YYYY-MM-DD or null), which are Claude Code's, because those are the numbers
+that say whether Claude Code's router has ever chosen the skill; then
+`callsByClient: { claude: {calls, commandCalls, contextCalls, firstSeen, lastSeen}, codex: {...}, ... }`
+holding only the tools that used it, `callsElsewhere` (every tool but Claude
+Code), `callsAllClients`, `lastSeenAnywhere`, and `unmeasuredClients`: the ids
+in `listedIn` whose chats this run could not read, which is what holds a delete
+back. Then `listingChars, listingTokens, descriptionTokens, capped` from
+`listingCost`, and `path`: `realPath` run through `tildify`, which is the value
+the HTML page writes into the decisions file.
+
+A call that carries the path of the SKILL.md it read (Codex and Cursor do) is
+matched by that path first, through the real folder and every alias, so a
+shortcut and its target are one skill; otherwise by name as before.
 
 Calls attach to every row, listed or not, so a project skill used inside its own
 project still shows its history. Only rows with `loaded: true` go on to
@@ -156,7 +209,8 @@ Row plus:
 recommendation: {
   action: 'keep' | 'command' | 'context' | 'optimize' | 'delete' | 'review',
   reason: 'short, numbers first, at most two sentences (see the style rule below)',
-  flags: ['never-called', 'summoned-only', 'heavy-description', 'thin-description', 'capped', 'unroutable', 'dormant-command', 'not-editable', 'stale', 'too-new'],
+  flags: ['never-called', 'summoned-only', 'heavy-description', 'thin-description', 'capped', 'unroutable', 'dormant-command', 'not-editable', 'stale', 'too-new',
+          'used-elsewhere', 'picked-elsewhere', 'usage-unmeasured'],
   impactTokensPerCall: 118,      // tokens saved per API call if the action is taken (0 for keep)
   rank: 1,                       // 1 = most impactful
 }
@@ -167,20 +221,24 @@ Rules, in priority order (first match wins; flags accumulate regardless):
 1. `mode === 'command'` and `calls === 0`: action `review`, flag `dormant-command`. Costs one line; nothing to save; the person decides whether it still exists for a reason.
 2. `mode === 'context'`, `calls === 0`, `descriptionChars < thresholds.thinChars`: action `optimize`, flags `never-called`, `thin-description`. The description may be too thin to route to; rewrite before deciding anything else. (The thin flag is only meaningful when the invocation count is zero. A thin description that gets routed to is fine.)
 3. `mode === 'context'`, `calls === 0`, and `modifiedOn` within `thresholds.newSkillDays`: action `keep`, flag `too-new`. A skill installed days ago has had no chance to be chosen, so a zero call count is not evidence. It outranks the stale and never-called rules; a thin description still wins over it, because that is worth fixing on day one.
-4. `mode === 'context'`, `calls === 0`, `location` in `user`, `user-symlink`, `project`, and `modifiedOn` older than `thresholds.staleDays`: action `delete`, flags `never-called`, `stale`. Alternative offered in the UI: `command`.
+3b. `mode === 'context'`, `contextCalls === 0`, and a gate honouring tool other than Claude Code (Cursor) has `contextCalls > 0` in `callsByClient`: action `keep`, flag `picked-elsewhere`. Claude Code never picked it, but Cursor's agent did and reads the same line, so gating it here would take it away there. Covers both never called and summoned only.
+4. `mode === 'context'`, `calls === 0`, `location` in `user`, `user-symlink`, `project`, `modifiedOn` older than `thresholds.staleDays`, `callsElsewhere === 0`, and `unmeasuredClients` empty: action `delete`, flags `never-called`, `stale`. Alternative offered in the UI: `command`. A use in any other tool, or a listing tool whose chats could not be read, drops this to rule 5 with a clause saying which.
 5. `mode === 'context'`, `calls === 0`: action `command`, flag `never-called`.
 6. `mode === 'context'`, `calls > 0`, `contextCalls === 0`: action `command`, flag `summoned-only`.
 7. `mode === 'context'`, `contextCalls > 0`, (`descriptionChars > thresholds.heavyChars` or `capped`): action `optimize`, flag `heavy-description` (and `capped` when over the per-entry cap).
 8. otherwise `keep`.
 
-Extra flags: `unroutable` if the name is in `economics.overflowUnroutable.names`; `not-editable` if `editable === false`.
+Extra flags: `unroutable` if the name is in `economics.overflowUnroutable.names`; `not-editable` if `editable === false`; `used-elsewhere` if `callsElsewhere > 0`; `picked-elsewhere` per rule 3b; `usage-unmeasured` if `unmeasuredClients` is not empty.
 
 Reason style: numbers first, at most two sentences, under 30 words. The reason
 does not restate a flag, because the renderers already show `unroutable` and
-`not-editable` as badges. The single exception is `not-editable`, which appends
-one clause: with a `sourcePath` it says to edit the source copy because the
-installed copy refreshes on the next plugin update, and without one it says the
-change belongs in the plugin's own repository.
+`not-editable` as badges. Two exceptions append one clause each. `not-editable`:
+with a `sourcePath` it says to edit the source copy because the installed copy
+refreshes on the next plugin update, and without one it says the change belongs
+in the plugin's own repository. The other tools: a never called skill used
+elsewhere says "Used 8 times in Codex, so keep the folder", and a stale skill
+held back from delete by an unread tool says that tool lists it too and its
+chats could not be read, so it is gated rather than deleted.
 
 `impactTokensPerCall`: for `command` and `delete`, `listingTokens - ceil(nameLineChars/4)`; for `optimize`, `max(0, listingTokens - ceil((thresholds.optimizeTargetChars + nameLineChars)/4))`; for `review` and `keep`, 0. Sort by impact desc, then descriptionTokens desc, then name.
 
@@ -202,6 +260,22 @@ Stats:   { measured, sessions, days, firstSession, sessionsPerDay, sessionsPerWe
 `apiCalls` counts distinct `requestId` per transcript (one response is stored
 as several lines). Synthetic messages are skipped. Subagent transcripts are not
 read; everything is a lower bound.
+
+The other tools' scanners return the same three things, `{calls, sessions,
+coverage}`, and `scanAllClients` gathers them under `byClient` with a flat
+`calls` list where every call carries `client` and, for Codex and Cursor, the
+`path` of the SKILL.md it read. Their sessions are lighter (`client, source,
+id, project, firstTs, lastTs, apiCalls, models, skillCalls`, plus
+`contextWindow` for Codex) and never feed `sessionStats`: the cost multipliers
+are Claude Code's. `coverage` is `{measured, sources: [{label, path, files,
+read}], notes: [sentence]}` and is the honesty record: `measured` false means
+no chat of that tool was read this run, so a skill it lists cannot be called
+never used. What each tool counts as a use is written at the top of its module:
+Codex's `<skill>` block for `$name` and a command that reads a SKILL.md;
+Cursor's attached skill or `/name` and a Read of a SKILL.md, from the command
+line transcripts and, through `node:sqlite` (Node 22.5 or newer), the app's own
+chat database; Gemini CLI's `activate_skill` call. A read of a skill the person
+just typed is the same use, not a second one.
 
 `listingWrites` counts the requests that pay for the listing at the cache write
 rate rather than the read rate, one per break of the cached prefix. A break is
@@ -292,8 +366,19 @@ measured sessions per day and per week.
   skills: RankedRow[],           // every LISTED skill, sorted by rank
   heaviest: RankedRow[], thin: RankedRow[],
   notLoaded: [{ name, path, location, reason, plugin, installKey, mode,
-                descriptionChars, calls, commandCalls, contextCalls, lastSeen }],
-  unmatchedCalls: [{skill, calls}],
+                descriptionChars, calls, commandCalls, contextCalls, lastSeen,
+                listedIn, listing, callsByClient, callsElsewhere, callsAllClients, lastSeenAnywhere, unmeasuredClients }],
+  unmatchedCalls: [{client, skill, calls}],
+  clients: [{                    // one per tool ON THIS MACHINE, Claude Code first
+    id, label, honoursGate, sigil,
+    skills,                      // rows this tool lists from cwd
+    listingChars, listingTokens, // what that list costs in its own messages (Claude Code's are the priced figures above)
+    budget: { chars, tokens, contextWindow, source } | null,   // null where the tool publishes no allowance
+    overBudget: bool | null,
+    onlyHere: [name],            // skills no other tool lists
+    sessions, firstSession, lastSession, skillCalls, callsMatched, modelsSeen: [{model, apiCalls}],
+    coverage: { measured, sources: [{label, path, files, read}], notes: [sentence] },
+  }],
   summary: {                     // the thirteen fields the agent reads first
     skills, notListed, listingTokensPerCall, overBudgetRatio, neverCalledContext, unroutable, summonedOnly,
     wastedTokensPerCall, savedTokensPerCallIfApplied, fitsAfter,
@@ -329,8 +414,12 @@ declaredContext, gateDeclaredAnywhere, transcriptsRead, callsTotal,
 callsMatched, calledSkills, neverCalled, neverCalledCommand, neverCalledContext`,
 and adds three: `onDiskNotListed` (the length of `notLoaded`),
 `notListedByReason` (`{reason: count}`) and `withSourceCopy` (listed rows
-carrying a `sourcePath`). `skills` and every never-called count are over listed
-rows; `callsMatched` counts calls on listed and unlisted rows together.
+carrying a `sourcePath`), then four for the other tools: `clientsRead` (ids),
+`listedByOtherToolsOnly` (unlisted rows some other tool lists),
+`callsElsewhere` (uses in other tools, listed and unlisted rows together) and
+`usedElsewhere` (listed rows with any such use). `skills` and every
+never-called count are over listed rows and Claude Code's calls;
+`callsMatched` counts Claude Code's calls on listed and unlisted rows together.
 
 ### Decisions file (HTML export in, apply in)
 

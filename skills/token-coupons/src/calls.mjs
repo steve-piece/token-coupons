@@ -13,6 +13,12 @@
 // Subagent transcripts (the <session>/subagents/*.jsonl files) are not read.
 // Subagents carry their own listing, so everything here is a lower bound.
 //
+// The other tools on the machine are read by their own modules (calls-codex,
+// calls-cursor, calls-gemini) and gathered by scanAllClients at the bottom of
+// this file. Their sessions never feed the cost multipliers below, which are
+// Claude Code's; their calls are joined onto skills so that "never used" can
+// mean never used anywhere.
+//
 // One more thing comes out of the same walk: how many times per session the
 // prompt cache is broken from the front. The skill listing rides in the system
 // prompt, which sits at the very front of the cached prefix, so a break means
@@ -25,8 +31,12 @@
 import { readFileSync } from 'node:fs'
 import { join, basename } from 'node:path'
 
-import { listDir } from './lib/util.mjs'
-import { projectsDir } from './paths.mjs'
+import { isDir, listDir } from './lib/util.mjs'
+import { projectsDir, tildify } from './paths.mjs'
+import { CLIENTS } from './clients.mjs'
+import { scanCodex } from './calls-codex.mjs'
+import { scanCursor } from './calls-cursor.mjs'
+import { scanGemini } from './calls-gemini.mjs'
 
 /**
  * How long the prompt cache survives with no traffic. One hour on a Claude
@@ -171,6 +181,41 @@ export function scanTranscripts (since = null, { cacheTtlMinutes = DEFAULT_CACHE
     if (s.apiCalls > 0) sessions.push(s)
   }
   return { calls, sessions }
+}
+
+const OTHER_SCANNERS = { codex: scanCodex, cursor: scanCursor, gemini: scanGemini }
+
+/**
+ * Every client's chats in one call. Claude Code's scan is the one above and
+ * keeps its shape; the others come back beside it under their own ids, each
+ * with a `coverage` block saying what was read and what could not be. `calls`
+ * is the flat union, every call stamped with its client, which is what the
+ * report joins onto skills.
+ *
+ * A client is scanned only when its folder exists. A tool that is not on the
+ * machine has no usage to be unsure about.
+ */
+export function scanAllClients (since = null, opts = {}) {
+  const claude = scanTranscripts(since, opts)
+  const files = transcriptFiles().length
+  const byClient = {
+    claude: Object.assign({}, claude, {
+      coverage: {
+        measured: claude.sessions.length > 0,
+        sources: [{ label: 'Claude Code chats', path: tildify(projectsDir()), files, read: true }],
+        notes: files ? [] : ['no Claude Code chats found under ' + tildify(projectsDir())],
+      },
+    }),
+  }
+  for (const client of CLIENTS) {
+    if (client.id === 'claude' || !isDir(client.dir())) continue
+    byClient[client.id] = OTHER_SCANNERS[client.id](since)
+  }
+  const calls = []
+  for (const [id, r] of Object.entries(byClient)) {
+    for (const c of r.calls) calls.push(Object.assign({ client: id, path: null }, c))
+  }
+  return { byClient, calls }
 }
 
 /**

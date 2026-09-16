@@ -4,6 +4,7 @@
 // every message", and gating is "start only when you type its name".
 
 import { fmt, money } from './lib/util.mjs'
+import { clientLabel } from './clients.mjs'
 
 const ANSI = {
   reset: '\x1b[0m',
@@ -48,6 +49,11 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   line(paint.bold('token-coupons') + ' ' + (r.tool && r.tool.version ? 'v' + r.tool.version + ' ' : '') + paint.dim('(' + meta.join(', ') + ')'))
   line(paint.dim('Claude Code carries a list of every installed skill, name and description, in every message you send. This is what that list costs.'))
   line(paint.dim('Cost is counted in tokens: small chunks of text, about four characters each, and everything you send is billed by the token.'))
+  const clients = Array.isArray(r.clients) ? r.clients : []
+  const others = clients.filter((c) => c.id !== 'claude')
+  if (others.length) {
+    line(paint.dim('Also on this machine: ' + others.map((c) => c.label).join(', ') + '. Their skills and chats are read too, so a skill kept for one of them is a row here and "never used" means never used anywhere. See OTHER TOOLS.'))
+  }
 
   // SINCE YOUR LAST RUN
   // First, because it decides how much of the rest is news. Silence here means
@@ -191,20 +197,55 @@ export function renderText (report, { color = false, top = 15 } = {}) {
 
   // NEVER CALLED
   head('NEVER CALLED')
-  const neverContext = skills.filter((s) => s.calls === 0 && s.mode !== 'command').map(nameOf)
-  const neverCommand = skills.filter((s) => s.calls === 0 && s.mode === 'command').map(nameOf)
+  const neverContext = skills.filter((s) => s.calls === 0 && s.mode !== 'command')
+  const neverCommand = skills.filter((s) => s.calls === 0 && s.mode === 'command')
+  // A skill Claude Code never called may still be in daily use next door,
+  // and that is worth a bracket: the folder stays whatever is decided here.
+  const withElsewhere = (s) => nameOf(s) + (s.callsElsewhere ? ' (' + elsewhereLabel(s) + ')' : '')
   line('  Described on every message (' + fmt(neverContext.length) + '):')
-  line('    ' + wrap(neverContext.length ? neverContext.join(', ') : 'none', 100, '    '))
+  line('    ' + wrap(neverContext.length ? neverContext.map(withElsewhere).join(', ') : 'none', 100, '    '))
   line('  Already start only when you type their name (' + fmt(neverCommand.length) + '):')
-  line('    ' + wrap(neverCommand.length ? neverCommand.join(', ') : 'none', 100, '    '))
+  line('    ' + wrap(neverCommand.length ? neverCommand.map(withElsewhere).join(', ') : 'none', 100, '    '))
+  const usedNextDoor = skills.filter((s) => s.calls === 0 && s.callsElsewhere > 0).length
+  if (usedNextDoor) line(paint.dim('  ' + fmt(usedNextDoor) + ' of these were used in another tool (in brackets), so a change here only touches what Claude Code sends; the folder stays.'))
 
   // CALLED
   head('CALLED')
   const called = skills.filter((s) => s.calls > 0).sort((a, b) => b.calls - a.calls || (nameOf(a) < nameOf(b) ? -1 : 1))
   if (!called.length) line('  none in the sessions read')
   else {
-    const rows = called.map((s) => [nameOf(s), fmt(s.calls), fmt(s.contextCalls), fmt(s.commandCalls), s.lastSeen || '', s.mode === 'command' ? 'starts only when you type it' : ''])
-    for (const l of table([['skill', 'uses', 'agent picked', 'you typed', 'last seen', ''], ...rows], [1, 2, 3])) line('  ' + l)
+    const rows = called.map((s) => [nameOf(s), fmt(s.calls), fmt(s.contextCalls), fmt(s.commandCalls), s.lastSeen || '', elsewhereLabel(s), s.mode === 'command' ? 'starts only when you type it' : ''])
+    for (const l of table([['skill', 'uses', 'agent picked', 'you typed', 'last seen', 'elsewhere', ''], ...rows], [1, 2, 3])) line('  ' + l)
+  }
+
+  // OTHER TOOLS
+  head('OTHER TOOLS')
+  if (!others.length) line('  none found: no Codex, Cursor or Gemini CLI folder on this machine')
+  else {
+    line(paint.dim('  each tool sends its own skill list with its own messages, on its own model, so these are not added to the figures above.'))
+    for (const c of others) {
+      line()
+      line('  ' + paint.bold(c.label))
+      line('    In its list: ' + fmt(c.skills) + ' skills, about ' + fmt(c.listingTokens) + ' tokens per message' +
+        (c.budget ? ' (room for about ' + fmt(c.budget.tokens) + ': ' + c.budget.source + ')' : ' (it publishes no allowance)') +
+        (c.overBudget ? ' ' + paint.red('over its allowance') : ''))
+      if (Array.isArray(c.onlyHere) && c.onlyHere.length) {
+        const shown = c.onlyHere.slice(0, 12)
+        const more = c.onlyHere.length - shown.length
+        line(paint.dim('    Listed only here (' + fmt(c.onlyHere.length) + '): ' + wrap(shown.join(', ') + (more ? ', and ' + fmt(more) + ' more in the JSON report' : ''), 100, '      ')))
+      }
+      line('    Chats read: ' + fmt(c.sessions) + (c.firstSession ? ' (' + c.firstSession + ' to ' + c.lastSession + ')' : '') +
+        ', ' + fmt(c.skillCalls) + ' skill uses, ' + fmt(c.callsMatched) + ' matched to a skill on disk' +
+        (Array.isArray(c.modelsSeen) && c.modelsSeen.length ? paint.dim('  on ' + c.modelsSeen.slice(0, 3).map((m) => m.model).join(', ')) : ''))
+      const cov = c.coverage || {}
+      for (const src of Array.isArray(cov.sources) ? cov.sources : []) {
+        line(paint.dim('    ' + (src.read ? 'read ' : 'could not read ') + src.label + ' at ' + src.path + (src.files ? ' (' + fmt(src.files) + ')' : '')))
+      }
+      for (const n of Array.isArray(cov.notes) ? cov.notes : []) line(paint.dim('    ' + n))
+      line(paint.dim(c.honoursGate
+        ? '    Reads disable-model-invocation, so a command decision here applies there too.'
+        : '    Ignores disable-model-invocation: a command decision here changes nothing in ' + c.label + '.'))
+    }
   }
 
   // ON DISK, NOT LISTED
@@ -212,12 +253,15 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   const notLoaded = Array.isArray(r.notLoaded) ? r.notLoaded : []
   if (!notLoaded.length) line('  every skill found on disk is in the listing')
   else {
-    line(paint.dim('  these cost nothing per message: Claude Code does not put them in the listing from this folder. Grouped by why.'))
+    line(paint.dim('  these cost Claude Code nothing per message: it does not put them in its list from this folder. Grouped by why; uses in any tool are in brackets.'))
     const byReason = new Map()
     for (const n of notLoaded) { const a = byReason.get(n.reason) || []; a.push(n); byReason.set(n.reason, a) }
     for (const [reason, list] of [...byReason.entries()].sort((a, b) => b[1].length - a[1].length)) {
       line('  ' + fmt(list.length) + '  ' + reason)
-      const names = list.map((n) => n.name + (n.calls ? ' (' + uses(n.calls) + ')' : ''))
+      const names = list.map((n) => {
+        const all = Number(n.callsAllClients) || Number(n.calls) || 0
+        return n.name + (all ? ' (' + uses(all) + (n.callsElsewhere ? ': ' + elsewhereLabel(n) + (n.calls ? ', Claude Code ' + fmt(n.calls) : '') : '') + ')' : '')
+      })
       line(paint.dim('     ' + wrap(names.join(', '), 100, '     ')))
     }
   }
@@ -227,8 +271,8 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   const un = Array.isArray(r.unmatchedCalls) ? r.unmatchedCalls : []
   if (!un.length) line('  every recorded skill call matched an installed skill')
   else {
-    line(paint.dim('  calls in the transcripts that match no skill on disk today: removed, renamed, a plugin no longer present, or a skill built into Claude Code itself'))
-    for (const u of un) line('  ' + u.skill + paint.dim('  ' + uses(u.calls)))
+    line(paint.dim('  calls in the chats that match no skill on disk today: removed, renamed, a plugin no longer present, or a skill built into the tool itself'))
+    for (const u of un) line('  ' + u.skill + paint.dim('  ' + uses(u.calls) + (u.client && u.client !== 'claude' ? ' in ' + clientLabel(u.client) : '')))
   }
 
   line()
@@ -267,6 +311,15 @@ function actionLabel (k) {
 }
 
 function baseName (s) { return (Array.isArray(s.names) && s.names[0]) || s.name || '' }
+
+/** "Codex 8, Cursor 3": uses in every tool but Claude Code, or an empty string. */
+function elsewhereLabel (s) {
+  const by = s && s.callsByClient && typeof s.callsByClient === 'object' ? s.callsByClient : {}
+  return Object.entries(by)
+    .filter(([id, t]) => id !== 'claude' && t && Number(t.calls) > 0)
+    .map(([id, t]) => clientLabel(id) + ' ' + fmt(t.calls))
+    .join(', ')
+}
 
 function uses (n) { return fmt(n) + (Number(n) === 1 ? ' use' : ' uses') }
 

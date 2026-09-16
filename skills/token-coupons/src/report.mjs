@@ -7,10 +7,14 @@
 // economics, rank a recommendation per skill, price the waste, then write the
 // short summary block an agent reads before anything else.
 
+import { realpathSync } from 'node:fs'
+import { dirname } from 'node:path'
+
 import { VERSION } from './version.mjs'
 import { runRecord, compareRuns } from './runs.mjs'
 import { discoverSkills } from './discover.mjs'
-import { scanTranscripts, sessionStats } from './calls.mjs'
+import { scanAllClients, sessionStats } from './calls.mjs'
+import { CLIENTS, clientLabel, entryChars, listingBudgetFor } from './clients.mjs'
 import { listingBudget, listingCost } from './budget.mjs'
 import { economics as computeEconomics } from './economics.mjs'
 import { recommend } from './recommend.mjs'
@@ -41,17 +45,23 @@ export function dayOf (value = null) {
 export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null, cached = true, thresholds = {}, today = null, cwd = process.cwd(), cacheTtlMinutes = undefined, previous = null, runFlags = {}, ranAt = null } = {}) {
   const generatedOn = dayOf(today)
   const everything = discoverSkills({ cwd })
-  const { calls, sessions } = scanTranscripts(since || null, { cacheTtlMinutes })
+  const scans = scanAllClients(since || null, { cacheTtlMinutes })
+  // Claude Code's chats alone feed the cost multipliers: the listing being
+  // priced is the one Claude Code sends, on the model Claude Code ran.
+  const { calls, sessions } = scans.byClient.claude
   const stats = sessionStats(sessions, { since: since || null, today: today || null, cacheTtlMinutes })
   const budget = listingBudget(budgetOpts || {})
 
-  // Calls attach to every row, listed or not, so a project skill used inside
-  // its project still shows its history. Economics run over the LISTED rows
-  // only: an unlisted skill costs nothing per message and cannot be dropped.
-  const joined = joinCalls(everything, calls, budget)
+  // Calls from every client attach to every row, listed or not, so a project
+  // skill used inside its project still shows its history and a skill Codex
+  // reads is not "never used". Economics run over the rows Claude Code LISTS:
+  // an unlisted skill costs nothing per message here and cannot be dropped.
+  const joined = joinCalls(everything, scans.calls, budget)
+  markUnmeasured(joined.rows, scans.byClient)
   const rows = joined.rows.filter((r) => r.loaded)
-  const notLoaded = joined.rows.filter((r) => !r.loaded).map(briefUnlisted).sort((a, b) => b.calls - a.calls || (a.name < b.name ? -1 : 1))
+  const notLoaded = joined.rows.filter((r) => !r.loaded).map(briefUnlisted).sort((a, b) => b.callsAllClients - a.callsAllClients || (a.name < b.name ? -1 : 1))
   const unmatchedCalls = joined.unmatchedCalls
+  const clients = clientSummaries(joined.rows, scans.byClient)
 
   const economics = computeEconomics(rows, budget)
   const ranked = recommend(rows, { economics, budget, thresholds: thresholds || {}, today: today || undefined })
@@ -73,8 +83,16 @@ export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null
     cost.dollarsPerTokenPerMonth = rate
   }
 
-  const totals = buildTotals(rows, sessions, calls, notLoaded)
+  const totals = buildTotals(rows, sessions, calls, notLoaded, clients)
   const summary = buildSummary({ rows: ranked.rows, economics, stats, pricing, cost, counts: ranked.counts, notLoaded })
+  // Claude Code's own entry carries the priced figures, so the two can never disagree.
+  const mine = clients.find((c) => c.id === 'claude')
+  if (mine) {
+    mine.listingTokens = economics.perSession.totalListingTokens
+    mine.listingChars = economics.perSession.contextListingChars + economics.perSession.commandListingChars
+    mine.budget = { chars: budget.chars, tokens: budget.tokens, contextWindow: budget.contextWindow, source: budget.windowSource }
+    mine.overBudget = economics.perSession.fitsBudget === false
+  }
 
   // The record this run leaves for the next one, and what moved since the last.
   // `run` is built here rather than by the caller so that whatever is compared
@@ -105,6 +123,7 @@ export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null
     thin: ranked.thin,
     notLoaded,
     unmatchedCalls,
+    clients,
     summary,
     run,
     previous: previous
@@ -123,7 +142,7 @@ export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null
   }
 }
 
-/** The compact row shape for skills that are on disk but not in the listing. */
+/** The compact row shape for skills that are on disk but not in Claude Code's listing. */
 function briefUnlisted (r) {
   return {
     name: (Array.isArray(r.names) && r.names[0]) || r.name,
@@ -138,55 +157,153 @@ function briefUnlisted (r) {
     commandCalls: r.commandCalls,
     contextCalls: r.contextCalls,
     lastSeen: r.lastSeen,
+    listedIn: r.listedIn || [],
+    listing: r.listing || {},
+    callsByClient: r.callsByClient || {},
+    callsElsewhere: r.callsElsewhere || 0,
+    callsAllClients: r.callsAllClients || 0,
+    lastSeenAnywhere: r.lastSeenAnywhere || null,
+    unmeasuredClients: r.unmeasuredClients || [],
   }
 }
 
 /**
- * Attribute every recorded Skill call to a discovered skill. A call names a
- * skill exactly as the client resolved it (`plugin:name` or `name`); the
- * canonical name of a skill wins over an alias, and the first skill to claim
- * a name keeps it. Calls that match nothing are counted under unmatchedCalls
- * so a stale transcript never disappears silently.
+ * Which of a row's listing clients this run could not read chats for. A
+ * skill listed by a tool whose usage is unknown is never "never used" with
+ * enough confidence to delete; recommend.mjs reads this to hold back.
+ */
+function markUnmeasured (rows, byClient) {
+  for (const r of rows) {
+    r.unmeasuredClients = (r.listedIn || []).filter((id) => id !== 'claude' && byClient[id] && !byClient[id].coverage.measured)
+  }
+}
+
+/**
+ * One entry per client on this machine: what its list holds and costs, what
+ * of its chats were read, and how many skill uses came out of them. This is
+ * the block the OTHER TOOLS section renders, and the honesty record for every
+ * per client count elsewhere in the report.
+ */
+function clientSummaries (rows, byClient) {
+  const out = []
+  for (const client of CLIENTS) {
+    const scan = byClient[client.id]
+    if (!scan) continue
+    const listed = rows.filter((r) => r.listing && r.listing[client.id] && r.listing[client.id].listed)
+    const chars = listed.reduce((n, r) => n + entryChars(client.id, { name: r.names[0], descriptionChars: r.descriptionChars, path: r.skillMd }), 0)
+    const contextWindow = scan.sessions.reduce((w, s) => Math.max(w, Number(s.contextWindow) || 0), 0) || null
+    const budget = client.id === 'claude' ? null : listingBudgetFor(client.id, { contextWindow })
+    const models = {}
+    let first = null
+    let last = null
+    for (const s of scan.sessions) {
+      for (const [m, n] of Object.entries(s.models || {})) models[m] = (models[m] || 0) + n
+      if (s.firstTs && (!first || s.firstTs < first)) first = s.firstTs
+      if (s.lastTs && (!last || s.lastTs > last)) last = s.lastTs
+    }
+    const matched = rows.reduce((n, r) => n + (((r.callsByClient || {})[client.id] || {}).calls || 0), 0)
+    const onlyHere = rows.filter((r) => r.listedIn && r.listedIn.length === 1 && r.listedIn[0] === client.id).map((r) => r.names[0]).sort()
+    out.push({
+      id: client.id,
+      label: client.label,
+      honoursGate: client.honoursGate,
+      sigil: client.sigil,
+      skills: listed.length,
+      listingChars: chars,
+      listingTokens: Math.ceil(chars / 4),
+      budget,
+      overBudget: budget ? chars > budget.chars : null,
+      onlyHere,
+      sessions: scan.sessions.length,
+      firstSession: first ? first.slice(0, 10) : null,
+      lastSession: last ? last.slice(0, 10) : null,
+      skillCalls: scan.calls.length,
+      callsMatched: matched,
+      modelsSeen: Object.entries(models).sort((a, b) => b[1] - a[1]).map(([model, apiCalls]) => ({ model, apiCalls })),
+      coverage: scan.coverage,
+    })
+  }
+  return out
+}
+
+/**
+ * Attribute every recorded skill call to a discovered skill. A call that
+ * carries the path of the SKILL.md it read (Codex and Cursor do) is matched
+ * by that path first, through the real folder and every alias, so a shortcut
+ * and its target are one skill. Otherwise a call names a skill exactly as the
+ * client resolved it (`plugin:name` or `name`); the canonical name of a skill
+ * wins over an alias, and the first skill to claim a name keeps it. Calls
+ * that match nothing are counted under unmatchedCalls, per client, so a
+ * stale transcript never disappears silently.
+ *
+ * `calls`, `commandCalls`, `contextCalls`, `firstSeen` and `lastSeen` on a row
+ * are Claude Code's, because those are the numbers that say whether Claude
+ * Code's router has ever chosen the skill. The other clients sit beside them
+ * in `callsByClient`, with `callsElsewhere` and `callsAllClients` as the sums.
  */
 export function joinCalls (skills, calls, budget) {
   const canonical = new Map()
   const alias = new Map()
+  const byDir = new Map()
   for (const s of skills) {
     const names = Array.isArray(s.names) && s.names.length ? s.names : [s.name]
     if (names[0] && !canonical.has(names[0])) canonical.set(names[0], s)
     for (const n of names) if (n && !alias.has(n)) alias.set(n, s)
+    for (const d of [s.realPath].concat(Array.isArray(s.aliases) ? s.aliases : [])) {
+      if (!d) continue
+      if (!byDir.has(d)) byDir.set(d, s)
+      const real = safeReal(d)
+      if (real && !byDir.has(real)) byDir.set(real, s)
+    }
   }
+  const empty = () => ({ calls: 0, commandCalls: 0, contextCalls: 0, firstSeen: null, lastSeen: null })
   const tally = new Map()
   const unmatched = new Map()
   for (const c of calls) {
-    const target = canonical.get(c.skill) || alias.get(c.skill) || (c.bare && (canonical.get(c.bare) || alias.get(c.bare))) || null
+    const client = c.client || 'claude'
+    const dir = c.path ? dirname(String(c.path)) : null
+    const target = (dir && (byDir.get(dir) || byDir.get(safeReal(dir)))) ||
+      canonical.get(c.skill) || alias.get(c.skill) || (c.bare && (canonical.get(c.bare) || alias.get(c.bare))) || null
     if (!target) {
-      unmatched.set(c.skill, (unmatched.get(c.skill) || 0) + 1)
+      const key = client + '\n' + c.skill
+      unmatched.set(key, (unmatched.get(key) || 0) + 1)
       continue
     }
     let t = tally.get(target)
-    if (!t) { t = { calls: 0, commandCalls: 0, contextCalls: 0, firstSeen: null, lastSeen: null }; tally.set(target, t) }
-    t.calls++
-    if (c.mode === 'command') t.commandCalls++
-    else t.contextCalls++
+    if (!t) { t = {}; tally.set(target, t) }
+    const b = t[client] || (t[client] = empty())
+    b.calls++
+    if (c.mode === 'command') b.commandCalls++
+    else b.contextCalls++
     const day = c.ts ? String(c.ts).slice(0, 10) : null
     if (day) {
-      if (!t.firstSeen || day < t.firstSeen) t.firstSeen = day
-      if (!t.lastSeen || day > t.lastSeen) t.lastSeen = day
+      if (!b.firstSeen || day < b.firstSeen) b.firstSeen = day
+      if (!b.lastSeen || day > b.lastSeen) b.lastSeen = day
     }
   }
   const cap = budget && budget.perEntryCap
   const rows = skills.map((s) => {
-    const t = tally.get(s) || { calls: 0, commandCalls: 0, contextCalls: 0, firstSeen: null, lastSeen: null }
+    const byClient = tally.get(s) || {}
+    const mine = byClient.claude || empty()
     const name = (Array.isArray(s.names) && s.names[0]) || s.name
     const cost = listingCost(Number(s.descriptionChars) || 0, name, cap)
+    let elsewhere = 0
+    let lastAnywhere = mine.lastSeen
+    for (const [id, b] of Object.entries(byClient)) {
+      if (id !== 'claude') elsewhere += b.calls
+      if (b.lastSeen && (!lastAnywhere || b.lastSeen > lastAnywhere)) lastAnywhere = b.lastSeen
+    }
     return Object.assign({}, s, {
       path: tildify(s.realPath),
-      calls: t.calls,
-      commandCalls: t.commandCalls,
-      contextCalls: t.contextCalls,
-      firstSeen: t.firstSeen,
-      lastSeen: t.lastSeen,
+      calls: mine.calls,
+      commandCalls: mine.commandCalls,
+      contextCalls: mine.contextCalls,
+      firstSeen: mine.firstSeen,
+      lastSeen: mine.lastSeen,
+      callsByClient: byClient,
+      callsElsewhere: elsewhere,
+      callsAllClients: mine.calls + elsewhere,
+      lastSeenAnywhere: lastAnywhere,
       listingChars: cost.chars,
       listingTokens: cost.tokens,
       descriptionTokens: cost.descriptionTokens,
@@ -194,10 +311,12 @@ export function joinCalls (skills, calls, budget) {
     })
   })
   const unmatchedCalls = [...unmatched.entries()]
-    .map(([skill, n]) => ({ skill, calls: n }))
-    .sort((a, b) => b.calls - a.calls || (a.skill < b.skill ? -1 : 1))
+    .map(([key, n]) => { const [client, skill] = key.split('\n'); return { client, skill, calls: n } })
+    .sort((a, b) => b.calls - a.calls || (a.skill < b.skill ? -1 : 1) || (a.client < b.client ? -1 : 1))
   return { rows, unmatchedCalls }
 }
+
+function safeReal (p) { try { return realpathSync(p) } catch { return null } }
 
 /**
  * What one listing token costs per month, from the priced waste. Null when no
@@ -213,7 +332,7 @@ function dollarsPerTokenPerMonth (cost, economics) {
   return perMonth / wastedTokens
 }
 
-function buildTotals (rows, sessions, calls, notLoaded = []) {
+function buildTotals (rows, sessions, calls, notLoaded = [], clients = []) {
   const command = rows.filter((r) => r.mode === 'command')
   const context = rows.filter((r) => r.mode !== 'command')
   const matched = rows.reduce((n, r) => n + r.calls, 0) + notLoaded.reduce((n, r) => n + r.calls, 0)
@@ -223,6 +342,10 @@ function buildTotals (rows, sessions, calls, notLoaded = []) {
     skills: rows.length,
     onDiskNotListed: notLoaded.length,
     notListedByReason: byReason,
+    listedByOtherToolsOnly: notLoaded.filter((r) => Array.isArray(r.listedIn) && r.listedIn.length).length,
+    clientsRead: clients.map((c) => c.id),
+    callsElsewhere: rows.reduce((n, r) => n + (r.callsElsewhere || 0), 0) + notLoaded.reduce((n, r) => n + (r.callsElsewhere || 0), 0),
+    usedElsewhere: rows.filter((r) => (r.callsElsewhere || 0) > 0).length,
     withSourceCopy: rows.filter((r) => r.sourcePath).length,
     declaredCommand: command.length,
     declaredContext: context.length,

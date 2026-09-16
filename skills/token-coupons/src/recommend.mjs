@@ -9,9 +9,17 @@
 //
 // Priority order is fixed by the contract: the first rule that matches decides
 // the action, while every flag that applies is recorded regardless.
+//
+// The other tools on the machine change two things and nothing else. A skill
+// another tool's agent picked on its own is not gated when that tool reads the
+// same setting, because the gate would take it away there too. And a skill is
+// never deleted while some tool has used it, or lists it and had chats this
+// run could not read: "never used" has to mean never used anywhere before a
+// folder moves.
 
 import { nameLineChars, toTokens, listingCost, DEFAULT_PER_ENTRY_CAP } from './budget.mjs'
 import { fmt } from './lib/util.mjs'
+import { GATE_HONOURING, clientLabel } from './clients.mjs'
 
 /** Overridable through the `thresholds` option. */
 export const DEFAULT_THRESHOLDS = {
@@ -32,6 +40,7 @@ const DELETABLE_LOCATIONS = new Set(['user', 'user-symlink', 'project'])
 const FLAG_ORDER = [
   'never-called', 'summoned-only', 'heavy-description', 'thin-description',
   'capped', 'unroutable', 'dormant-command', 'not-editable', 'stale', 'too-new',
+  'used-elsewhere', 'picked-elsewhere', 'usage-unmeasured',
 ]
 
 /**
@@ -105,6 +114,16 @@ function decide (row, { thresholds, cap, now, unroutable }) {
   const isUnroutable = unroutable.has(name) || (Array.isArray(out.names) && out.names.some((n) => unroutable.has(n)))
   const notEditable = out.editable === false
 
+  // What the other tools on the machine did with it. Uses elsewhere keep the
+  // folder; picks by a tool that reads the same gate keep the description.
+  const elsewhere = otherClients(out)
+  const callsElsewhere = elsewhere.reduce((n, e) => n + e.calls, 0)
+  const usedIn = elsewhere.filter((e) => e.calls > 0)
+  const pickedIn = elsewhere.filter((e) => GATE_HONOURING.includes(e.id) && e.contextCalls > 0)
+  const routedElsewhere = pickedIn.reduce((n, e) => n + e.contextCalls, 0)
+  const unmeasured = Array.isArray(out.unmeasuredClients) ? out.unmeasuredClients : []
+  const deletable = DELETABLE_LOCATIONS.has(out.location) && ageDays !== null && ageDays > thresholds.staleDays
+
   const flagSet = new Set()
   if (calls === 0) flagSet.add('never-called')
   if (summonedOnly) flagSet.add('summoned-only')
@@ -116,20 +135,27 @@ function decide (row, { thresholds, cap, now, unroutable }) {
   if (notEditable) flagSet.add('not-editable')
   if (stale) flagSet.add('stale')
   if (tooNew) flagSet.add('too-new')
+  if (callsElsewhere > 0) flagSet.add('used-elsewhere')
+  if (routedElsewhere > 0) flagSet.add('picked-elsewhere')
+  if (unmeasured.length) flagSet.add('usage-unmeasured')
   const flags = FLAG_ORDER.filter((f) => flagSet.has(f))
 
   let action = 'keep'
   let rule = 'keep'
+  let heldBack = null
   if (mode === 'command' && calls === 0) {
     action = 'review'; rule = 'dormant-command'
   } else if (mode === 'context' && calls === 0 && descriptionChars < thresholds.thinChars) {
     action = 'optimize'; rule = 'thin'
   } else if (mode === 'context' && tooNew) {
     action = 'keep'; rule = 'too-new'
-  } else if (mode === 'context' && calls === 0 && DELETABLE_LOCATIONS.has(out.location) && ageDays !== null && ageDays > thresholds.staleDays) {
+  } else if (mode === 'context' && contextCalls === 0 && routedElsewhere > 0) {
+    action = 'keep'; rule = 'routed-elsewhere'
+  } else if (mode === 'context' && calls === 0 && deletable && callsElsewhere === 0 && unmeasured.length === 0) {
     action = 'delete'; rule = 'stale'
   } else if (mode === 'context' && calls === 0) {
     action = 'command'; rule = 'never-called'
+    if (deletable && callsElsewhere === 0 && unmeasured.length) heldBack = 'unmeasured'
   } else if (summonedOnly) {
     action = 'command'; rule = 'summoned-only'
   } else if (mode === 'context' && contextCalls > 0 && (heavy || out.capped === true)) {
@@ -146,6 +172,7 @@ function decide (row, { thresholds, cap, now, unroutable }) {
   const reason = reasonFor(rule, {
     mode, calls, contextCalls, descriptionChars, listingTokens, nameTokens,
     ageDays, cap, impactTokensPerCall, thresholds, flags, sourcePath: out.sourcePath || null,
+    usedIn, pickedIn, routedElsewhere, callsElsewhere, unmeasured, heldBack,
   })
 
   out.recommendation = { action, reason, flags, impactTokensPerCall, rank: 0 }
@@ -182,6 +209,8 @@ function reasonFor (rule, c) {
   } else if (rule === 'too-new') {
     base = 'Installed ' + (c.ageDays === 0 ? 'today' : c.ageDays === 1 ? 'yesterday' : fmt(c.ageDays) + ' days ago') +
       ' and not used yet, which is expected. Its ' + desc + ' description costs ' + cost + '. Check back in a couple of weeks'
+  } else if (rule === 'routed-elsewhere') {
+    base = 'Claude Code never picked it on its own, but ' + names(c.pickedIn) + ' did (' + fmt(c.routedElsewhere) + ' times) and reads the same setting, so gating it here would take it away there. Leave it'
   } else if (c.mode === 'command') {
     base = 'Used ' + uses + ' and already waits for its name, so it costs ' + fmt(c.nameTokens) + ' tokens a message. Leave it'
   } else {
@@ -193,7 +222,28 @@ function reasonFor (rule, c) {
       ? '. Edit its source copy; the installed copy refreshes on the next plugin update'
       : '. This copy is the plugin cache; the change belongs in the plugin\'s source repo'
   }
+  // One clause on what the other tools did, only where it changed the call.
+  if ((rule === 'never-called' || rule === 'dormant-command' || rule === 'thin') && c.usedIn.length) {
+    base += '. Used ' + fmt(c.callsElsewhere) + (c.callsElsewhere === 1 ? ' time' : ' times') + ' in ' + names(c.usedIn) + ', so keep the folder'
+  } else if (c.heldBack === 'unmeasured') {
+    base += '. ' + names(c.unmeasured.map((id) => ({ id }))) + ' lists it too and its chats could not be read, so it is gated rather than deleted'
+  }
   return base + '.'
+}
+
+/** "Codex and Cursor" from a list of client entries. */
+function names (list) {
+  const labels = list.map((e) => clientLabel(e.id))
+  if (labels.length <= 1) return labels[0] || 'another tool'
+  return labels.slice(0, -1).join(', ') + ' and ' + labels[labels.length - 1]
+}
+
+/** Per client call counts other than Claude Code's, from the joined row. */
+function otherClients (row) {
+  const by = row.callsByClient && typeof row.callsByClient === 'object' ? row.callsByClient : {}
+  return Object.entries(by)
+    .filter(([id]) => id !== 'claude')
+    .map(([id, t]) => ({ id, calls: Number(t && t.calls) || 0, contextCalls: Number(t && t.contextCalls) || 0 }))
 }
 
 /** Whole days between the file date and today, or null when there is no date. */

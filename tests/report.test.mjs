@@ -70,7 +70,7 @@ describe('buildReport', () => {
         assert.equal(r.totals.neverCalled, 4)
         assert.equal(r.totals.neverCalledCommand, 1)
         assert.equal(r.totals.neverCalledContext, 3)
-        assert.deepEqual(r.unmatchedCalls, [{ skill: 'ghost', calls: 1 }])
+        assert.deepEqual(r.unmatchedCalls, [{ client: 'claude', skill: 'ghost', calls: 1 }])
         assert.equal(r.budget.contextWindow, 1000000)
         assert.ok(r.economics && r.economics.perSession && r.stats && r.cost)
         assert.equal(r.stats.measured, true)
@@ -243,7 +243,7 @@ describe('joinCalls', () => {
     assert.equal(rows[1].firstSeen, '2026-08-02')
     assert.equal(rows[1].lastSeen, '2026-08-03')
     assert.equal(rows[2].calls, 1, 'a plugin prefixed call falls back to the bare name')
-    assert.deepEqual(unmatchedCalls, [{ skill: 'nope', calls: 2 }])
+    assert.deepEqual(unmatchedCalls, [{ client: 'claude', skill: 'nope', calls: 2 }])
   })
 })
 

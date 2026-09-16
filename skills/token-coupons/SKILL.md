@@ -80,6 +80,14 @@ If `report.previous` is set, its `drift` list comes first, in one line. A number
 the folder changed is not the same news as one that moved because they installed twelve skills, and
 saying which it was is the difference between a report they trust and one they argue with.
 
+If `report.clients` has more than one entry, add one line naming the other tools that were read
+(Codex, Cursor, Gemini CLI) and quote any `coverage.notes` sentence, because a tool whose chats could
+not be opened turns "never used" into "not known". Read `clients` and `summary`, nothing more:
+
+```bash
+node -e "const r=JSON.parse(require('fs').readFileSync(process.env.HOME+'/.token-coupons/report.json','utf8'));console.log(JSON.stringify(r.clients.map(c=>({id:c.id,skills:c.skills,tokens:c.listingTokens,chats:c.sessions,uses:c.skillCalls,notes:c.coverage.notes})),null,2))"
+```
+
 ## Step 3. Put the report in front of them
 
 - If an Artifact tool is available, publish `$HOME/.token-coupons/report.html` with it and hand over
