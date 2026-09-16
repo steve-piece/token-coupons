@@ -225,15 +225,16 @@ function writeCursor (home, cursor) {
 }
 
 /**
- * The Cursor app database, only when node:sqlite is available. Tests that
- * need it call hasSqlite() and skip otherwise; the tool itself degrades the
- * same way, which is the behaviour those tests exist to check.
+ * The Cursor app database. With node:sqlite it is a real one; without it the
+ * fixture leaves a placeholder file at the same path, so the tool meets what
+ * an older Node meets on a real machine (a database it cannot open) and the
+ * test checks that it says so rather than counting the chats as empty.
  */
 function writeCursorApp (home, app) {
   const sqlite = loadSqlite()
   const H = (v) => String(v).replace(/__HOME__/g, home)
-  if (!sqlite) return
   mkdirSync(join(home, 'cursor-app'), { recursive: true })
+  if (!sqlite) { writeFileSync(join(home, 'cursor-app', 'state.vscdb'), 'not a database on this Node\n'); return }
   const db = new sqlite.DatabaseSync(join(home, 'cursor-app', 'state.vscdb'))
   db.exec('create table cursorDiskKV (key text primary key, value text)')
   const put = db.prepare('insert into cursorDiskKV (key, value) values (?, ?)')
