@@ -11,70 +11,85 @@
 </p>
 
 <p align="center">
+  <a href="#install"><b>Install</b></a> ·
+  <a href="#the-loop">How it works</a> ·
+  <a href="#what-it-can-change-and-how-to-undo-it">What it changes</a> ·
+  <a href="#every-tool-on-the-machine">Every tool</a> ·
+  <a href="#privacy">Privacy</a>
+</p>
+
+Claude Code sends the name and description of every installed skill with every message you send. **token-coupons** reads your own chat history, finds the skills the agent has never used, prices what they cost you, and carries out your decisions with an undo line for each.
+
+It reads Codex, Cursor and Gemini CLI too, so a skill you keep for another tool is never mistaken for dead weight.
+
+<p align="center">
   <img src="./assets/readme/scorecard.png" width="100%" alt="The scorecard token-coupons draws from the author's report, showing what taking its recommendations is worth: $52.59 a month, 7,427 tokens off every message from 81 skills; every message before 11,485 tokens, after 4,058; 46 skills set to active, 25 unused skills removed, 10 descriptions optimized.">
 </p>
 
 ## What it tells you
 
-Real output, from the author's machine, trimmed to fit:
+Real output, from the author's machine on 2026-09-16, trimmed to fit:
 
 ```text
 WHAT THE LISTING COSTS
-  Skills in your listing: 99 (98 let the agent pick them, 1 starts only when you type its name)
+  Skills in your listing: 119 (118 let the agent pick them, 1 starts only when you type its name)
   Allowance for the list: 40,000 characters, about 10,000 tokens (1 percent of a 1,000,000 token window)
-  Sent with every message: about 11,485 tokens
-  Over the allowance by 5,908 characters (1.15x). Past that line Claude Code drops descriptions
+  Sent with every message: about 14,517 tokens
+  Over the allowance by 18,037 characters (1.45x). Past that line Claude Code drops descriptions
   quietly, least used first, so those skills cannot be found by the agent.
 
-  66    never used, but described on every message  7,181 tokens per message
-  6     cannot be reached (their description is being dropped to fit)
-  7     only ever started by you typing their name    689 tokens per message
+  86    never used, but described on every message  10,436 tokens per message
+  24    cannot be reached (their description is being dropped to fit)
+  4     only ever started by you typing their name    326 tokens per message
 
-  Set those 73 skills to start only when you type their name and you save about 7,427 tokens
+  Set those 90 skills to start only when you type their name and you save about 10,178 tokens
   on every message, and the list fits its allowance again.
 
 WHAT IT COSTS IN DOLLARS
     model                     wasted/week  wasted/month  uncached/week  whole list/month
-  * Claude Fable 5                 $25.72       $111.43        $166.78           $162.64
-  * Claude Opus 5                  $12.86        $55.72         $83.39            $81.32
-  * Claude Sonnet 5                 $5.14        $22.29         $33.36            $32.53
+  * Claude Opus 5                  $22.73        $98.51        $147.83           $132.89
+  * Claude Fable 5                 $45.47       $197.03        $295.65           $265.77
+  * Claude Sonnet 5                 $9.09        $39.41         $59.13            $53.15
   * seen in your own sessions
-  Assumes 135 messages per chat and 15.7 chats per week, measured from your sessions.
+  Assumes 136 messages per chat and 20.2 chats per week, measured from your sessions.
+  On Claude Opus 5, the model you actually use, the unused descriptions cost about $22.73 a week
+  ($98.51 a month).
 
 RECOMMENDED
-  41 to make a command, 25 to delete, 10 to rewrite (optimize), 23 to keep
+  29 to make a command, 12 to delete, 10 to rewrite (optimize), 68 to keep
 
    #  action    saves/msg  skill
-   1  delete          384  typescript-e2e-testing
-       Never used, last edited 151 days ago, 2,327 chars sent every message.
-   2  command         286  app-review
-  46 to gate (active), 25 to delete, 10 to rewrite (optimize), 18 to keep
-
-   #  action    saves/msg  skill
-   1  delete          384  typescript-e2e-testing
-       Never used, last edited 153 days ago, 2,327 chars sent every message.
-   2  active          286  app-review
-       Never used in these sessions, yet its 1,143 chars description costs 290 tokens a message.
+   1  command         263  library-app-parity
+       Never used in these sessions, yet its 1,051 chars description costs 269 tokens a message.
+  10  delete          137  on-page-seo-auditor
+       Never used, last edited 203 days ago, 547 chars sent every message.
+  43  command          67  testing-skills-with-subagents
+       Never used in these sessions, yet its 270 chars description costs 76 tokens a message.
+       Used 1 time in Cursor, so keep the folder.
+  52  keep              0  typescript-e2e-testing
+       Claude Code never picked it on its own, but Cursor did (2 times) and reads the same
+       setting, so gating it here would take it away there. Leave it.
 
 OTHER TOOLS
   Codex
     In its list: 57 skills, about 6,731 tokens per message (room for about 5,168: 2 percent of a
     258400 token window, seen in its chats) over its allowance
     Chats read: 23 (2026-02-11 to 2026-03-23), 35 skill uses, 32 matched to a skill on disk
-    Ignores disable-model-invocation: a command decision here changes nothing in Codex.
   Cursor
     In its list: 241 skills, about 23,102 tokens per message (it publishes no allowance)
     Chats read: 3,185 (2026-01-28 to 2026-09-15), 1,269 skill uses, 1,109 matched to a skill on disk
     read Cursor command line chats at ~/.cursor/projects (653)
     read Cursor app chats at ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb (2,533)
-    Reads disable-model-invocation, so a command decision here applies there too.
   Gemini CLI
-    In its list: 1 skills, about 58 tokens per message (it publishes no allowance)
+    In its list: 1 skill, about 58 tokens per message (it publishes no allowance)
     Chats read: 0, 0 skill uses, 0 matched to a skill on disk
     no Gemini CLI chats found under ~/.gemini/tmp
 ```
 
-Then it hands you a page where every row is already set to what it recommends, you change the ones you disagree with, and it carries out your decisions. A skill Codex or Cursor has been using is marked as such, so "never used" means never used in any tool on the machine, and a skill Cursor's agent picks on its own is never gated, because Cursor reads the same line.
+> [!NOTE]
+> **Row 52 is worth a second look.** An earlier version of this excerpt had `typescript-e2e-testing` as its number one delete: never used, months untouched, the biggest description on the list. Cursor's agent had been reading it the whole time. Now that the report reads every tool on the machine, it stays.
+
+Next, it hands you a page where every row is already set to what it recommends, you change the ones you disagree with, and it carries out your decisions.
 
 <p align="center">
   <img src="./assets/readme/decision-page.png" width="100%" alt="The decision page: a score of 43 out of 100 with the grade F, 66 skills never used, the two modes explained, $52.59 a month back against $55.72 wasted, and the ranked list where each row shows the skill, its mode today, how often the agent and you used it, its cost a month, the suggested action, why, and a dropdown for your call.">
@@ -145,7 +160,7 @@ Nothing on disk changes while it waits for you. The agent runs `apply` without `
 
 ## What it can change, and how to undo it
 
-Two kinds of skill, a distinction this tool draws, and the whole job is deciding which one each skill belongs in.
+The tool sorts every skill into one of two kinds, and the whole job is deciding which kind each skill belongs in.
 
 <p align="center">
   <img src="./assets/readme/modes.svg" width="100%" alt="Context, the default: the skill's name and its whole description are sent with every message, and the agent picks it up as needed. Command: only the name is sent, and you start it by typing its name. One line in SKILL.md, disable-model-invocation: true, is the switch.">
@@ -159,15 +174,34 @@ Two kinds of skill, a distinction this tool draws, and the whole job is deciding
 | Action | When | What it does | Undo |
 | --- | --- | --- | --- |
 | `keep` | used, description a fair size | nothing | nothing |
-| `command` | never used, or only started by name | adds the line | delete the line |
+| `command` | never used, or only started by name | adds the line, which Cursor reads too | delete the line |
 | `context` | you want the agent picking it again | removes the line | add it back |
 | `optimize` | used, but oversized or past the cap | queues it for `describe` | `cp` the copy `describe` kept |
-| `delete` | never used, yours, untouched 90 days | unlinks the shortcut, or moves the folder to trash | `ln -s` or move it back |
+| `delete` | never used in any tool, yours, untouched 90 days | unlinks the shortcut, or moves the folder to trash | `ln -s` or move it back |
 | `review` | already a command, never used | nothing: pick one of the five above | nothing |
 
 Nothing is unrecoverable. Shortcuts are unlinked rather than followed. Folders move to `~/.token-coupons/trash/<timestamp>` rather than being erased. A file about to have its description replaced is copied there first. Copies owned by the plugin cache are refused outright, with the `claude plugin uninstall` command to run instead. Every step prints its own undo line.
 
 Rewriting a description is the one job that needs a model, so it is the one job the tool leaves to the agent. `apply` hands back a worklist, the agent drafts the words, and `describe` files them, replacing that one key and leaving every other line untouched.
+
+## Every tool on the machine
+
+Codex, Cursor and Gemini CLI each keep skills in their own folders, send their own listing with their own messages, and leave their chats on disk. token-coupons reads all of it. Every skill folder on the machine is a row, each row says which tools list it, and a use in any tool counts, so "never used" means never used anywhere.
+
+| Tool | Skills read from | Chats read from | What counts as a use |
+| --- | --- | --- | --- |
+| **Claude Code** | `~/.claude/skills`, the project's `.claude/skills`, enabled plugins | `~/.claude/projects` | the Skill tool |
+| **Codex** | `~/.codex/skills` and its bundled tier, `~/.agents/skills`, enabled plugins, `/etc/codex/skills` | `~/.codex/sessions` | a typed `$name`, or a command that reads the SKILL.md |
+| **Cursor** | `~/.cursor/skills`, its bundled skills, `~/.agents/skills`, `~/.claude/skills` and `~/.codex/skills` as compatibility paths, installed plugins | `~/.cursor/projects`, plus the app's own chat database on Node 22.5 or newer | an attached skill or `/name`, or a read of the SKILL.md |
+| **Gemini CLI** | `~/.gemini/skills`, extensions | `~/.gemini/tmp` | `activate_skill` |
+
+Three rules follow:
+
+- **A skill another tool has used is never proposed for deletion.**
+- **A skill Cursor's agent picks on its own is never gated**, because Cursor reads the same `disable-model-invocation` line. Codex and Gemini CLI ignore it.
+- **A tool whose chats could not be read is unknown, never zero.** That covers a tool with no history yet, or the Cursor app database on an older Node. A delete is held back for anything it lists.
+
+Only Claude Code's list is priced. Each tool sends its own list with its own messages on its own model, so the report gives each tool its own line, with its own allowance where the tool publishes one, rather than adding them into a total that no single message ever carries.
 
 ## Where the numbers come from
 
@@ -175,7 +209,6 @@ Rewriting a description is the one job that needs a model, so it is the one job 
 - **Messages per chat and chats per week are measured**, not assumed. When no history is found, the report says so instead of guessing.
 - **On a subscription, dollars are the wrong unit**, so the report also gives the listing as a share of everything you send.
 - **Prices are a data file** with a verified-on date, never code, and the report warns you when that date is more than 60 days old.
-- **Every tool on the machine is read, not just Claude Code.** Codex, Cursor and Gemini CLI keep their skills in their own folders and their chats on disk. Those skills are rows too, a use in any of them counts, and the report says which chats it could and could not open. A skill Codex has been reading is not "never used", and a skill Cursor's agent picks on its own is not gated, because Cursor reads the same `disable-model-invocation` line. Only Claude Code's list is priced: each tool sends its own list with its own messages, on its own model, so the tokens are not added up across them.
 
 <details>
 <summary>Two runs a week apart should be comparable</summary>
@@ -245,7 +278,7 @@ token-coupons help
 
 ## Privacy
 
-- **Local files only.** Your skill folders, and the chat history each tool already keeps on disk: Claude Code's under `~/.claude/projects`, Codex's under `~/.codex/sessions`, Cursor's under `~/.cursor/projects` and in the Cursor app's own chat database, Gemini CLI's under `~/.gemini/tmp`. Plus each tool's own config, for which plugins are on and which model you run. A tool whose folder is not on the machine is not looked for.
+- **Local files only.** Your skill folders, the chat history each tool already keeps on disk (every path is in [the table above](#every-tool-on-the-machine)), and each tool's own config, for which plugins are on and which model you run. A tool whose folder is not on the machine is not looked for.
 - **No network access, ever.** Prices ship as a data file with a date on them; refreshing them is a human action, not a fetch.
 - **`report` writes nothing** beyond the paths you give it and its own run record.
 - Set `TOKEN_COUPONS_HOME` to point the whole tool at a different home directory.
