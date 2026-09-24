@@ -75,7 +75,8 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   // WHAT THE LISTING COSTS
   head('WHAT THE LISTING COSTS')
   line('  Skills in your listing: ' + fmt(totals.skills || 0) +
-    ' (' + fmt(totals.declaredContext || 0) + ' let the agent pick them, ' + fmt(totals.declaredCommand || 0) + ' start only when you type their name)' +
+    ' (' + fmt(totals.declaredContext || 0) + (totals.declaredContext === 1 ? ' lets the agent pick it, ' : ' let the agent pick them, ') +
+    fmt(totals.declaredCommand || 0) + (totals.declaredCommand === 1 ? ' starts only when you type its name)' : ' start only when you type their name)') +
     (totals.onDiskNotListed ? paint.dim('  plus ' + fmt(totals.onDiskNotListed) + ' on disk but not listed, see ON DISK, NOT LISTED') : ''))
   line('  Allowance for the list: ' + fmt(budget.chars || 0) + ' characters, about ' + fmt(budget.tokens || 0) + ' tokens' +
     paint.dim(' (' + describeBudget(budget) + ')'))
