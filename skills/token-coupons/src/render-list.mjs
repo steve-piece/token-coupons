@@ -656,7 +656,10 @@ td.used .elsewhere { color: var(--muted); margin-left: 6px; font-size: 11.5px; }
 .tools b { color: var(--text); font-weight: 600; }
 .toolnote { display: block; font-size: 12px; margin-top: 2px; }
 td.act select { max-width: 150px; }
-td.act select { font: inherit; font-size: 12.5px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-2); color: var(--text); }
+td.act select { font: inherit; font-size: 12.5px; padding: 5px 28px 5px 8px; border: 1px solid var(--line); border-radius: 8px; background-color: var(--surface-2); color: var(--text); }
+/* the native arrow sits flush against the border, so draw our own chevron
+   inset from the edge, in the text color so it follows the theme */
+td.act select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent calc(50% - 0.8px), currentColor calc(50% - 0.8px), currentColor calc(50% + 0.8px), transparent calc(50% + 0.8px)), linear-gradient(135deg, transparent calc(50% - 0.8px), currentColor calc(50% - 0.8px), currentColor calc(50% + 0.8px), transparent calc(50% + 0.8px)); background-position: calc(100% - 17px) 55%, calc(100% - 12px) 55%; background-size: 5px 5px; background-repeat: no-repeat; }
 /* whose choice a control is holding. The select itself never changes its
    words, so the state has to be visible beside it. */
 .ctl { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 3px; }
@@ -668,6 +671,7 @@ td.act select { font: inherit; font-size: 12.5px; padding: 5px 8px; border: 1px 
 .ctl[data-state="yours"] select { border-color: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
 .ctl[data-state="yours"] .state { color: var(--ok); font-weight: 600; }
 .note.key { margin-bottom: 14px; }
+.note.key .state { font-size: inherit; line-height: inherit; }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
 .legendk { font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; }
 .legenditem { display: inline-flex; align-items: center; gap: 6px; }
