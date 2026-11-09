@@ -7,3 +7,6 @@ node_modules/
 report.json
 report.html
 decisions.json
+
+# Internal recommendations sheet, kept local only
+future-recommendations.md
