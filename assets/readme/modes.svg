@@ -48,6 +48,7 @@
     <text x="24" y="150" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="15" fill="#7E8CA6">SENT WITH EVERY MESSAGE</text>
     <rect x="24" y="162" width="118" height="30" rx="7" fill="#131B2C"/>
     <text x="36" y="183" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#E8EEF9">jira-sync</text>
-    <text x="156" y="183" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#7E8CA6">and nothing else. Start it with /jira-sync</text>
+    <rect x="150" y="162" width="346" height="30" rx="7" fill="#0F2A22" stroke="#35E3A1" stroke-opacity="0.45"/>
+    <text x="162" y="183" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="16" fill="#35E3A1">Only the skill name sent</text>
   </g>
 </svg>
