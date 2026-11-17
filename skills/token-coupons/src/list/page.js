@@ -59,6 +59,8 @@
     if (t.value === 'command' && t.today === 'context') return rec.action === 'command' ? impact : desc;
     if (t.value === 'context' && t.today === 'command') return -desc;
     if (a.value === 'optimize') {
+      // a command's description is not in the listing, so shortening it saves nothing
+      if (t.value === 'command') return 0;
       if (rec.action === 'optimize') return impact;
       var chars = Number(s.descriptionChars) || 0;
       return chars > target ? Math.round(desc * (1 - target / chars)) : 0;
@@ -235,7 +237,8 @@
       var vis = visibleRows();
       vis.forEach(function (tr) {
         var t = picked(tr, 'type'); var a = picked(tr, 'action');
-        if (what === 'command') setPick(tr, 'type', 'command');
+        // a command is kept, so any delete or shorten on the row is cleared with it
+        if (what === 'command') { setPick(tr, 'type', 'command'); setPick(tr, 'action', 'keep'); }
         if (what === 'keep') { setPick(tr, 'type', t.today); setPick(tr, 'action', 'keep'); }
         if (what === 'suggested') { setPick(tr, 'type', t.rec); setPick(tr, 'action', a.rec); }
       });
