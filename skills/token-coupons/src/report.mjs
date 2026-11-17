@@ -16,12 +16,19 @@ import { discoverSkills } from './discover.mjs'
 import { scanAllClients, sessionStats } from './calls.mjs'
 import { CLIENTS, clientLabel, entryChars, listingBudgetFor } from './clients.mjs'
 import { listingBudget, listingCost } from './budget.mjs'
-import { economics as computeEconomics } from './economics.mjs'
+import { economics as computeEconomics, ifApplied, DEFAULT_TYPED_SHARE } from './economics.mjs'
 import { recommend } from './recommend.mjs'
 import { loadPricing, costModel, yourModel, normalizeModelId } from './pricing.mjs'
 import { tildify } from './paths.mjs'
 
 export const REPORT_VERSION = 1
+
+/**
+ * How far back "used recently" looks. A month is long enough to catch a skill
+ * that is only needed now and then, and short enough that the answer is about
+ * how the person works today rather than everything they ever tried.
+ */
+export const RECENT_DAYS = 30
 
 /** The tool version. */
 export function toolVersion () { return VERSION }
@@ -56,15 +63,27 @@ export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null
   // skill used inside its project still shows its history and a skill Codex
   // reads is not "never used". Economics run over the rows Claude Code LISTS:
   // an unlisted skill costs nothing per message here and cannot be dropped.
-  const joined = joinCalls(everything, scans.calls, budget)
+  // The recent window never claims more history than was read: thirty days,
+  // or however many days of sessions there actually are when that is fewer.
+  // A --since bounds what was read whether or not any session fell inside it.
+  const readDays = (since || stats.measured) ? Number(stats.days) || RECENT_DAYS : RECENT_DAYS
+  const recentDays = Math.max(1, Math.min(RECENT_DAYS, readDays))
+  const recentSince = dayOf(new Date(Date.parse(generatedOn + 'T00:00:00Z') - recentDays * 86400000))
+  const joined = joinCalls(everything, scans.calls, budget, { recentSince })
   markUnmeasured(joined.rows, scans.byClient)
   const rows = joined.rows.filter((r) => r.loaded)
   const notLoaded = joined.rows.filter((r) => !r.loaded).map(briefUnlisted).sort((a, b) => b.callsAllClients - a.callsAllClients || (a.name < b.name ? -1 : 1))
   const unmatchedCalls = joined.unmatchedCalls
   const clients = clientSummaries(joined.rows, scans.byClient)
 
-  const economics = computeEconomics(rows, budget)
+  // The same share reaches the economics and the recommendations, so the
+  // count of skills started by you is the count of rows flagged that way.
+  const typedShare = Number((thresholds || {}).typedShare) || DEFAULT_TYPED_SHARE
+  const economics = computeEconomics(rows, budget, { typedShare })
   const ranked = recommend(rows, { economics, budget, thresholds: thresholds || {}, today: today || undefined })
+  // What the recommendations, as given, give back. It can only be known once
+  // the rows are ranked, and it is what every headline saving is read from.
+  economics.ifApplied = ifApplied(ranked.rows, economics, { optimizeTargetChars: ranked.thresholds.optimizeTargetChars })
   const pricing = loadPricing(pricingPath || null, { today: today || null })
   const cost = costModel({
     wastedTokens: economics.wastedPerCall.tokens,
@@ -83,7 +102,7 @@ export function buildReport ({ since = null, budgetOpts = {}, pricingPath = null
     cost.dollarsPerTokenPerMonth = rate
   }
 
-  const totals = buildTotals(rows, sessions, calls, notLoaded, clients)
+  const totals = buildTotals(rows, sessions, calls, notLoaded, clients, recentDays)
   const summary = buildSummary({ rows: ranked.rows, economics, stats, pricing, cost, counts: ranked.counts, notLoaded })
   // Claude Code's own entry carries the priced figures, so the two can never disagree.
   const mine = clients.find((c) => c.id === 'claude')
@@ -203,12 +222,19 @@ function clientSummaries (rows, byClient) {
     }
     const matched = rows.reduce((n, r) => n + (((r.callsByClient || {})[client.id] || {}).calls || 0), 0)
     const onlyHere = rows.filter((r) => r.listedIn && r.listedIn.length === 1 && r.listedIn[0] === client.id).map((r) => r.names[0]).sort()
+    // The lists overlap: one skill folder, linked into several tools, is one
+    // row here and an entry in each of their lists. Counted once, so no
+    // renderer can present the tools as separate piles of skills.
+    const alsoElsewhere = listed.filter((r) => (r.listedIn || []).some((id) => id !== client.id)).length
+    const alsoInClaude = client.id === 'claude' ? null : listed.filter((r) => (r.listedIn || []).includes('claude')).length
     out.push({
       id: client.id,
       label: client.label,
       honoursGate: client.honoursGate,
       sigil: client.sigil,
       skills: listed.length,
+      alsoElsewhere,
+      alsoInClaude,
       listingChars: chars,
       listingTokens: Math.ceil(chars / 4),
       budget,
@@ -241,7 +267,7 @@ function clientSummaries (rows, byClient) {
  * Code's router has ever chosen the skill. The other clients sit beside them
  * in `callsByClient`, with `callsElsewhere` and `callsAllClients` as the sums.
  */
-export function joinCalls (skills, calls, budget) {
+export function joinCalls (skills, calls, budget, { recentSince = null } = {}) {
   const canonical = new Map()
   const alias = new Map()
   const byDir = new Map()
@@ -256,7 +282,9 @@ export function joinCalls (skills, calls, budget) {
       if (real && !byDir.has(real)) byDir.set(real, s)
     }
   }
-  const empty = () => ({ calls: 0, commandCalls: 0, contextCalls: 0, firstSeen: null, lastSeen: null })
+  // `recent` counts the calls on or after `recentSince` (YYYY-MM-DD), so the
+  // report can say what was used lately and not only what was used ever.
+  const empty = () => ({ calls: 0, commandCalls: 0, contextCalls: 0, recent: 0, firstSeen: null, lastSeen: null })
   const tally = new Map()
   const unmatched = new Map()
   for (const c of calls) {
@@ -279,6 +307,7 @@ export function joinCalls (skills, calls, budget) {
     if (day) {
       if (!b.firstSeen || day < b.firstSeen) b.firstSeen = day
       if (!b.lastSeen || day > b.lastSeen) b.lastSeen = day
+      if (recentSince && day >= recentSince) b.recent++
     }
   }
   const cap = budget && budget.perEntryCap
@@ -300,6 +329,7 @@ export function joinCalls (skills, calls, budget) {
       contextCalls: mine.contextCalls,
       firstSeen: mine.firstSeen,
       lastSeen: mine.lastSeen,
+      recentCalls: mine.recent || 0,
       callsByClient: byClient,
       callsElsewhere: elsewhere,
       callsAllClients: mine.calls + elsewhere,
@@ -332,7 +362,7 @@ function dollarsPerTokenPerMonth (cost, economics) {
   return perMonth / wastedTokens
 }
 
-function buildTotals (rows, sessions, calls, notLoaded = [], clients = []) {
+function buildTotals (rows, sessions, calls, notLoaded = [], clients = [], recentDays = RECENT_DAYS) {
   const command = rows.filter((r) => r.mode === 'command')
   const context = rows.filter((r) => r.mode !== 'command')
   const matched = rows.reduce((n, r) => n + r.calls, 0) + notLoaded.reduce((n, r) => n + r.calls, 0)
@@ -343,6 +373,9 @@ function buildTotals (rows, sessions, calls, notLoaded = [], clients = []) {
     onDiskNotListed: notLoaded.length,
     notListedByReason: byReason,
     listedByOtherToolsOnly: notLoaded.filter((r) => Array.isArray(r.listedIn) && r.listedIn.length).length,
+    // Every skill at least one tool lists, each counted once however many
+    // tools it is linked into. The per tool counts add up to more than this.
+    listedByAnyTool: rows.length + notLoaded.filter((r) => Array.isArray(r.listedIn) && r.listedIn.length).length,
     clientsRead: clients.map((c) => c.id),
     callsElsewhere: rows.reduce((n, r) => n + (r.callsElsewhere || 0), 0) + notLoaded.reduce((n, r) => n + (r.callsElsewhere || 0), 0),
     usedElsewhere: rows.filter((r) => (r.callsElsewhere || 0) > 0).length,
@@ -354,6 +387,13 @@ function buildTotals (rows, sessions, calls, notLoaded = [], clients = []) {
     callsTotal: calls.length,
     callsMatched: matched,
     calledSkills: rows.filter((r) => r.calls > 0).length,
+    // Listed skills Claude Code used in the recent window, and how many uses
+    // that was. `days` is the window actually measured, never more than was read.
+    usedRecently: {
+      days: recentDays,
+      skills: rows.filter((r) => (r.recentCalls || 0) > 0).length,
+      uses: rows.reduce((n, r) => n + (r.recentCalls || 0), 0),
+    },
     neverCalled: rows.filter((r) => r.calls === 0).length,
     neverCalledCommand: command.filter((r) => r.calls === 0).length,
     neverCalledContext: context.filter((r) => r.calls === 0).length,
@@ -370,16 +410,22 @@ function buildSummary ({ rows, economics, stats, pricing, cost, counts, notLoade
     const priced = (cost.perModel || []).find((m) => normalizeModelId(m.id) === key)
     if (priced && priced.wasted && typeof priced.wasted.perWeek === 'number') {
       wastedPerWeekOnYourModel = { model: priced.label || priced.id, dollars: round(priced.wasted.perWeek), dollarsPerMonth: round(priced.wasted.perMonth) }
-      // What taking the recommendations is worth in money. The saving is a
-      // share of the waste, because gating leaves the name line behind, so it
-      // never quite reaches the full wasted figure.
+      // What taking the recommendations is worth in money: the tokens the
+      // acted rows give back, at the price a token of the list costs. That
+      // price is read off the waste, or off the whole list when nothing is
+      // wasted and the saving is all shortened descriptions.
       const wastedTokens = Number(economics.wastedPerCall.tokens) || 0
-      const savedTokens = Number(economics.ifGated.savedTokensPerSession) || 0
-      const share = wastedTokens > 0 ? Math.min(1, savedTokens / wastedTokens) : 0
+      const listingTokens = Number(per.totalListingTokens) || 0
+      const savedTokens = appliedOf(economics).tokens
+      const perToken = wastedTokens > 0
+        ? { week: priced.wasted.perWeek / wastedTokens, month: priced.wasted.perMonth / wastedTokens }
+        : (listingTokens > 0 && priced.listing
+            ? { week: priced.listing.perWeek / listingTokens, month: priced.listing.perMonth / listingTokens }
+            : { week: 0, month: 0 })
       savedOnYourModel = {
         model: priced.label || priced.id,
-        dollars: round(priced.wasted.perWeek * share),
-        dollarsPerMonth: round(priced.wasted.perMonth * share),
+        dollars: round(perToken.week * savedTokens),
+        dollarsPerMonth: round(perToken.month * savedTokens),
         tokens: savedTokens,
       }
     }
@@ -394,12 +440,23 @@ function buildSummary ({ rows, economics, stats, pricing, cost, counts, notLoade
     unroutable: nullable(economics.overflowUnroutable.count),
     summonedOnly: nullable(economics.summonedOnlyContext.count),
     wastedTokensPerCall: nullable(economics.wastedPerCall.tokens),
-    savedTokensPerCallIfApplied: nullable(economics.ifGated.savedTokensPerSession),
-    fitsAfter: typeof economics.ifGated.fitsBudgetAfter === 'boolean' ? economics.ifGated.fitsBudgetAfter : null,
+    savedTokensPerCallIfApplied: nullable(appliedOf(economics).tokens),
+    fitsAfter: typeof appliedOf(economics).fitsBudgetAfter === 'boolean' ? appliedOf(economics).fitsBudgetAfter : null,
     wastedPerWeekOnYourModel,
     savedOnYourModel,
     recommendedActions: actions,
   }
+}
+
+/**
+ * The saving the summary reports: what the recommendations give back. Falls
+ * back to the gate everything figure only for an economics block built
+ * without rows to rank, which is a hand built one in a test.
+ */
+function appliedOf (economics) {
+  if (economics.ifApplied) return economics.ifApplied
+  const gated = economics.ifGated || {}
+  return { tokens: Number(gated.savedTokensPerSession) || 0, fitsBudgetAfter: gated.fitsBudgetAfter }
 }
 
 const SUMMARY_KEYS = [

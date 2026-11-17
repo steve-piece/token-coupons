@@ -6,104 +6,158 @@ import { sampleReport } from './fixtures/sample-report.mjs'
 
 const report = sampleReport()
 const html = renderList(report, { cardHref: 'card.html' })
+const ours = html.split('id="report-data"')[0]
+
+/** The markup of one row, by its index in report.skills. */
+function rowOf (i) {
+  const at = html.indexOf('<tr data-i="' + i + '"')
+  return at === -1 ? '' : html.slice(at, html.indexOf('</tr>', at))
+}
+/** The checked value of one of a row's two controls. */
+function checked (row, kind) {
+  const seg = row.split('data-kind="' + kind + '"')[1] || ''
+  const m = seg.split('</div>')[0].match(/value="(\w+)" checked/)
+  return m ? m[1] : null
+}
+const dollars = (s) => Number(String(s).replace(/[^0-9.]/g, ''))
+const wasteText = (k) => (html.match(new RegExp('data-wv="' + k + '">([^<]*)<')) || [])[1]
+const wasteCount = (k) => Number((html.match(new RegExp('data-wn="' + k + '">(\\d+)<')) || [])[1])
+
+describe('the waste, accounted for in full', () => {
+  const names = new Set([...report.economics.neverCalledContext.names, ...report.economics.summonedOnlyContext.names])
+  const waste = report.skills.filter((x) => names.has(x.names[0]))
+  const total = waste.reduce((n, x) => n + x.dollarsPerMonth, 0)
+
+  test('the headline is every wasted skill priced the way its row is', () => {
+    assert.match(html, /<section class="waste" id="waste"/)
+    assert.match(html, new RegExp('<span class="wv bad">\\$' + total.toFixed(2) + '</span><span class="wk">wasted a month'))
+  })
+
+  test('the bar splits that whole figure, and its parts add back up to it', () => {
+    const widths = [...html.matchAll(/class="ws ws-\w+" data-w="\w+" style="width:([\d.]+)%"/g)].map((m) => Number(m[1]))
+    assert.equal(widths.length, 5, 'back, new, other tools, still listed, name lines')
+    assert.ok(Math.abs(widths.reduce((a, b) => a + b, 0) - 100) < 0.05)
+    const parts = ['back', 'fresh', 'elsewhere', 'left', 'nameline'].reduce((n, k) => n + dollars(wasteText(k)), 0)
+    assert.ok(Math.abs(parts - total) < 0.01, 'parts ' + parts + ' against ' + total)
+  })
+
+  test('back starts on the suggestions, counting only wasted skills', () => {
+    const back = waste.reduce((n, x) => {
+      const a = x.recommendation.action
+      return ['command', 'delete', 'optimize'].includes(a) && x.location !== 'plugin-cache'
+        ? n + x.recommendation.impactTokensPerCall * x.dollarsPerMonth / x.listingTokens : n
+    }, 0)
+    assert.equal(dollars(html.match(/id="k-save">([^<]*)</)[1]).toFixed(2), back.toFixed(2))
+    assert.equal(wasteCount('back'), waste.filter((x) => x.recommendation.impactTokensPerCall > 0).length)
+  })
+
+  test('a suggestion that saves nothing is still listed, never counted as back', () => {
+    // csv-quick-stats is unused and too short: shortening it gives nothing back
+    assert.equal(wasteCount('left'), 1)
+    assert.match(html, /data-wk="left" title="unused, and nothing in the current choices/)
+  })
+
+  test('what shortening a used skill saves is shown apart, since it is not waste', () => {
+    assert.match(html, /<p class="wextra" id="w-extra">Plus <b class="good" data-wv="extra">\$[\d.]+<\/b> from shortening <span data-wn="extra">2<\/span> skills you do use/)
+    assert.match(html, /id="k-total">\$[\d.]+<\/b> back in all/)
+  })
+
+  test('the held back parts are buttons that filter the list to exactly those rows', () => {
+    assert.match(html, /<button type="button" class="wl" data-wk="fresh" data-goflag="waste-fresh" aria-pressed="false"/)
+    assert.match(html, /<button type="button" class="wl" data-wk="elsewhere" data-goflag="waste-elsewhere" aria-pressed="false"/)
+    const tagged = (f) => (html.match(new RegExp('data-flags="[^"]*\\b' + f + '\\b')) || []).length
+    assert.equal(tagged('waste-fresh'), wasteCount('fresh'))
+    assert.equal(tagged('waste-elsewhere'), wasteCount('elsewhere'))
+  })
+
+  test('names the tool that picks them when one does', () => {
+    const r = sampleReport()
+    const x = r.skills.find((s) => s.names[0] === 'weekly-status-digest')
+    x.recommendation = { ...x.recommendation, action: 'keep', impactTokensPerCall: 0, flags: [...x.recommendation.flags, 'picked-elsewhere'] }
+    x.callsByClient = { cursor: { calls: 2, contextCalls: 2, commandCalls: 0 } }
+    const page = renderList(r)
+    assert.match(page, /aria-label="Cursor"[^]*?Cursor picks these<\/span><span class="wlv" data-wv="elsewhere">\$0\.241</)
+  })
+
+  test('sits between the score and the list it summarizes', () => {
+    const at = (s) => html.indexOf(s)
+    assert.ok(at('class="scorecard"') < at('id="waste"') && at('id="waste"') < at('id="list"'))
+  })
+})
 
 describe('the decision list', () => {
-  test('explains the two kinds of skill directly above the list that asks about them', () => {
-    const modesAt = html.indexOf('Two kinds of skill, and the whole idea')
-    const tableAt = html.indexOf('id="rows-section"')
-    const figuresAt = html.indexOf('id="figures"')
-    assert.ok(modesAt > 0, 'the explainer exists')
-    assert.ok(modesAt < tableAt, 'and it comes before the table it explains')
-    assert.ok(figuresAt > 0 && figuresAt < modesAt, 'sitting below the figures, not above them')
-    assert.ok(html.includes("Descriptions injected in the model's context, used as needed."), 'context, in one line')
-    assert.ok(html.includes('Skills activated through direct reference within the prompt.'), 'command, in one line')
-    assert.ok(html.includes('One line in the YAML: <code>disable-model-invocation: true</code>'))
+  test('gives two controls per skill, one per question, each preset to the suggestion', () => {
+    const rows = (html.match(/<tr data-i=/g) || []).length
+    assert.equal(rows, report.skills.length)
+    assert.equal((html.match(/<div class="seg" role="radiogroup" data-kind="type"/g) || []).length, rows)
+    assert.equal((html.match(/<div class="seg" role="radiogroup" data-kind="action"/g) || []).length, rows)
+
+    // a suggestion to make it a command belongs to the type control, never the other
+    const gate = report.skills.findIndex((s) => s.recommendation.action === 'command')
+    assert.notEqual(gate, -1, 'the fixture has at least one of these')
+    assert.equal(checked(rowOf(gate), 'type'), 'command')
+    assert.equal(checked(rowOf(gate), 'action'), 'keep')
+
+    // a review suggestion changes nothing, so both controls sit where they are
+    const review = report.skills.findIndex((s) => s.recommendation.action === 'review')
+    assert.equal(checked(rowOf(review), 'action'), 'keep')
+  })
+
+  test('marks the suggestion and what the skill is today, without words inside the options', () => {
+    const gate = report.skills.findIndex((s) => s.recommendation.action === 'command')
+    const row = rowOf(gate)
+    assert.match(row, /<label class="sg today"><input type="radio" name="t\d+" value="context"/)
+    assert.match(row, /<label class="sg sug"><input type="radio" name="t\d+" value="command" checked/)
+    assert.equal(/\(suggested\)/.test(html), false)
+    assert.match(row, /data-state="suggested"/)
+    const keep = report.skills.findIndex((s) => s.recommendation.action === 'keep')
+    assert.match(rowOf(keep), /data-state=""/)
   })
 
   test('names the two kinds context and command, and never the old two words', () => {
-    const ours = html.split('report-data')[0]
-    assert.match(ours, /<option value="context"/)
-    assert.match(ours, /<option value="command"/)
-    assert.equal(/<option value="(passive|active)"/.test(ours), false)
-    assert.equal(/\bPassive\b/.test(ours), false, 'the old word is gone from the copy too')
+    assert.match(ours, /value="context"/)
+    assert.match(ours, /value="command"/)
+    assert.equal(/value="(passive|active)"/.test(ours), false)
+    assert.equal(/\bPassive\b/.test(ours), false)
+    assert.match(ours, /disable-model-invocation: true/, 'the one line that makes a command is named')
   })
 
-  test('leads with money, and prices every row the same way', () => {
-    assert.ok(html.includes('a month, back'), 'the recoverable figure comes first')
-    assert.ok(html.includes('a month, wasted'))
-    // green on what you get back, red on the count behind it
-    assert.match(html, /class="fig good"><span class="v">\$/)
-    assert.match(html, /class="fig bad"><span class="v">\d+<\/span><span class="k">skills never used/)
-    assert.ok(html.includes('Cost a month'), 'the column is money, not tokens')
-    const rows = (html.match(/<tr data-index=/g) || []).length
-    const costs = (html.match(/td class="num cost"/g) || []).length
-    assert.equal(costs, rows, 'every row carries a cost cell')
+  test('prices every row in money', () => {
+    const rows = (html.match(/<tr data-i=/g) || []).length
+    assert.equal((html.match(/<td class="num cost"><span class="cv">\$/g) || []).length, rows)
+    assert.ok(html.includes('Cost / mo'))
   })
 
-  test('gives two controls per skill, one per question, each preset to the suggestion', () => {
-    const rows = (html.match(/<tr data-index=/g) || []).length
-    assert.equal(rows, report.skills.length)
-    // context or command is one question, keep or shorten or delete is another,
-    // so a row carries one control for each
-    assert.equal((html.match(/select class="action"/g) || []).length, rows)
-    assert.equal((html.match(/select class="mode"/g) || []).length, rows)
-
-    // a review suggestion changes nothing, so both controls sit where they are
-    const review = report.skills.findIndex((s) => (s.recommendation || {}).action === 'review')
-    if (review !== -1) {
-      const block = html.split('data-index="' + review + '"').slice(1).join('data-index="')
-      assert.match(block.slice(0, 1400), /data-rec="keep"/)
-    }
-    // a suggestion to make it a command belongs to the type control, never the other
-    const gate = report.skills.findIndex((s) => (s.recommendation || {}).action === 'command')
-    assert.notEqual(gate, -1, 'the fixture has at least one of these')
-    const block = html.split('data-index="' + gate + '"').slice(1).join('data-index="').slice(0, 1600)
-    assert.match(block, /class="mode"[^>]*data-rec="command"/)
-    assert.match(block, /class="action"[^>]*data-rec="keep"/)
-  })
-
-  test('says which choice is a suggestion, without hiding what the skill is today', () => {
-    const gate = report.skills.findIndex((s) => (s.recommendation || {}).action === 'command')
-    const block = html.split('data-index="' + gate + '"').slice(1).join('data-index="').slice(0, 1600)
-    // the option text is the value alone: the state is not smuggled into the word
-    assert.equal(/\(suggested\)/.test(html), false, 'no parenthetical inside an option')
-    assert.match(block, /<span class="ctl" data-state="suggested"><select class="mode"/)
-    assert.match(block, /<span class="state">suggested, Context today<\/span>/)
-    // and a row the tool would leave alone carries no state at all
-    const keep = report.skills.findIndex((s) => (s.recommendation || {}).action === 'keep')
-    if (keep !== -1) {
-      const quiet = html.split('data-index="' + keep + '"').slice(1).join('data-index="').slice(0, 1600)
-      assert.match(quiet, /<span class="ctl" data-state=""><select class="mode"/)
-    }
-  })
-
-  test('keys the tags under a name, since a hover tooltip is not discoverable', () => {
-    assert.match(html, /<span class="legendk">Tags<\/span>/)
-    assert.match(html, /class="legendtext">dropped from the list to fit the budget/)
-    // and the location line says where in words, not in a label needing its own key
-    assert.match(html, /class="where" title="where this skill lives on this machine">/)
-    assert.match(html, /in your skills folder/)
-    assert.equal(/>linked in</.test(html), false, 'the old label read as a company name')
+  test('draws usage and description length as data, and keeps tags for the rest', () => {
+    assert.match(html, /<span class="pk">agent<\/span>/)
+    assert.match(html, /<span class="pk">you<\/span>/)
+    assert.match(html, /<div class="meter (ok|warn|danger)"/)
+    assert.match(html, /<span class="tag danger" title="dropped from the listing to fit the budget[^"]*">Out of reach<\/span>/)
+    assert.match(html, /<span class="tag plain" title="[^"]*">Already a command<\/span>/)
   })
 
   test('refuses to offer delete where the folder is not the person to fix', () => {
-    const cached = report.skills.some((s) => s.location === 'plugin-cache')
-    if (cached) assert.ok(html.includes('value="delete" disabled'))
+    const cached = report.skills.findIndex((s) => s.location === 'plugin-cache')
+    assert.match(rowOf(cached), /<label class="sg dis" title="lives in a plugin cache; uninstall the plugin instead"><input type="radio" name="a\d+" value="delete" disabled/)
   })
 
   test('links back to the card when it has one, and omits the link when it does not', () => {
-    assert.ok(html.includes('href="card.html"'))
+    assert.ok(html.includes('<a class="back" href="card.html">Back to the scorecard</a>'))
     assert.equal(renderList(report).includes('Back to the scorecard'), false)
   })
 
-  test('is self contained, dark, and free of the banned characters', () => {
+  test('is self contained, follows the reader\'s theme, and is free of the banned characters', () => {
     assert.equal(/(?:src|href)="https?:/.test(html), false, 'no external asset')
-    assert.ok(html.includes('id="report-data"'), 'the data island the script reads')
-    assert.ok(html.includes('color-scheme: dark'))
+    assert.equal(html.split('id="report-data"').length - 1, 1, 'one data island for the page script')
+    assert.ok(html.includes('color-scheme: light dark'))
+    assert.equal(html.includes('__LABELS__'), false, 'the tool names are filled in')
     const DASHES = [0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2212].map((c) => String.fromCodePoint(c))
     // only our own markup: a skill description on disk may contain anything
-    const ours = html.split('report-data')[0]
     assert.equal(DASHES.some((d) => ours.includes(d)), false)
+  })
+
+  test('is the same bytes every time it is built from the same report', () => {
+    assert.equal(renderList(report, { cardHref: 'card.html' }), html)
   })
 
   test('the decisions file starts on the suggestions, in the contract shape', () => {
@@ -112,11 +166,15 @@ describe('the decision list', () => {
     const json = JSON.parse(inner
       .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'))
     assert.equal(json.version, 1)
-    assert.ok(Array.isArray(json.decisions))
+    assert.equal(json.source, 'token-coupons html report')
     for (const d of json.decisions) {
       assert.ok(d.name && typeof d.path === 'string')
       assert.ok(['command', 'context', 'optimize', 'delete'].includes(d.action), 'keep is never exported')
     }
+    const gate = report.skills.find((s) => s.recommendation.action === 'command')
+    assert.ok(json.decisions.some((d) => d.name === gate.names[0] && d.action === 'command'))
+    const cached = report.skills.find((s) => s.location === 'plugin-cache')
+    assert.equal(json.decisions.some((d) => d.name === cached.names[0] && d.action === 'delete'), false)
   })
 
   test('survives a report with nothing in it', () => {
@@ -124,27 +182,36 @@ describe('the decision list', () => {
     assert.ok(out.includes('</html>'))
     assert.equal(out.includes('undefined'), false)
     assert.equal(out.includes('NaN'), false)
+    assert.equal(out.includes('id="waste"'), false, 'no waste, no breakdown')
   })
 })
 
-describe('the two questions a reader asks about the money', () => {
+describe('the questions a reader asks about the money', () => {
   test('says the figures are API prices, and what a flat plan actually pays', () => {
-    assert.ok(html.includes('API prices'))
-    assert.match(html, /not a bill you will see/)
-    assert.match(html, /eats into your plan's limits/)
+    assert.match(html, /API prices; on a flat plan it is not a bill but it eats into your limits/)
   })
 
-  test('explains why the wasted and recovered figures cannot match', () => {
-    assert.match(html, /do not match, and cannot/)
-    assert.match(html, /leaves its <strong>name<\/strong> in the list/)
+  test('says what the used count was counted over, and how many uses that was', () => {
+    assert.match(html, /<span class="kv">9<span class="of">\/12<\/span><\/span><span class="kk">used, last 30 days/)
+    assert.match(html, /61 uses in all\. The rest were sent with every message and never opened\./)
+  })
+
+  test('the window is whatever was measured, and a report that predates it draws no tile for it', () => {
+    const short = sampleReport()
+    short.totals.usedRecently = { days: 9, skills: 1, uses: 1 }
+    assert.match(renderList(short), /<span class="kv">1<span class="of">\/12<\/span><\/span><span class="kk">used, last 9 days/)
+
+    const older = sampleReport()
+    delete older.totals.usedRecently
+    const before = renderList(older)
+    assert.equal(/used, last/.test(before), false)
+    assert.match(before, /<div class="kpis" style="--k:2">/, 'the tiles close up around the missing one')
   })
 })
 
-describe('the score, now that it lives here', () => {
+describe('the score', () => {
   test('is shown above the list it is telling you to change', () => {
-    const scoreAt = html.indexOf('id="score"')
-    const tableAt = html.indexOf('id="rows-section"')
-    assert.ok(scoreAt > 0 && scoreAt < tableAt)
+    assert.ok(html.indexOf('class="scorecard"') < html.indexOf('id="list"'))
     assert.match(html, /class="sv">\d+<\/span><span class="sd">\/100</)
     assert.match(html, /class="grade (emerald|amber|rose)"/)
   })
@@ -154,16 +221,9 @@ describe('the score, now that it lives here', () => {
     assert.match(html, /in every message you send/)
   })
 
-  test('says how the score is built, so it is not a black box', () => {
-    assert.match(html, /earned its place \(70\)/)
-    assert.match(html, /fits the space your agent gives it \(20\)/)
-    assert.match(html, /silently dropped \(10\)/)
-  })
-
-  test('keeps that rule behind a question, revealed on hover or focus', () => {
-    assert.match(html, /<button type="button" class="tiptrigger" aria-describedby="score-how">/)
-    assert.match(html, /How is the score calculated\?/)
-    assert.match(html, /<span class="tip" role="tooltip" id="score-how">Scored out of 100/)
-    assert.match(html, /\.tipwrap:hover \.tip, \.tipwrap:focus-within \.tip \{[^}]*visibility: visible/)
+  test('shows how it is built, one bar per part', () => {
+    for (const [label, max] of [['Earned', 70], ['Fits', 20], ['Reach', 10]]) {
+      assert.match(html, new RegExp('<span class="pk">' + label + '</span>[^]*?<span class="dim">/' + max + '</span>'))
+    }
   })
 })

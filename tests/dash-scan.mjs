@@ -9,7 +9,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const CODES = [0x2010, 0x2011, 0x2012, 0x2013, 0x2014, 0x2015, 0x2212]
 const CHARS = CODES.map((c) => String.fromCodePoint(c))
 const SKIP_DIRS = new Set(['node_modules', '.git', 'out', 'tmp'])
-const EXTS = new Set(['.mjs', '.js', '.json', '.md', '.html', '.css', '.txt', '.yml', '.yaml'])
+const EXTS = new Set(['.mjs', '.js', '.ts', '.tsx', '.json', '.md', '.html', '.css', '.txt', '.yml', '.yaml'])
 
 function walk (dir, out = []) {
   for (const name of readdirSync(dir)) {

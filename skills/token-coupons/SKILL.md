@@ -95,6 +95,10 @@ node -e "const r=JSON.parse(require('fs').readFileSync(process.env.HOME+'/.token
 - Otherwise open it locally (`TC report --open ...`, or `open <path>` on macOS, `xdg-open <path>` on
   Linux) and give the absolute path in the reply as well, so they can find it again later.
 
+A plugin install also has `/coupons`, a pane showing these same numbers. It is a view only and a
+standalone install does not have it, so never send anyone to it and never depend on it: this loop
+is complete without it.
+
 ## Step 4. Tell them what to do, then stop
 
 Say this, near enough word for word:

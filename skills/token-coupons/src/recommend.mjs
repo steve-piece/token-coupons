@@ -20,6 +20,7 @@
 import { nameLineChars, toTokens, listingCost, DEFAULT_PER_ENTRY_CAP } from './budget.mjs'
 import { fmt } from './lib/util.mjs'
 import { GATE_HONOURING, clientLabel } from './clients.mjs'
+import { DEFAULT_TYPED_SHARE, isMostlyTyped } from './economics.mjs'
 
 /** Overridable through the `thresholds` option. */
 export const DEFAULT_THRESHOLDS = {
@@ -31,6 +32,9 @@ export const DEFAULT_THRESHOLDS = {
   // used" says nothing about it. Below this age a zero-call skill is left alone.
   newSkillDays: 14,
   heaviestListSize: 15,
+  // A skill counts as started by you once you typed its name for this share of
+  // its uses. See DEFAULT_TYPED_SHARE in economics.mjs for why it is not 1.
+  typedShare: DEFAULT_TYPED_SHARE,
 }
 
 /** Delete is only ever offered for files the person owns and can move. */
@@ -110,7 +114,8 @@ function decide (row, { thresholds, cap, now, unroutable }) {
   const heavy = mode === 'context' && descriptionChars > thresholds.heavyChars
   const thin = mode === 'context' && calls === 0 && descriptionChars < thresholds.thinChars
   const capped = mode === 'context' && out.capped === true
-  const summonedOnly = mode === 'context' && calls > 0 && contextCalls === 0
+  const commandCalls = Number(out.commandCalls) || 0
+  const summonedOnly = mode === 'context' && isMostlyTyped(out, thresholds.typedShare)
   const isUnroutable = unroutable.has(name) || (Array.isArray(out.names) && out.names.some((n) => unroutable.has(n)))
   const notEditable = out.editable === false
 
@@ -149,7 +154,7 @@ function decide (row, { thresholds, cap, now, unroutable }) {
     action = 'optimize'; rule = 'thin'
   } else if (mode === 'context' && tooNew) {
     action = 'keep'; rule = 'too-new'
-  } else if (mode === 'context' && contextCalls === 0 && routedElsewhere > 0) {
+  } else if (mode === 'context' && (contextCalls === 0 || summonedOnly) && routedElsewhere > 0) {
     action = 'keep'; rule = 'routed-elsewhere'
   } else if (mode === 'context' && calls === 0 && deletable && callsElsewhere === 0 && unmeasured.length === 0) {
     action = 'delete'; rule = 'stale'
@@ -170,7 +175,7 @@ function decide (row, { thresholds, cap, now, unroutable }) {
   }
 
   const reason = reasonFor(rule, {
-    mode, calls, contextCalls, descriptionChars, listingTokens, nameTokens,
+    mode, calls, contextCalls, commandCalls, descriptionChars, listingTokens, nameTokens,
     ageDays, cap, impactTokensPerCall, thresholds, flags, sourcePath: out.sourcePath || null,
     usedIn, pickedIn, routedElsewhere, callsElsewhere, unmeasured, heldBack,
   })
@@ -200,6 +205,11 @@ function reasonFor (rule, c) {
     base = 'Never used, last edited ' + fmt(c.ageDays) + ' days ago, ' + desc + ' sent every message. Deleting (or making it wait for its name) ' + gain
   } else if (rule === 'never-called') {
     base = 'Never used in these sessions, yet its ' + desc + ' description costs ' + cost + '. Making it wait for its name ' + gain
+  } else if (rule === 'summoned-only' && c.contextCalls > 0) {
+    // Mostly typed, not always: say what the agent's few picks were, because
+    // gating gives those up and the person should see the trade.
+    base = 'Used ' + uses + ', ' + fmt(c.commandCalls) + ' of them by you typing its name. Gating it ' + gain +
+      '; the agent picked it ' + (c.contextCalls === 1 ? 'once' : fmt(c.contextCalls) + ' times') + ', and you would type ' + (c.contextCalls === 1 ? 'that one' : 'those') + ' too'
   } else if (rule === 'summoned-only') {
     base = 'Used ' + uses + ', always by you typing its name, never picked by the agent. Its ' + desc + ' description buys nothing; gating it ' + gain
   } else if (rule === 'capped') {
@@ -210,7 +220,7 @@ function reasonFor (rule, c) {
     base = 'Installed ' + (c.ageDays === 0 ? 'today' : c.ageDays === 1 ? 'yesterday' : fmt(c.ageDays) + ' days ago') +
       ' and not used yet, which is expected. Its ' + desc + ' description costs ' + cost + '. Check back in a couple of weeks'
   } else if (rule === 'routed-elsewhere') {
-    base = 'Claude Code never picked it on its own, but ' + names(c.pickedIn) + ' did (' + fmt(c.routedElsewhere) + ' times) and reads the same setting, so gating it here would take it away there. Leave it'
+    base = (c.contextCalls > 0 ? 'You nearly always type it here' : 'Claude Code never picked it on its own') + ', but ' + names(c.pickedIn) + ' did (' + fmt(c.routedElsewhere) + ' times) and reads the same setting, so gating it here would take it away there. Leave it'
   } else if (c.mode === 'command') {
     base = 'Used ' + uses + ' and already waits for its name, so it costs ' + fmt(c.nameTokens) + ' tokens a message. Leave it'
   } else {

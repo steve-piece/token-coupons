@@ -396,8 +396,23 @@ export function sampleReport () {
   for (const r of rows) counts[r.recommendation.action] = (counts[r.recommendation.action] || 0) + 1
 
   const yours = cost.perModel.find((m) => m.seenInTranscripts) || cost.perModel[0]
-  // gating leaves the name line behind, so the saving is a share of the waste
-  const savedShare = wastedTokens > 0 ? Math.min(1, economics.ifGated.savedTokensPerSession / wastedTokens) : 0
+  // What the recommendations give back is the sum of the rows that act, the
+  // way economics.mjs ifApplied() states it, not the figure for gating everything.
+  const acted = rows.filter((r) => ['command', 'delete', 'optimize'].includes(r.recommendation.action))
+  const appliedTokens = acted.reduce((n, r) => n + r.recommendation.impactTokensPerCall, 0)
+  const appliedChars = acted.filter((r) => r.mode !== 'command').reduce((n, r) => n + (r.recommendation.action === 'optimize'
+    ? Math.max(0, r.listingChars - (THRESHOLDS.optimizeTargetChars + nameLineChars(r.names[0])))
+    : Math.max(0, r.listingChars - nameLineChars(r.names[0]))), 0)
+  economics.ifApplied = {
+    tokens: appliedTokens,
+    chars: appliedChars,
+    count: acted.length,
+    byAction: { command: counts.command, delete: counts.delete, optimize: counts.optimize },
+    charsAfter: Math.max(0, spend - appliedChars),
+    tokensAfter: toTokens(Math.max(0, spend - appliedChars)),
+    fitsBudgetAfter: Math.max(0, spend - appliedChars) <= budget.chars,
+  }
+  const savedShare = wastedTokens > 0 ? appliedTokens / wastedTokens : 0
   // one rate for every row, the way report.mjs derives it
   const rate = yours && wastedTokens > 0 ? yours.wasted.perMonth / wastedTokens : null
   if (rate !== null) for (const r of rows) r.dollarsPerMonth = round(r.listingTokens * rate, 4)
@@ -420,6 +435,7 @@ export function sampleReport () {
       neverCalled: rows.filter((r) => r.calls === 0).length,
       neverCalledCommand: commandNow.filter((r) => r.calls === 0).length,
       neverCalledContext: deadWeight.length,
+      usedRecently: { days: 30, skills: 9, uses: 61 },
     },
     economics,
     stats: STATS,
@@ -439,15 +455,15 @@ export function sampleReport () {
       unroutable: overflow.length,
       summonedOnly: summonedOnly.length,
       wastedTokensPerCall: wastedTokens,
-      savedTokensPerCallIfApplied: economics.ifGated.savedTokensPerSession,
-      fitsAfter: economics.ifGated.fitsBudgetAfter,
+      savedTokensPerCallIfApplied: appliedTokens,
+      fitsAfter: economics.ifApplied.fitsBudgetAfter,
       wastedPerWeekOnYourModel: yours ? { model: yours.label, dollars: yours.wasted.perWeek, dollarsPerMonth: yours.wasted.perMonth } : null,
       savedOnYourModel: yours
         ? {
             model: yours.label,
             dollars: round(yours.wasted.perWeek * savedShare),
             dollarsPerMonth: round(yours.wasted.perMonth * savedShare),
-            tokens: economics.ifGated.savedTokensPerSession,
+            tokens: appliedTokens,
           }
         : null,
       recommendedActions: counts,

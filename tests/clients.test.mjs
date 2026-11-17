@@ -210,11 +210,20 @@ describe('one row, every tool', () => {
         assert.equal(codex.skillCalls, 1)
         assert.equal(codex.callsMatched, 1)
         assert.equal(codex.skills, 1, 'Codex lists only the shared folder skill')
+        // The lists overlap, and the report says by how much: one folder
+        // linked into several tools is an entry in each of their lists.
+        assert.equal(codex.alsoInClaude, 1)
+        assert.equal(r.clients.find((c) => c.id === 'cursor').alsoInClaude, 3)
+        assert.equal(r.clients.find((c) => c.id === 'gemini').alsoInClaude, 1)
+        const mine = r.clients.find((c) => c.id === 'claude')
+        assert.equal(mine.alsoInClaude, null, 'not a question to ask of Claude Code itself')
+        assert.equal(mine.alsoElsewhere, 3, 'every Claude Code skill in this fixture is linked into another tool')
         assert.ok(codex.budget && codex.budget.chars > 0)
         assert.equal(codex.honoursGate, false)
         const gemini = r.clients.find((c) => c.id === 'gemini')
         assert.equal(gemini.coverage.measured, false)
         assert.equal(r.totals.callsElsewhere, 3)
+        assert.equal(r.totals.listedByAnyTool, 3, 'three skills, each counted once though several tools list it')
         assert.equal(r.totals.usedElsewhere, 2)
         assert.deepEqual(r.totals.clientsRead, ['claude', 'codex', 'cursor', 'gemini'])
       })
@@ -294,6 +303,7 @@ describe('one row, every tool', () => {
         const [solo] = r.notLoaded
         assert.match(solo.reason, /a Codex skill; Claude Code does not read that folder/)
         assert.deepEqual(solo.listedIn, ['codex'])
+        assert.equal(r.clients.find((c) => c.id === 'codex').alsoInClaude, 0, 'a Codex only skill is shared with nobody')
         assert.equal(solo.callsAllClients, 1)
         assert.equal(r.totals.listedByOtherToolsOnly, 1)
       })
@@ -309,7 +319,8 @@ describe('what the readers see', () => {
         const text = renderText(buildReport({ today: TODAY }))
         assert.match(text, /Also on this machine: Codex, Cursor, Gemini CLI/)
         assert.match(text, /\nOTHER TOOLS\n/)
-        assert.match(text, /Codex\n\s+In its list: 1 skills?, about \d+ tokens per message \(room for about/)
+        assert.match(text, /Codex\n\s+In its list: 1 skill \(1 shared with Claude Code\), about \d+ tokens per message \(room for about/)
+        assert.match(text, /The lists overlap: 3 of your 3 skills are in another tool's list too, one folder linked into each/)
         assert.match(text, /Ignores disable-model-invocation: a command decision here changes nothing in Codex/)
         assert.match(text, /Cursor[\s\S]*Reads disable-model-invocation, so a command decision here applies there too/)
         assert.match(text, /no Gemini CLI chats found/)
@@ -325,14 +336,19 @@ describe('what the readers see', () => {
     try {
       await withHome(fx.home, () => {
         const html = renderList(buildReport({ today: TODAY }))
-        assert.match(html, /Other tools on this machine/)
-        assert.match(html, /<b>Codex<\/b> lists 1 skill, about/)
-        assert.match(html, /also listed by Codex and Cursor/)
-        assert.match(html, /class="elsewhere" title="also used in Codex 1 \(last 2026-08-10\), Cursor 1 \(last 2026-08-11\)">\+2</)
-        assert.match(html, />used elsewhere</)
-        assert.match(html, />picked elsewhere</)
-        assert.match(html, />usage unknown</)
-        assert.match(html, /Cursor reads that line too\. Codex and Gemini CLI do not\./)
+        // one row per tool: what its list holds and how much of it is shared
+        const toolRow = (label) => (html.split('<table class="toolt">')[1] || '').split('</tr>').find((tr) => tr.includes('aria-label="' + label + '"')) || ''
+        assert.match(html, /Tools on this machine/)
+        assert.match(toolRow('Codex'), /<\/th><td class="num">1<\/td><td class="num">1<\/td>/)
+        assert.match(toolRow('Cursor'), /<\/th><td class="num">3<\/td><td class="num">3<\/td>/)
+        assert.match(html, /shared folders change everywhere/)
+        // the row says who else lists it, and counts the uses next door
+        assert.match(html, /class="tools-in" title="also listed by Codex, Cursor"/)
+        assert.match(html, /<span class="plus" title="uses in other tools on this machine">\+2 elsewhere<\/span>/)
+        assert.match(html, />Used in Codex 1x, Cursor 1x</)
+        assert.match(html, />Cursor 1x picks it</)
+        assert.match(html, />Usage unknown</)
+        assert.match(html, /Cursor reads that line too; Codex and Gemini CLI do not\./)
         for (const ch of FORBIDDEN) assert.equal(html.includes(ch), false)
       })
     } finally { fx.cleanup() }

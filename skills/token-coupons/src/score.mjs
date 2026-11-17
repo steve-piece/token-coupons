@@ -96,7 +96,7 @@ export function headline (summary, economics, scored) {
   }
   const first = []
   if (never > 0) first.push(`${fmt(never)} skill${never === 1 ? ' has' : 's have'} never been used.`)
-  if (summoned > 0) first.push(`${fmt(summoned)} more you only type yourself.`)
+  if (summoned > 0) first.push(`${fmt(summoned)} more you mostly run by hand.`)
   return [
     first.join(' '),
     `Their descriptions cost ${fmt(wasted)} tokens in every message you send.`,

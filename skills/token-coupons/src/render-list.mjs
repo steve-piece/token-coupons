@@ -2,911 +2,544 @@
 // one number, this page carries every row behind it and lets a person change
 // any of them.
 //
-// Three things shape it:
+// Four things shape it:
 //
-//   Money, not tokens. A token count is a unit nobody has intuition for. Every
-//   row is priced per month at the same rate the card quotes, so the two
-//   documents can never disagree about what a skill costs.
+//   The waste is accounted for in full. The headline figure is split into
+//   where each dollar sits: what the choices give back, new skills it is too
+//   early to judge, skills another tool picks, and the name lines a command
+//   still costs. Changing a row moves its dollars between those parts, so the
+//   gap between "wasted" and "back" always explains itself.
 //
-//   Context and command, explained right above the list. Nobody can make these
-//   decisions without knowing what the two kinds of skill are, so the explainer
-//   sits where the decisions start. That difference is the only lever the tool
-//   pulls.
+//   Data, not sentences. Usage, description length and age are drawn in their
+//   own cells, so tags are kept for the signals those cells cannot show.
 //
-//   The current state is never hidden behind a suggestion. A control that holds
-//   the tool's proposal says so underneath, and says what the skill is today.
+//   Two questions, two controls. Context or command, and keep, shorten or
+//   delete, are separate segmented controls. A dot marks the suggestion and a
+//   dashed outline marks what the skill is today, so the current state is
+//   never hidden behind a proposal.
 //
-// Nothing here writes to disk. The page produces a decisions file the person
-// pastes back to their agent, which is what actually applies anything.
+//   Nothing here writes to disk. The page produces a decisions file the person
+//   pastes back to their agent, which is what actually applies anything.
+//
+// The stylesheet and the page script live beside this file in list/, read
+// once at load and inlined, so the page stays one self contained document.
+
+import { readFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { fmt, money } from './lib/util.mjs'
 import { CLIENTS, clientLabel } from './clients.mjs'
-import { scoreReport, headline, GRADE_COLOR } from './score.mjs'
+import { scoreReport, headline, GRADE_COLOR, WEIGHTS } from './score.mjs'
+import { LOGO_PATHS } from './list/logos.mjs'
 
-// The page carries its own palette rather than the card's. The card is one
-// dark object meant to be posted somewhere else; this is a document a person
-// reads and works in, so it follows the reader's theme in both directions.
-const SANS = "ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+const HERE = join(dirname(fileURLToPath(import.meta.url)), 'list')
+const CSS = readFileSync(join(HERE, 'page.css'), 'utf8')
+const JS = readFileSync(join(HERE, 'page.js'), 'utf8')
 
-// Two independent questions, so two controls. Blending them into one select
-// made the reader choose between "make it a command" and "shorten it" when those
-// are not alternatives: a skill can be both.
-const MODES = [
-  ['context', 'Context', 'the agent can pick it, so its description is sent in every message'],
-  ['command', 'Command', 'the description stops being sent; you reach it by typing its name'],
-]
-const MODE_LABEL = Object.fromEntries(MODES.map(([value, label]) => [value, label]))
+/* -------------------------------------------------------------- vocabulary */
 
-const DISPOSITIONS = [
-  ['keep', 'Keep', 'leave the skill as it is'],
-  ['optimize', 'Shorten', 'keep the skill, rewrite the description shorter'],
-  ['delete', 'Delete', 'remove it, moving the folder to a trash directory so you can put it back'],
-]
+// The short names a tool gets wherever space is tight. The full name is always
+// in the title beside it.
+const TOOL_ABBR = { claude: 'CC', codex: 'CX', cursor: 'CU', gemini: 'GE' }
 
-const MODE_TIP = 'Context: the agent can pick it on its own, so its description rides in every message. ' +
-  'Command: the description is not sent, and you start it by typing its name.'
+// Where a folder lives, in two words. The long phrasing moves to the tooltip.
+const ORIGIN = {
+  user: ['Personal', 'in your skills folder'],
+  'user-symlink': ['Linked', 'a shortcut in your skills folder'],
+  'plugin-cache': ['Plugin cache', 'installed by a plugin; edits are wiped on the next update'],
+  marketplace: ['Marketplace', 'a marketplace checkout'],
+  project: ['Project', 'in this project'],
+  'project-source': ['Project', 'in this project'],
+  agents: ['Shared', 'in the shared .agents skills folder'],
+}
+
+// Signals that are not already visible in the Usage or Description cells.
+// Never used, too long, too short and stale are drawn as data in those cells,
+// so they are not repeated as tags.
+const TAG_DEFS = {
+  unroutable: ['danger', 'Out of reach', 'dropped from the listing to fit the budget: the agent cannot pick it, and nothing warns you'],
+  capped: ['danger', 'Cut off', 'longer than the agent reads, so the tail of the description is thrown away'],
+  'summoned-only': ['info', 'You type it', 'you start it by name four times in five, so it pays to sit in the router for little return'],
+  'dormant-command': ['plain', 'Already a command', 'already waits for its name; it costs one line and nothing changes by editing it'],
+  'usage-unmeasured': ['warn', 'Usage unknown', 'listed by a tool whose chats this run could not read, so never used is not certain'],
+}
 
 const FILTERS = [
-  ['all', 'All'],
   ['never-called', 'Never used'],
   ['summoned-only', 'You type it'],
   ['heavy-description', 'Too long'],
   ['thin-description', 'Too short'],
   ['unroutable', 'Out of reach'],
-  ['changed', 'Changed by me'],
+  ['stale', 'Stale'],
+  ['too-new', 'New'],
 ]
+
+/* ------------------------------------------------------------------ render */
 
 /** @param {object} report a Report from report.mjs @returns {string} one HTML document */
 export function renderList (report, { cardHref = null } = {}) {
+  tipSeq = 0
   const r = report || {}
   const s = r.summary || {}
   const skills = Array.isArray(r.skills) ? r.skills : []
+  const th = r.thresholds || {}
+  const today = dayNum(r.generatedOn)
+  const ctx = { r, s, th, today, waste: wasteSet(r), cap: (r.budget && r.budget.perEntryCap) || 1536 }
+  const rows = skills.map((x, i) => rowModel(x, i, ctx))
 
   return [
-    '<!doctype html>',
-    '<html lang="en">',
-    '<head>',
-    '<meta charset="utf-8">',
+    '<!doctype html><html lang="en"><head><meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     '<title>Skill Decisions</title>',
-    '<style>' + styles() + '</style>',
-    '</head>',
-    '<body>',
+    '<style>' + CSS + '</style>',
+    '</head><body>',
     '<div class="wrap">',
-    header(r, s, cardHref),
-    score(r, s),
-    figures(s, r.cost),
+    mast(r, cardHref),
+    hero(r, s),
+    wastePanel(r, s, ctx.waste),
     tools(r),
-    modes(),
-    table(skills, r),
-    exportFooter(r, skills),
+    table(rows, ctx),
     '</div>',
-    island(r),
-    '<script>' + script(Object.fromEntries(CLIENTS.map((c) => [c.id, c.label]))) + '</script>',
-    '</body>',
-    '</html>',
+    tray(),
+    dialog(r, rows),
+    '<script type="application/json" id="report-data">' + JSON.stringify(r).replace(/</g, '\\u003c') + '</script>',
+    '<script>' + JS.replace('__LABELS__', JSON.stringify(Object.fromEntries(CLIENTS.map((c) => [c.id, c.label])))) + '</script>',
+    '</body></html>',
     '',
   ].join('\n')
 }
 
-/* ------------------------------------------------------------------ head */
-
-function header (r, s, cardHref) {
-  return [
-    '<header class="head">',
-    '<div class="mast">',
-    '<span class="dot"></span><span class="brand">token-coupons</span>',
-    cardHref ? '<a class="back" href="' + attr(cardHref) + '">Back to the scorecard</a>' : '',
-    '<span class="when">' + esc(r.generatedOn || '') + '</span>',
-    '<button type="button" id="theme-toggle" class="ghost sm" title="switch between the light and dark version of this page">Dark or light</button>',
-    '</div>',
-    '<h1>Every skill, and what it costs you</h1>',
-    '<p class="lede">' + fmt(s.skills || 0) + ' skills are described again in every message you send. Below is each one, ' +
-      'what it costs a month, and what to do about it.</p>',
-    '</header>',
-  ].join('\n')
+function mast (r, cardHref) {
+  return '<header class="mast"><span class="dot"></span><span class="brand">token-coupons</span>' +
+    '<span class="crumb">Skill decisions</span>' +
+    (cardHref ? '<a class="back" href="' + attr(cardHref) + '">Back to the scorecard</a>' : '') +
+    '<span class="when">' + esc(r.generatedOn || '') + '</span>' +
+    '<button type="button" id="theme-toggle" class="icon-btn" aria-label="switch light or dark">' + ICON.theme + '</button></header>'
 }
 
-/**
- * The two kinds of skill, stated directly above the list that asks the reader
- * to choose between them. One line each on what each costs, because that
- * difference is the whole lever.
- */
-/**
- * The other tools on the machine, one line each: what their list holds, what
- * of their chats were read, how many uses came out. They send their own list
- * with their own messages, so nothing here is added to the figures above; it
- * is here so a row's +N and its "also listed by" have somewhere to point.
- */
-function tools (r) {
-  const others = (Array.isArray(r.clients) ? r.clients : []).filter((c) => c.id !== 'claude')
-  if (!others.length) return ''
-  const items = others.map((c) => {
-    const cov = c.coverage || {}
-    const notes = (Array.isArray(cov.notes) ? cov.notes : []).map((n) => '<span class="toolnote">' + esc(n) + '</span>').join('')
-    const budget = c.budget ? ', room for about ' + fmt(c.budget.tokens) : ''
-    return '<li><b>' + esc(c.label) + '</b> lists ' + fmt(c.skills) + (c.skills === 1 ? ' skill' : ' skills') + ', about ' + fmt(c.listingTokens) + ' tokens a message' + esc(budget) +
-      (c.overBudget ? ' <span class="pill danger xs">over its allowance</span>' : '') +
-      '. ' + fmt(c.sessions) + ' chats read, ' + fmt(c.skillCalls) + ' skill uses' +
-      (c.honoursGate ? '. Reads the command line, so a command here applies there.' : '. Ignores the command line.') + notes + '</li>'
-  })
-  return [
-    '<section class="section" id="tools">',
-    '<h2 class="eyebrow">Other tools on this machine</h2>',
-    '<ul class="tools">' + items.join('') + '</ul>',
-    '<p class="note">Each sends its own skill list with its own messages, on its own model, so none of this is added to the figures above. ' +
-      'A <code>+N</code> in the Used column is uses in these tools, and the grey line under a name says which of them list it.</p>',
-    '</section>',
-  ].join('\n')
-}
+/* ------------------------------------------------------------------- hero */
 
-function modes () {
-  return [
-    '<section class="section" id="modes">',
-    '<h2 class="eyebrow">Two kinds of skill, and the whole idea</h2>',
-    '<div class="modes">',
-    '<article class="mode">',
-    '<div class="modehead"><span class="pill warn">Context</span><span class="modecost">the default</span></div>',
-    '<p>Descriptions injected in the model\'s context, used as needed.</p>',
-    '<p class="modefine">Its description is sent with every message, used or not.</p>',
-    '</article>',
-    '<article class="mode">',
-    '<div class="modehead"><span class="pill good">Command</span><span class="modecost">you run it</span></div>',
-    '<p>Skills activated through direct reference within the prompt.</p>',
-    '<p class="modefine">One line in the YAML: <code>disable-model-invocation: true</code></p>',
-    '<p class="modefine">Cursor reads that line too. Codex and Gemini CLI do not.</p>',
-    '</article>',
-    '</div>',
-    '<p class="note">Every row below is that one question: <strong>does the agent need to find this by itself, or do you ' +
-      'always reach for it yourself?</strong> If you always type it, make it a command and it stops costing you anything.</p>',
-    '</section>',
-  ].join('\n')
-}
-
-/**
- * The score, and what is behind it. It lives here rather than on the card
- * because it is a diagnosis: it belongs next to the list of things it is
- * telling you to change, not on the thing you post afterwards.
- */
-function score (r, s) {
+function hero (r, s) {
   const scored = scoreReport(r)
   const tone = GRADE_COLOR[scored.grade] || 'rose'
-  return [
-    '<section class="section" id="score">',
-    '<div class="scorerow">',
-    '<div class="scorenum"><span class="sv">' + esc(String(scored.score)) + '</span><span class="sd">/100</span></div>',
-    '<span class="grade ' + tone + '">' + esc(scored.grade) + '</span>',
-    '<div class="scoretext">',
-    headline(s, r.economics || {}, scored).map((l) => '<p>' + esc(l) + '</p>').join(''),
-    '</div>',
-    '</div>',
-    // The scoring rule sits behind a question rather than on the page: it is
-    // the answer to "why this number", so it should appear when that is asked
-    // and stay out of the way otherwise. Hover or focus reveals it.
-    '<p class="note tipwrap"><button type="button" class="tiptrigger" aria-describedby="score-how">' +
-      '<span class="tipmark" aria-hidden="true">?</span>How is the score calculated?</button>' +
-      '<span class="tip" role="tooltip" id="score-how">Scored out of 100: how much of the list has earned its place (70), ' +
-      'whether the whole list fits the space your agent gives it (20), and whether anything is being silently dropped (10). ' +
-      'Every change below moves it.</span></p>',
-    '</section>',
-  ].join('\n')
-}
+  const recent = r.totals && r.totals.usedRecently
+  const over = Number(s.overBudgetRatio) || ((r.economics || {}).perSession || {}).overBudgetRatio || 0
+  const budgetTok = (r.budget && r.budget.tokens) || 0
+  const lines = headline(s, r.economics || {}, scored)
 
-/* --------------------------------------------------------------- figures */
+  const parts = ['earned', 'fit', 'reach'].map((k) => {
+    const got = scored.parts[k]; const max = WEIGHTS[k]
+    const label = { earned: 'Earned', fit: 'Fits', reach: 'Reach' }[k]
+    const tip = {
+      earned: 'share of listing tokens spent on skills the agent has picked at least once',
+      fit: 'full marks at or under the listing allowance, none at twice over',
+      reach: 'a tenth off for every skill the agent is silently dropping',
+    }[k]
+    return '<div class="part" title="' + attr(tip) + '"><span class="pk">' + label + '</span>' +
+      '<span class="pm"><i style="width:' + pct(got, max) + '%"></i></span>' +
+      '<span class="pv">' + fmtN(got) + '<span class="dim">/' + max + '</span></span></div>'
+  }).join('')
 
-function figures (s, cost) {
-  const wasted = s.wastedPerWeekOnYourModel
-  const saved = s.savedOnYourModel
-  const model = (saved && saved.model) || (wasted && wasted.model) || null
-  const share = ((cost || {}).volume || {}).wastedShareOfInput
-  const shareText = (typeof share === 'number' && share > 0)
-    ? (share < 0.001 ? 'under 0.1 percent' : (share * 100).toFixed(1) + ' percent')
-    : null
-  const cells = []
-  // Green on what you get back, red on the count that causes it. The wasted
-  // figure sits between them and needs no colour of its own.
-  if (saved) cells.push(fig(money(saved.dollarsPerMonth), 'a month, back', 'good'))
-  if (wasted) cells.push(fig(money(wasted.dollarsPerMonth), 'a month, wasted', 'plain'))
-  cells.push(fig(fmt(s.neverCalledContext || 0), 'skills never used', 'bad'))
-  if (!cells.length) return ''
-  // Two things a reader will otherwise get wrong: why the two dollar figures
-  // differ, and whether a flat plan actually bills any of this.
-  const residue = (wasted && saved && typeof wasted.dollarsPerMonth === 'number' && typeof saved.dollarsPerMonth === 'number')
-    ? wasted.dollarsPerMonth - saved.dollarsPerMonth : null
-  const notes = []
-  notes.push('<p class="note">' + (model ? 'At ' + esc(model) + ' API prices. ' : '') +
-    'On a flat plan this is not a bill you will see: it is what the waste is worth, and it eats into your plan\'s limits ' +
-    'instead' + (shareText ? ', where it is ' + esc(shareText) + ' of everything you send' : '') + '.</p>')
-  if (residue !== null && residue > 0.005) {
-    notes.push('<p class="note">The two figures do not match, and cannot: gating a skill removes its description but leaves its ' +
-      '<strong>name</strong> in the list. Those name lines are the last ' + esc(money(residue)) + ' a month, and no decision here ' +
-      'removes them.</p>')
+  const kpis = []
+  if (recent && Number.isFinite(Number(recent.skills))) {
+    kpis.push(kpi(fmt(recent.skills) + '<span class="of">/' + fmt(s.skills || 0) + '</span>', 'used, last ' + fmt(recent.days) + ' days', 'plain',
+      fmt(recent.uses) + ' uses in all. The rest were sent with every message and never opened.', true))
   }
+  kpis.push(kpi(fmt(s.unroutable || 0), 'out of reach', (s.unroutable ? 'bad' : 'plain'),
+    'Installed and correct, but dropped from the listing to fit the budget, so the agent cannot pick them.'))
+  if (over) {
+    kpis.push(kpi(over.toFixed(2) + '<span class="of">x</span>', 'over the listing budget', over > 1 ? 'warn' : 'good',
+      fmt(s.listingTokensPerCall || 0) + ' tokens a message against room for ' + fmt(budgetTok) + '.', true,
+      '<span class="kbar"><i style="width:' + Math.min(100, Math.round(100 / Math.max(over, 1))) + '%"></i></span>'))
+  }
+
   return [
-    '<section class="section" id="figures">',
-    '<div class="figs">' + cells.join('') + '</div>',
-    notes.join(''),
+    '<section class="hero">',
+    '<div class="scorecard">',
+    '<div class="scoretop"><span class="sv">' + esc(String(scored.score)) + '</span><span class="sd">/100</span>' +
+      '<span class="grade ' + tone + '">' + esc(scored.grade) + '</span></div>',
+    '<div class="parts">' + parts + '</div>',
+    '</div>',
+    '<div class="herotext">',
+    '<h1>' + esc(lines[0] || '') + '</h1>',
+    lines[1] ? '<p class="sub">' + esc(lines[1]) + '</p>' : '',
+    '<div class="kpis" style="--k:' + kpis.length + '">' + kpis.join('') + '</div>',
+    '</div>',
     '</section>',
   ].join('\n')
 }
 
-function fig (value, label, tone) {
-  return '<div class="fig ' + tone + '"><span class="v">' + esc(value) + '</span>' +
-    '<span class="k">' + esc(label) + '</span></div>'
+/* ------------------------------------------------------------------ waste */
+
+/** The skills the wasted figure counts: context skills never picked, plus the
+ *  ones you mostly start by typing. Same lists the economics block prices. */
+const nameOf = (x) => (x.names && x.names[0]) || x.name || ''
+function wasteSet (r) {
+  const e = r.economics || {}
+  return new Set([...((e.neverCalledContext || {}).names || []), ...((e.summonedOnlyContext || {}).names || [])])
 }
 
-/* ----------------------------------------------------------------- table */
-
-// The tags a row can carry, in one place, so the key above the table and the
-// pills inside it can never disagree about what a tag means.
-const TAGS = [
-  ['unroutable', 'danger', 'out of reach', 'dropped from the list to fit the budget, so the agent cannot pick it and nothing warns you'],
-  ['capped', 'warn', 'cut off', 'longer than the agent will read, so the tail is thrown away'],
-  ['source', 'plain', 'source on disk', 'an editable copy exists outside the plugin cache, and that is the one a change is written to'],
-  ['used-elsewhere', 'plain', 'used elsewhere', 'used in another tool on this machine; the folder stays whatever you decide here'],
-  ['picked-elsewhere', 'good', 'picked elsewhere', 'another tool that reads the same setting chose it on its own, so a command here would take it away there'],
-  ['usage-unmeasured', 'warn', 'usage unknown', 'listed by a tool whose chats this run could not read, so never used is not certain'],
-]
-
-function table (skills, r) {
-  const priced = skills.some((x) => typeof x.dollarsPerMonth === 'number')
-  const maxCost = skills.reduce((n, x) => Math.max(n, Number(x.dollarsPerMonth) || 0), 0) || 1
-  const tagsUsed = new Set()
-
-  const rows = skills.map((x, i) => {
+/** Where every wasted dollar goes under the suggestions. The client redraws
+ *  the same buckets from the rows as you change them. */
+function wasteBuckets (r, waste) {
+  const b = { back: 0, nameline: 0, fresh: 0, elsewhere: 0, left: 0, extra: 0 }
+  const n = { back: 0, fresh: 0, elsewhere: 0, left: 0, extra: 0 }
+  const pickers = new Set()
+  for (const x of r.skills || []) {
     const rec = x.recommendation || {}
-    const flags = Array.isArray(rec.flags) ? rec.flags : []
-    const name = (x.names && x.names[0]) || x.name || 'skill'
-    const preset = presetFor(rec.action, x.location)
-    const cost = Number(x.dollarsPerMonth) || 0
-    const bar = Math.max(2, Math.round((cost / maxCost) * 100))
-    const tags = TAGS.filter(([key]) => key === 'source' ? !!x.sourcePath : flags.includes(key))
-    tags.forEach(([key]) => tagsUsed.add(key))
-    const marks = tags.map(([key, tone, label, tip]) =>
-      mark(tone, label, key === 'source' ? 'the editable copy is at ' + x.sourcePath : tip))
+    const flags = rec.flags || []
+    const d = Number(x.dollarsPerMonth) || 0
+    const acts = ['command', 'delete', 'optimize'].includes(rec.action) && !(rec.action === 'delete' && x.location === 'plugin-cache')
+    const got = acts && x.listingTokens ? (Number(rec.impactTokensPerCall) || 0) * d / x.listingTokens : 0
+    if (!waste.has(nameOf(x))) { if (got) { b.extra += got; n.extra++ } continue }
+    if (flags.includes('picked-elsewhere')) {
+      Object.entries(x.callsByClient || {}).forEach(([id, t]) => { if (id !== 'claude' && t && Number(t.contextCalls) > 0) pickers.add(id) })
+    }
+    if (got > 0) { b.back += got; b.nameline += d - got; n.back++ } else {
+      const k = flags.includes('too-new') ? 'fresh' : flags.includes('picked-elsewhere') ? 'elsewhere' : 'left'
+      b[k] += d; n[k]++
+    }
+  }
+  const total = b.back + b.nameline + b.fresh + b.elsewhere + b.left
+  return { b, n, total, pickers: [...pickers] }
+}
 
-    return [
-      '<tr data-index="' + i + '" data-flags="' + attr(flags.join(' ')) + '" data-changed="no">',
-      '<td class="num rank">' + esc(String(rec.rank || i + 1)) + '</td>',
-      '<td class="skill">',
-      '<button type="button" class="sname" data-detail="' + i + '" aria-expanded="false">' + esc(name) + '</button>',
-      '<span class="where" title="where this skill lives on this machine">' + esc(whereLabel(x)) + '</span>',
-      marks.length ? '<span class="marks">' + marks.join('') + '</span>' : '',
-      '</td>',
-      '<td class="act">' + modeSelect(x, i, name) + '</td>',
-      '<td class="num used"><span>' + fmt(x.contextCalls || 0) + '</span><span class="slash">/</span><span>' + fmt(x.commandCalls || 0) + '</span>' +
-        (x.callsElsewhere ? '<span class="elsewhere" title="' + attr(elsewhereTip(x)) + '">+' + fmt(x.callsElsewhere) + '</span>' : '') + '</td>',
-      '<td class="num cost">' + (priced
-        ? '<span>' + esc(money(cost)) + '</span><span class="bar" aria-hidden="true"><i style="width:' + bar + '%"></i></span>'
-        : '<span>' + fmt(x.descriptionTokens || 0) + '</span>') + '</td>',
-      '<td class="why">' + esc(rec.reason || '') + '</td>',
-      '<td class="act">' + dispositionSelect(x, i, name, preset) + '</td>',
-      '</tr>',
-    ].join('')
-  }).join('\n')
+function wastePanel (r, s, waste) {
+  const { b, n, total, pickers } = wasteBuckets(r, waste)
+  if (!total) return ''
+  const model = ((s.wastedPerWeekOnYourModel || {}).model) || ((s.savedOnYourModel || {}).model) || ''
+  const share = ((r.cost || {}).volume || {}).wastedShareOfInput
+  const who = pickers.length ? pickers.map(clientLabel).join(' and ') + (pickers.length > 1 ? ' pick' : ' picks') + ' these' : 'Other tools pick these'
+  const w = (v) => (v / total * 100).toFixed(2) + '%'
+  const SEGS = [
+    ['back', 'Back with your choices', 'the suggestions you have kept, plus any you added', null, null],
+    ['fresh', 'New, check back in 14 days', 'installed in the last 14 days, so not being used yet proves nothing', 'waste-fresh', null],
+    ['elsewhere', who, 'unused here, but another tool that reads the same command setting picks them; a command here would take them away there', 'waste-elsewhere', pickers],
+    ['left', 'Still listed', 'unused, and nothing in the current choices takes them out of the listing', null, null],
+    ['nameline', 'Name lines stay', 'a command still lists its name, so a sliver of each saving stays listed', null, null],
+  ]
+  const bar = SEGS.map(([k, label]) => '<i class="ws ws-' + k + '" data-w="' + k + '" style="width:' + w(b[k]) + '" title="' + attr(label) + '"></i>').join('')
+  const legend = SEGS.map(([k, label, tip, flag, ids]) => {
+    const inner = '<span class="sw ws-' + k + '"></span>' +
+      '<span class="wlk">' + (ids && ids.length ? ids.map((id) => logo(id, clientLabel(id))).join('') : '') + esc(label) + '</span>' +
+      '<span class="wlv" data-wv="' + k + '">' + esc(money(b[k])) + '</span>' +
+      (k === 'nameline' ? '' : '<span class="wln" data-wn="' + k + '">' + n[k] + '</span>')
+    const hide = (k === 'left' && !b.left) ? ' hidden' : ''
+    return flag
+      ? '<button type="button" class="wl" data-wk="' + k + '" data-goflag="' + flag + '" aria-pressed="false" title="' + attr(tip + '. Show them in the list.') + '"' + hide + '>' + inner + '</button>'
+      : '<span class="wl" data-wk="' + k + '" title="' + attr(tip) + '"' + hide + '>' + inner + '</span>'
+  }).join('')
 
-  const unroutable = (r.economics && r.economics.overflowUnroutable && r.economics.overflowUnroutable.count) || 0
   return [
-    '<section class="section" id="rows-section">',
-    '<div class="sechead"><h2>The list</h2><span class="count" id="row-count">' + skills.length + ' skills</span></div>',
-    // The one convention the controls use, stated once before the reader
-    // meets it: what is suggested and what is current are never the same mark.
-    '<p class="note key">Every control starts on what the tool suggests. ' +
-      '<span class="ctl inline" data-state="suggested"><span class="state">suggested</span></span> under a control is a change the ' +
-      'tool proposes, with what the skill is today beside it: leave it to accept it, or pick something else and it reads ' +
-      '<span class="ctl inline" data-state="yours"><span class="state">your change</span></span>. ' +
-      'A control with nothing under it is a row the tool would leave alone.</p>',
-    '<div class="chips" role="group" aria-label="filters">',
-    FILTERS.map(([v, label]) => '<button type="button" class="chip' + (v === 'all' ? ' on' : '') +
-      '" data-filter="' + attr(v) + '" aria-pressed="' + (v === 'all' ? 'true' : 'false') + '">' + esc(label) + '</button>').join(''),
+    '<section class="waste" id="waste" data-total="' + total + '">',
+    '<div class="wtop">',
+    '<div class="wstat"><span class="wv bad">' + esc(money(total)) + '</span><span class="wk">wasted a month' +
+      info('tip-waste', 'Descriptions of skills the agent never picks, or that you start by typing, sent with every message. At ' + model +
+        ' API prices; on a flat plan it is not a bill but it eats into your limits' +
+        (typeof share === 'number' && share > 0 ? ' (' + (share * 100).toFixed(1) + '% of everything you send)' : '') + '.') + '</span></div>',
+    '<div class="wstat right"><span class="wv good" id="k-save">' + esc(money(b.back)) + '</span><span class="wk">of it back with your choices</span></div>',
     '</div>',
-    '<input type="search" id="search" placeholder="Search names, plugins, descriptions" aria-label="search the list">',
-    legend(tagsUsed),
-    '<div class="tablewrap">',
-    '<table>',
+    '<div class="wbar" aria-hidden="true">' + bar + '</div>',
+    '<div class="wlegend">' + legend + '</div>',
+    '<p class="wextra" id="w-extra"' + (b.extra ? '' : ' hidden') + '>Plus <b class="good" data-wv="extra">' + esc(money(b.extra)) + '</b> from shortening ' +
+      '<span data-wn="extra">' + n.extra + '</span> skills you do use, so <b class="good" id="k-total">' + esc(money(b.back + b.extra)) + '</b> back in all.</p>',
+    '</section>',
+  ].join('\n')
+}
+
+// Tooltip ids for the figure tiles, counted per render so the page is the
+// same bytes every time it is built from the same report.
+let tipSeq = 0
+
+function kpi (valueHtml, label, tone, tip, raw = false, extra = '') {
+  const id = 'tip-k' + (++tipSeq)
+  return '<div class="kpi ' + tone + '"><span class="kv">' + (raw ? valueHtml : esc(valueHtml)) + '</span>' +
+    '<span class="kk">' + esc(label) + info(id, tip) + '</span>' + extra + '</div>'
+}
+
+function info (id, tip) {
+  return '<span class="info"><button type="button" class="info-btn" aria-describedby="' + id + '" aria-label="more about this">' + ICON.info + '</button>' +
+    '<span class="tip" role="tooltip" id="' + id + '">' + esc(tip) + '</span></span>'
+}
+
+/* ------------------------------------------------------------------ tools */
+
+function tools (r) {
+  const all = Array.isArray(r.clients) ? r.clients : []
+  if (all.length < 2) return ''
+  const rows = all.map((c) => {
+    const notes = ((c.coverage || {}).notes || []).join(' ')
+    const isCC = c.id === 'claude'
+    return '<tr' + (isCC ? ' class="me"' : '') + '>' +
+      '<th scope="row">' + logo(c.id, c.label) + esc(c.label) +
+        (notes ? info('tn-' + c.id, notes) : '') + '</th>' +
+      '<td class="num">' + fmt(c.skills) + '</td>' +
+      '<td class="num">' + (isCC ? '<span class="dim">all</span>' : fmt(c.alsoInClaude || 0)) + '</td>' +
+      '<td class="num">' + fmt(c.listingTokens) + (c.overBudget ? ' <span class="pill danger xs">over</span>' : '') + '</td>' +
+      '<td class="num">' + (c.budget ? fmt(c.budget.tokens) : '<span class="dim">none published</span>') + '</td>' +
+      '<td class="num">' + fmt(c.sessions) + '</td>' +
+      '<td class="num">' + fmt(c.skillCalls) + '</td>' +
+      '<td class="ctr">' + (c.honoursGate ? '<span class="yes" title="a command here is a command there">' + ICON.check + '</span>' : '<span class="no" title="ignores the command setting">' + ICON.x + '</span>') + '</td>' +
+      '</tr>'
+  }).join('')
+  return [
+    '<details class="tools" id="tools">',
+    '<summary><span class="sumk">Tools on this machine</span><span class="sumv">' + all.map((c) => logo(c.id, c.label)).join('') + '</span>' +
+      '<span class="dim">each sends its own list on its own model; shared folders change everywhere</span></summary>',
+    '<div class="tablewrap"><table class="toolt"><thead><tr><th>Tool</th><th class="num">Skills</th><th class="num">Shared w/ CC</th><th class="num">Tokens / msg</th>' +
+      '<th class="num">Allowance</th><th class="num">Chats read</th><th class="num">Skill uses</th><th class="ctr">Honors command</th></tr></thead>',
+    '<tbody>' + rows + '</tbody></table></div>',
+    '</details>',
+  ].join('\n')
+}
+
+/* ------------------------------------------------------------------ table */
+
+function rowModel (x, i, ctx) {
+  const rec = x.recommendation || {}
+  const raw = Array.isArray(rec.flags) ? rec.flags : []
+  // A command that was never used is counted apart from never used context
+  // skills in the headline, so the filter counts it the same way.
+  const flags = raw.includes('dormant-command') ? raw.filter((f) => f !== 'never-called') : raw
+  const name = (x.names && x.names[0]) || x.name || 'skill'
+  const todayMode = x.mode === 'command' ? 'command' : 'context'
+  const recMode = rec.action === 'command' ? 'command' : todayMode
+  const locked = x.location === 'plugin-cache'
+  const recAct = rec.action === 'delete' && locked ? 'keep' : (['optimize', 'delete'].includes(rec.action) ? rec.action : 'keep')
+  return { x, i, rec, flags, name, todayMode, recMode, recAct, locked }
+}
+
+function table (rows, ctx) {
+  const { s } = ctx
+  const counts = {}
+  rows.forEach((m) => m.flags.forEach((f) => { counts[f] = (counts[f] || 0) + 1 }))
+  const suggested = rows.filter((m) => m.recMode !== m.todayMode || m.recAct !== 'keep').length
+  const maxCost = rows.reduce((n, m) => Math.max(n, Number(m.x.dollarsPerMonth) || 0), 0) || 1
+
+  const tabs = [
+    ['all', 'All', rows.length],
+    ['suggested', 'Suggested', suggested],
+    ['changed', 'Changed by me', 0],
+  ].map(([v, label, n]) => '<button type="button" class="tab' + (v === 'all' ? ' on' : '') + '" data-scope="' + v + '" aria-pressed="' + (v === 'all') + '">' +
+    esc(label) + '<span class="n" ' + (v === 'changed' ? 'id="n-changed"' : '') + '>' + n + '</span></button>').join('')
+
+  const chips = FILTERS.filter(([k]) => counts[k]).map(([k, label]) =>
+    '<button type="button" class="chip" data-flag="' + k + '" aria-pressed="false">' + esc(label) + '<span class="n">' + counts[k] + '</span></button>').join('')
+
+  return [
+    '<section class="list" id="list">',
+    '<div class="toolbar">',
+    '<div class="tabs" role="group" aria-label="which rows">' + tabs + '</div>',
+    '<label class="search">' + ICON.search + '<input type="search" id="search" placeholder="Search skills" aria-label="search skills"></label>',
+    '</div>',
+    '<div class="subbar">',
+    '<div class="chips" role="group" aria-label="filter by signal">' + chips + '</div>',
+    '<div class="bulk" id="bulk">Set <b id="bulk-n">0</b> shown to' +
+      '<button type="button" class="ghost sm" data-bulk="command">Command</button>' +
+      '<button type="button" class="ghost sm" data-bulk="keep">As today</button>' +
+      '<button type="button" class="ghost sm" data-bulk="suggested">Suggested</button></div>',
+    '<div class="key"><span class="keyi"><span class="sugdot"></span>suggested</span><span class="keyi"><span class="todaybar"></span>today</span>' +
+      info('tip-modes', 'Context: the agent can pick it, so its description rides in every message. Command: only its name is listed and you start it by typing it (disable-model-invocation: true). Cursor reads that line too; Codex and Gemini CLI do not.') + '</div>',
+    '</div>',
+    '<div class="tablewrap main">',
+    '<table class="grid">',
+    '<colgroup><col class="c-rank"><col class="c-skill"><col class="c-use"><col class="c-desc"><col class="c-cost"><col class="c-save"><col class="c-type"><col class="c-act"></colgroup>',
     '<thead><tr>',
-    '<th class="num rank">#</th>',
-    '<th>Skill</th>',
-    '<th title="' + attr(MODE_TIP) + '">Type</th>',
-    '<th class="num" title="how often it was used in Claude Code: times the agent picked it on its own, then times you typed its name. A +N after them is uses in the other tools on this machine">Used</th>',
-    '<th class="num">' + (priced ? 'Cost a month' : 'Desc. tokens') + '</th>',
-    '<th>Why</th>',
-    '<th title="every control starts on the suggestion, so changing nothing accepts all of them">Decision</th>',
+    '<th class="num"><button type="button" class="sort" data-sort="rank">#</button></th>',
+    '<th><button type="button" class="sort" data-sort="name">Skill</button></th>',
+    '<th><button type="button" class="sort" data-sort="use" title="times the agent picked it, then times you typed it, in Claude Code">Usage</button></th>',
+    '<th><button type="button" class="sort" data-sort="chars" title="description length against the per entry cap; the tick is where too long starts">Description</button></th>',
+    '<th class="num"><button type="button" class="sort" data-sort="cost">Cost / mo</button></th>',
+    '<th class="num"><button type="button" class="sort" data-sort="save" title="what your current choices on this row recover">Saves / mo</button></th>',
+    '<th>Type</th>',
+    '<th>Action</th>',
     '</tr></thead>',
-    '<tbody id="rows">' + rows + '</tbody>',
+    '<tbody id="rows">' + rows.map((m) => row(m, ctx, maxCost)).join('\n') + '</tbody>',
     '</table>',
     '</div>',
-    '<p class="note">Click a skill name to see its full description and path. The grey line under a name is where its folder lives.' +
-      (unroutable ? ' The rows marked out of reach are already being dropped: installed, correct, and still unreachable.' : '') + '</p>',
+    '<p class="empty" id="empty" hidden>No skills match. <button type="button" class="link" id="clear">Clear filters</button></p>',
     '</section>',
   ].join('\n')
 }
 
-/** The key to the tags, showing only the ones that appear in this list. */
-function legend (used) {
-  const items = TAGS.filter(([key]) => used.has(key))
-  if (!items.length) return ''
-  return '<p class="legend"><span class="legendk">Tags</span>' + items.map(([, tone, label, tip]) =>
-    '<span class="legenditem">' + mark(tone, label, tip) + '<span class="legendtext">' + esc(tip) + '</span></span>').join('') + '</p>'
-}
+function row (m, ctx, maxCost) {
+  const { x, i, rec, flags, name, todayMode, recMode, recAct, locked } = m
+  const { th, today, cap } = ctx
+  const cost = Number(x.dollarsPerMonth) || 0
+  const chars = Number(x.descriptionChars) || 0
+  const usage = (Number(x.contextCalls) || 0) + (Number(x.commandCalls) || 0)
+  const state = (recMode !== todayMode || recAct !== 'keep') ? 'suggested' : ''
+  // Waste buckets the breakdown legend filters on; never shown as chips.
+  const wf = !ctx.waste.has(name) ? [] : flags.includes('too-new') ? ['waste-fresh'] : flags.includes('picked-elsewhere') ? ['waste-elsewhere'] : []
 
-/**
- * Context or command. It starts on whichever the tool suggests, which is only
- * different from today's value when the suggestion is to make it a command.
- * The current value is never hidden behind that: a control holding a
- * suggestion says so underneath, and says what the skill is today.
- */
-function modeSelect (x, i, name) {
-  const today = x.mode === 'command' ? 'command' : 'context'
-  const rec = ((x.recommendation || {}).action === 'command') ? 'command' : today
-  const opts = MODES.map(([value, label, tip]) =>
-    '<option value="' + value + '"' + (value === rec ? ' selected' : '') + ' title="' + attr(tip) + '">' + esc(label) + '</option>').join('')
-  const select = '<select class="mode" data-index="' + i + '" data-rec="' + attr(rec) + '" data-today="' + attr(today) +
-    '" data-name="' + attr(name) + '" aria-label="' + attr('context or command for ' + name) + '">' + opts + '</select>'
-  return control(select, rec === today ? '' : 'suggested', rec === today ? '' : 'suggested, ' + MODE_LABEL[today] + ' today')
-}
-
-/** Keep, shorten or delete. Orthogonal to the kind above: a skill can be both a command and shortened. */
-function dispositionSelect (x, i, name, preset) {
-  const locked = x.location === 'plugin-cache'
-  const rec = DISPOSITIONS.some(([v]) => v === preset) ? preset : 'keep'
-  const opts = DISPOSITIONS.map(([value, label, tip]) => {
-    const disabled = value === 'delete' && locked
-    return '<option value="' + value + '"' + (value === rec ? ' selected' : '') + (disabled ? ' disabled' : '') +
-      ' title="' + attr(disabled ? 'this lives in a plugin cache folder; remove it with claude plugin uninstall instead' : tip) + '">' +
-      esc(label) + '</option>'
-  }).join('')
-  const select = '<select class="action" data-index="' + i + '" data-rec="' + attr(rec) + '" data-name="' + attr(name) +
-    '" aria-label="' + attr('what to do with ' + name) + '">' + opts + '</select>'
-  return control(select, rec === 'keep' ? '' : 'suggested', rec === 'keep' ? '' : 'suggested')
-}
-
-/** A select and the words under it that say whose choice it is holding. */
-function control (select, state, text) {
-  return '<span class="ctl" data-state="' + attr(state) + '">' + select + '<span class="state">' + esc(text) + '</span></span>'
-}
-
-/**
- * The disposition control starts on the suggestion. Suggestions to make a
- * skill a command live in the type control instead, so 'command' and
- * 'context' land on Keep here, as do 'review' and a delete the plugin system
- * would undo.
- */
-export function presetFor (action, location) {
-  if (action === 'delete' && location === 'plugin-cache') return 'keep'
-  return DISPOSITIONS.some(([v]) => v === action) ? action : 'keep'
-}
-
-function mark (tone, label, tip) {
-  return '<span class="pill ' + tone + ' xs" title="' + attr(tip) + '">' + esc(label) + '</span>'
-}
-
-/* ---------------------------------------------------------------- export */
-
-function exportFooter (r, skills) {
-  const starting = JSON.stringify(decisionsOf(r, skills), null, 2)
   return [
-    '<section class="section" id="export">',
-    '<div class="sechead"><h2>Send it back</h2><span class="count" id="changed-count">0 changed</span></div>',
-    '<p class="note">Copy this and paste it into your next message with <code>proceed with these decisions</code>. Your agent ' +
-      'shows you the plan and waits for a yes before touching anything.</p>',
-    '<div class="codeblock">',
-    '<div class="codehead"><span class="codetitle">decisions.json</span>',
-    '<button type="button" id="copy" class="go sm">Copy</button>',
-    '<button type="button" id="reset" class="ghost sm">Reset my changes</button>',
-    '</div>',
-    '<textarea id="decisions-json" spellcheck="false" aria-label="the decisions file, ready to copy">' + esc(starting) + '</textarea>',
-    '</div>',
-    '<p class="note" id="export-note" role="status" aria-live="polite">Nothing has changed on disk, and nothing will until you say so.</p>',
-    '</section>',
-  ].join('\n')
+    '<tr data-i="' + i + '" data-flags="' + attr(flags.concat(wf).join(' ')) + '" data-state="' + state + '" data-changed="no"',
+    ' data-rank="' + (rec.rank || i + 1) + '" data-name="' + attr(name.toLowerCase()) + '" data-use="' + usage + '" data-chars="' + chars + '" data-cost="' + cost + '">',
+    '<td class="num rank">' + esc(String(rec.rank || i + 1)) + '</td>',
+    '<td class="skill">' + skillCell(x, i, name, flags, today) + '</td>',
+    '<td class="use">' + usageCell(x, today) + '</td>',
+    '<td class="desc">' + descCell(x, flags, th, cap, today) + '</td>',
+    '<td class="num cost"><span class="cv">' + esc(money(cost)) + '</span><span class="bar"><i style="width:' + Math.max(2, Math.round(cost / maxCost * 100)) + '%"></i></span></td>',
+    '<td class="num save"><span class="sv0" data-save="' + i + '">0</span></td>',
+    '<td class="ctl">' + seg('t' + i, [['context', 'Context'], ['command', 'Command']], recMode, recMode !== todayMode ? recMode : null, todayMode, {}, name, 'type') + '</td>',
+    '<td class="ctl">' + seg('a' + i, [['keep', 'Keep'], ['optimize', 'Shorten'], ['delete', 'Delete']], recAct, recAct !== 'keep' ? recAct : null, 'keep',
+      locked ? { delete: 'lives in a plugin cache; uninstall the plugin instead' } : {}, name, 'action') + '</td>',
+    '</tr>',
+  ].join('')
 }
 
-function decisionsOf (r, skills) {
+function skillCell (x, i, name, flags, today) {
+  const chips = []
+  if (x.plugin) chips.push('<span class="meta plug" title="part of the ' + attr(x.plugin) + ' plugin">' + ICON.plug + esc(x.plugin) + '</span>')
+  const o = ORIGIN[x.location] || [String(x.location || 'elsewhere'), String(x.location || '')]
+  chips.push('<span class="meta' + (x.location === 'plugin-cache' ? ' lock' : '') + '" title="' + attr(o[1]) + '">' +
+    (x.location === 'plugin-cache' ? ICON.lock : x.location === 'user-symlink' ? ICON.link : ICON.folder) + esc(o[0]) + '</span>')
+  if (x.sourcePath) chips.push('<span class="meta src" title="' + attr('edits go to the source copy at ' + x.sourcePath) + '">' + ICON.pen + 'source copy</span>')
+
+  const listed = (Array.isArray(x.listedIn) ? x.listedIn : []).filter((id) => id !== 'claude')
+  const tools = listed.length ? '<span class="tools-in" title="' + attr('also listed by ' + listed.map(clientLabel).join(', ')) + '">' +
+    listed.map((id) => logo(id, clientLabel(id))).join('') + '</span>' : ''
+
+  const tags = []
+  flags.forEach((f) => { if (TAG_DEFS[f]) tags.push(tag(...TAG_DEFS[f])) })
+  // The two tags whose value is the whole point, so they carry it.
+  const by = x.callsByClient || {}
+  const others = Object.entries(by).filter(([id, t]) => id !== 'claude' && t && Number(t.calls) > 0)
+  if (flags.includes('picked-elsewhere')) {
+    const who = others.filter(([, t]) => Number(t.contextCalls) > 0).map(([id, t]) => clientLabel(id) + ' ' + t.contextCalls + 'x')
+    tags.push(tag('good', (who[0] || 'Elsewhere') + ' picks it', 'another tool that reads the same command setting chose it on its own; a command here would take it away there'))
+  } else if (flags.includes('used-elsewhere') && others.length) {
+    tags.push(tag('plain', 'Used in ' + others.map(([id, t]) => clientLabel(id) + ' ' + t.calls + 'x').join(', '), 'another tool on this machine uses this folder'))
+  }
+  if (flags.includes('too-new')) {
+    const age = daysSince(x.modifiedOn, today)
+    tags.push(tag('info', 'New' + (age !== null ? ', ' + (age === 0 ? 'today' : age + 'd') : ''), 'installed in the last 14 days and not used yet, which is expected; no saving is claimed'))
+  }
+
+  return '<button type="button" class="sname" data-detail="' + i + '" aria-expanded="false">' + esc(name) + ICON.chev + '</button>' +
+    '<div class="metas">' + tags.join('') + chips.join('') + tools + '</div>'
+}
+
+function usageCell (x, today) {
+  const a = Number(x.contextCalls) || 0
+  const y = Number(x.commandCalls) || 0
+  const elsewhere = Number(x.callsElsewhere) || 0
+  const last = daysSince(x.lastSeen, today)
+  const lastTxt = x.lastSeen ? (last === 0 ? 'today' : last + 'd ago') : 'never'
+  return '<div class="pair"><span class="pn' + (a ? '' : ' z') + '">' + a + '</span><span class="pk">agent</span>' +
+    '<span class="pn' + (y ? '' : ' z') + '">' + y + '</span><span class="pk">you</span></div>' +
+    '<div class="sub' + (x.lastSeen ? '' : ' warn') + '">' + (x.lastSeen ? 'last ' : '') + lastTxt +
+    (elsewhere ? ' <span class="plus" title="uses in other tools on this machine">+' + elsewhere + ' elsewhere</span>' : '') + '</div>'
+}
+
+function descCell (x, flags, th, cap, today) {
+  const chars = Number(x.descriptionChars) || 0
+  const heavy = Number(th.heavyChars) || 600
+  const thin = Number(th.thinChars) || 60
+  const tone = flags.includes('capped') ? 'danger' : (flags.includes('heavy-description') || flags.includes('thin-description')) ? 'warn' : 'ok'
+  const edited = daysSince(x.modifiedOn, today)
+  const stale = flags.includes('stale')
+  const label = flags.includes('thin-description') ? 'too short' : flags.includes('heavy-description') ? 'too long' : ''
+  return '<div class="meter ' + tone + '" title="' + attr(fmt(chars) + ' characters, about ' + fmt(x.descriptionTokens || 0) + ' tokens a message. Too short under ' + thin + ', too long over ' + heavy + ', cut off past ' + cap) + '">' +
+    '<i style="width:' + pct(chars, cap) + '%"></i><b style="left:' + pct(heavy, cap) + '%"></b></div>' +
+    '<div class="sub"><span class="' + (tone === 'ok' ? '' : tone) + '">' + fmt(chars) + ' ch' + (label ? ' ' + label : '') + '</span>' +
+    (edited !== null ? ' <span class="' + (stale ? 'warn' : 'dim') + '" title="last edited ' + attr(x.modifiedOn) + '">&middot; ' + edited + 'd old</span>' : '') + '</div>'
+}
+
+/**
+ * A segmented control. The pressed segment is the current choice; a dot marks
+ * the tool's suggestion and a bar marks what the skill is today, so neither
+ * needs a sentence under the control.
+ */
+function seg (group, options, selected, suggested, today, disabled, name, kind) {
+  return '<div class="seg" role="radiogroup" data-kind="' + kind + '" aria-label="' + attr(kind + ' for ' + name) + '">' +
+    options.map(([v, label]) => {
+      const dis = disabled[v]
+      return '<label class="sg' + (v === suggested ? ' sug' : '') + (v === today ? ' today' : '') + (dis ? ' dis' : '') + '"' + (dis ? ' title="' + attr(dis) + '"' : '') + '>' +
+        '<input type="radio" name="' + group + '" value="' + v + '"' + (v === selected ? ' checked' : '') + (dis ? ' disabled' : '') +
+        ' data-rec="' + attr(suggested || today) + '" data-today="' + attr(today) + '">' +
+        '<span>' + esc(label) + '</span></label>'
+    }).join('') + '</div>'
+}
+
+/** A tool's mark, or its initials when there is no mark for it. */
+function logo (id, label) {
+  const p = LOGO_PATHS[id]
+  return '<span class="logo l-' + attr(id) + '" role="img" aria-label="' + attr(label) + '" title="' + attr(label) + '">' +
+    (p ? '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">' + p + '</svg>' : esc(TOOL_ABBR[id] || '?')) + '</span>'
+}
+
+function tag (tone, label, tip) {
+  return '<span class="tag ' + tone + '" title="' + attr(tip) + '">' + esc(label) + '</span>'
+}
+
+/* ------------------------------------------------------------ tray, dialog */
+
+function tray () {
+  return '<div class="tray" id="tray" role="region" aria-label="your decisions">' +
+    '<div class="tray-in">' +
+    '<div class="tstat"><span class="tv" id="t-count">0</span><span class="tk">changes</span></div>' +
+    '<div class="tstat"><span class="tv good" id="t-save">$0</span><span class="tk">a month back</span></div>' +
+    '<div class="tstat mine"><span class="tv" id="t-mine">0</span><span class="tk">yours</span></div>' +
+    '<span class="tnote" id="t-note" role="status" aria-live="polite">Nothing changes on disk until your agent asks and you say yes.</span>' +
+    '<button type="button" class="ghost risky" id="reset">Reset</button>' +
+    '<button type="button" class="ghost" id="view">View JSON</button>' +
+    '<button type="button" class="go" id="copy">' + ICON.copy + 'Copy</button>' +
+    '</div></div>'
+}
+
+function dialog (r, rows) {
+  return '<dialog id="json-dialog"><div class="dh"><b>decisions.json</b><span class="dim">paste it into your next message with "proceed with these decisions"</span>' +
+    '<button type="button" class="icon-btn" id="close" aria-label="close">' + ICON.x + '</button></div>' +
+    '<textarea id="decisions-json" spellcheck="false" readonly aria-label="the decisions file">' + esc(JSON.stringify(decisionsOf(r, rows), null, 2)) + '</textarea></dialog>'
+}
+
+/**
+ * The decisions file as the page opens, on the suggestions. The page script
+ * rebuilds it the same way on every change; this copy is there so the file is
+ * right before any script runs. One row can give two entries, because kind and
+ * disposition are separate questions.
+ */
+function decisionsOf (r, rows) {
   return {
     version: 1,
     generatedOn: r.generatedOn || null,
     source: 'token-coupons html report',
-    // One row can produce two entries, because kind and disposition are
-    // separate questions: making a skill a command and shortening it are not
-    // exclusive.
-    decisions: skills.flatMap((x) => {
-      const name = (x.names && x.names[0]) || x.name
-      const path = x.path || x.realPath || ''
+    decisions: rows.flatMap((m) => {
+      const path = m.x.path || m.x.realPath || ''
       const out = []
-      const today = x.mode === 'command' ? 'command' : 'context'
-      if ((x.recommendation || {}).action === 'command' && today !== 'command') out.push({ name, path, action: 'command', note: '' })
-      const disposition = presetFor((x.recommendation || {}).action, x.location)
-      if (disposition !== 'keep') out.push({ name, path, action: disposition, note: '' })
+      if (m.recMode !== m.todayMode) out.push({ name: m.name, path, action: m.recMode, note: '' })
+      if (m.recAct !== 'keep') out.push({ name: m.name, path, action: m.recAct, note: '' })
       return out
     }),
   }
 }
 
-function island (report) {
-  return '<script type="application/json" id="report-data">' + JSON.stringify(report).replace(/</g, '\\u003c') + '</script>'
-}
+/* ------------------------------------------------------------------ bits */
 
-/* ---------------------------------------------------------------- pieces */
-
-// Every location discover can produce, including the other tools' folders.
-// The words are whole phrases on purpose: an earlier 'linked in' read as a
-// company name next to the tag beside it.
-function locationLabel (loc) {
-  return {
-    user: 'in your skills folder', 'user-symlink': 'a shortcut in your skills folder', project: 'in this project',
-    'project-source': 'in this project', marketplace: 'a marketplace checkout', 'plugin-cache': 'in the plugin cache',
-    agents: 'in the shared .agents skills folder',
-    codex: 'in the Codex skills folder', 'codex-system': 'ships with Codex', 'codex-plugin-cache': 'in the Codex plugin cache',
-    'codex-machine': 'in the machine wide Codex folder',
-    cursor: 'in the Cursor skills folder', 'cursor-builtin': 'ships with Cursor', 'cursor-plugin-cache': 'in the Cursor plugin cache',
-    'cursor-plugin-local': 'a Cursor plugin under development',
-    gemini: 'in the Gemini CLI skills folder', 'gemini-extension': 'in a Gemini CLI extension',
-    'project-agents': 'in this project, for every tool', 'project-codex': 'in this project, for Codex',
-    'project-cursor': 'in this project, for Cursor', 'project-gemini': 'in this project, for Gemini CLI',
-    other: 'elsewhere on disk',
-  }[loc] || String(loc || '')
-}
-
-/** The grey line under a name: which plugin it belongs to, where its folder is, and which other tools list it. */
-function whereLabel (x) {
-  const others = (Array.isArray(x.listedIn) ? x.listedIn : []).filter((id) => id !== 'claude').map(clientLabel)
-  return [
-    x.plugin ? 'part of the ' + x.plugin + ' plugin' : '',
-    locationLabel(x.location),
-    others.length ? 'also listed by ' + others.join(' and ') : '',
-  ].filter(Boolean).join(', ')
-}
-
-/** "Codex 8, Cursor 3" for the +N in the Used column. */
-function elsewhereTip (x) {
-  const by = x.callsByClient && typeof x.callsByClient === 'object' ? x.callsByClient : {}
-  return 'also used in ' + Object.entries(by)
-    .filter(([id, t]) => id !== 'claude' && t && Number(t.calls) > 0)
-    .map(([id, t]) => clientLabel(id) + ' ' + fmt(t.calls) + (t.lastSeen ? ' (last ' + t.lastSeen + ')' : ''))
-    .join(', ')
-}
-
+function dayNum (d) { const t = Date.parse(d); return Number.isFinite(t) ? Math.floor(t / 864e5) : null }
+function daysSince (d, today) { const n = dayNum(d); return n === null || today === null ? null : Math.max(0, today - n) }
+function pct (v, max) { return Math.max(0, Math.min(100, Math.round((Number(v) || 0) / (Number(max) || 1) * 100))) }
+function fmtN (n) { return Number.isInteger(n) ? String(n) : n.toFixed(1) }
 function esc (v) {
   return String(v === null || v === undefined ? '' : v)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 }
 function attr (v) { return esc(v) }
 
-/* ----------------------------------------------------------------- style */
-
-function styles () {
-  return `
-:root {
-  color-scheme: light dark;
-  --bg: #f6f6f4;
-  --surface: #ffffff;
-  --surface-2: #efefeb;
-  --text: #191917;
-  --muted: #63635b;
-  --line: #dedcd5;
-  --accent: #2f4fd0;
-  --accent-soft: #e8ecfb;
-  --ok: #14684a;
-  --ok-soft: #e2f1ea;
-  --warn: #855700;
-  --warn-soft: #faefd9;
-  --danger: #972e24;
-  --danger-soft: #fbe7e3;
-  --bar: #c9cdd8;
-  --shadow: 0 1px 2px rgba(20, 20, 18, 0.06), 0 6px 18px rgba(20, 20, 18, 0.05);
-}
-/* the reader's system setting, unless they picked light on this page */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #121311;
-    --surface: #1b1c19;
-    --surface-2: #232420;
-    --text: #eceae4;
-    --muted: #a4a297;
-    --line: #33342e;
-    --accent: #9db0ff;
-    --accent-soft: #1f2540;
-    --ok: #74d1a4;
-    --ok-soft: #142a20;
-    --warn: #e5ba63;
-    --warn-soft: #2d2413;
-    --danger: #f0928a;
-    --danger-soft: #331a17;
-    --bar: #454740;
-    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  }
-}
-/* and the toggle, which has to win over a light system setting too */
-:root[data-theme="dark"] {
-  --bg: #121311;
-  --surface: #1b1c19;
-  --surface-2: #232420;
-  --text: #eceae4;
-  --muted: #a4a297;
-  --line: #33342e;
-  --accent: #9db0ff;
-  --accent-soft: #1f2540;
-  --ok: #74d1a4;
-  --ok-soft: #142a20;
-  --warn: #e5ba63;
-  --warn-soft: #2d2413;
-  --danger: #f0928a;
-  --danger-soft: #331a17;
-  --bar: #454740;
-  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-* { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.6 ${SANS}; overflow-x: hidden; }
-.wrap { max-width: 1240px; margin: 0 auto; padding: 40px 24px 96px; }
-h1 { font-size: 30px; letter-spacing: -0.01em; margin: 18px 0 0; font-weight: 700; }
-h2 { font-size: 19px; margin: 0; font-weight: 700; }
-h3 { font-size: 14px; margin: 16px 0 2px; font-weight: 600; }
-p { margin: 0 0 10px; }
-code { font-family: ${MONO}; font-size: .92em; background: var(--surface-2); padding: 2px 6px; border-radius: 6px; color: var(--accent); }
-strong { color: var(--text); font-weight: 700; }
-a { color: var(--accent); }
-
-.mast { display: flex; align-items: center; gap: 12px; }
-.dot { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); }
-.brand { font-weight: 700; font-size: 17px; }
-.back { font-size: 13px; text-decoration: none; border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; }
-.back:hover { border-color: var(--accent); }
-.when { margin-left: auto; color: var(--muted); font-size: 13px; }
-.lede { color: var(--muted); max-width: 78ch; margin-top: 10px; }
-
-.section { margin-top: 44px; }
-.sechead { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--line); padding-bottom: 10px; margin-bottom: 16px; }
-.eyebrow { font-size: 13px; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); font-weight: 400; margin-bottom: 14px; }
-.note { color: var(--muted); font-size: 13.5px; max-width: 84ch; }
-
-/* a question that answers itself on hover or focus */
-.tipwrap { position: relative; display: inline-block; margin-top: 14px; }
-.tiptrigger { font: inherit; color: var(--muted); background: none; border: 0; padding: 0; cursor: help; display: inline-flex; align-items: center; gap: 8px; text-decoration: underline dotted; text-underline-offset: 3px; }
-.tiptrigger:hover, .tiptrigger:focus-visible { color: var(--accent); }
-.tipmark { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 999px; border: 1px solid currentColor; font-size: 11px; font-weight: 700; }
-.tip { position: absolute; left: 0; top: calc(100% + 10px); z-index: 5; width: min(46ch, 80vw); padding: 12px 14px; border-radius: 12px; background: var(--surface-2); color: var(--text); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 13.5px; line-height: 1.5; opacity: 0; visibility: hidden; transform: translateY(-4px); transition: opacity .12s ease, transform .12s ease, visibility 0s linear .12s; }
-.tip::before { content: ""; position: absolute; left: 22px; top: -6px; width: 10px; height: 10px; background: var(--surface-2); border-left: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
-.tipwrap:hover .tip, .tipwrap:focus-within .tip { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
-@media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
-.count { color: var(--muted); font-size: 13px; }
-.dim { color: var(--muted); font-weight: 400; }
-
-.scorerow { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
-.scorenum { display: flex; align-items: baseline; gap: 6px; }
-.sv { font-size: 72px; font-weight: 700; letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums; }
-.sd { font-size: 22px; color: var(--muted); }
-.grade { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 16px; font-size: 32px; font-weight: 700; background: var(--surface-2); border: 1px solid var(--line); }
-.grade.emerald { color: var(--ok); border-color: var(--ok); }
-.grade.amber { color: var(--warn); border-color: var(--warn); }
-.grade.rose { color: var(--danger); border-color: var(--danger); }
-.scoretext { flex: 1 1 380px; min-width: 300px; }
-.scoretext p { margin: 0; font-size: 15px; }
-.scoretext p + p { color: var(--muted); }
-
-.modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-.mode { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 18px 22px; box-shadow: var(--shadow); }
-.modehead { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.modecost { color: var(--muted); font-size: 13px; }
-.mode p { color: var(--muted); margin: 0 0 8px; }
-.modefine { font-size: 13px; border-top: 1px solid var(--line); padding-top: 10px; margin: 12px 0 0 !important; }
-
-.pill { display: inline-block; border-radius: 999px; padding: 3px 12px; font-size: 13px; font-weight: 700; border: 1px solid transparent; white-space: nowrap; }
-.pill.sm { font-size: 12px; padding: 2px 10px; font-weight: 600; }
-.pill.xs { font-size: 11px; padding: 1px 8px; font-weight: 500; }
-.pill.good { background: var(--ok-soft); color: var(--ok); }
-.pill.warn { background: var(--warn-soft); color: var(--warn); }
-.pill.danger { background: var(--danger-soft); color: var(--danger); }
-.pill.plain { background: var(--surface-2); color: var(--muted); border-color: var(--line); }
-
-.figs { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 16px; }
-.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px 22px 20px 26px; position: relative; overflow: hidden; box-shadow: var(--shadow); }
-.fig::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; }
-.fig.good::before { background: var(--ok); }
-.fig.bad::before { background: var(--danger); }
-.fig.plain::before { background: var(--muted); opacity: .5; }
-.fig .v { display: block; font-size: 40px; font-weight: 700; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-.fig.good .v { color: var(--ok); }
-.fig.bad .v { color: var(--danger); }
-.fig .k { display: block; margin-top: 4px; color: var(--muted); }
-
-.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
-.chip, .ghost, .go {
-  font: inherit; font-size: 13px; cursor: pointer; border-radius: 999px; min-height: 34px; padding: 6px 14px;
-  border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
-  transition: border-color 150ms ease, color 150ms ease, background-color 150ms ease;
-}
-.ghost, .go { border-radius: 10px; }
-.go { background: var(--ok); border-color: var(--ok); color: #052A1D; font-weight: 700; }
-.go:hover { filter: brightness(1.08); }
-.chip:hover, .ghost:hover { border-color: var(--accent); color: var(--accent); }
-.chip.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 700; }
-button:focus-visible, select:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
-
-input[type="search"] {
-  font: inherit; font-size: 14px; padding: 9px 13px; width: 100%; max-width: 420px; margin-bottom: 14px;
-  border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--text);
-}
-input[type="search"]::placeholder { color: var(--muted); }
-
-.tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: var(--shadow); }
-table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13px; }
-td.num, td.cost, .sv, .fig .v { font-family: ${MONO}; }
-th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
-thead th { position: sticky; top: 0; z-index: 2; background: var(--surface-2); font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; white-space: nowrap; }
-tbody tr:last-child td { border-bottom: 0; }
-tbody tr:hover td { background: var(--surface-2); }
-th.num, td.num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-th.rank, td.rank { width: 42px; color: var(--muted); }
-td.skill { min-width: 180px; }
-.sname { font: inherit; font-weight: 700; color: var(--text); background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
-.sname:hover, .sname[aria-expanded="true"] { color: var(--accent); }
-.where { display: block; color: var(--muted); font-size: 12px; }
-.marks { margin-top: 5px; display: flex; flex-wrap: wrap; gap: 4px; }
-td.cost span:first-child { display: block; font-weight: 700; }
-td.cost .bar { display: block; height: 3px; background: var(--line); border-radius: 2px; margin-top: 5px; overflow: hidden; }
-td.cost .bar i { display: block; height: 100%; background: var(--danger); }
-td.why { min-width: 180px; max-width: 320px; color: var(--muted); font-size: 12.5px; line-height: 1.45; }
-td.used .slash { color: var(--muted); margin: 0 3px; }
-td.used .elsewhere { color: var(--muted); margin-left: 6px; font-size: 11.5px; }
-.tools { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 8px; color: var(--muted); font-size: 13px; }
-.tools b { color: var(--text); font-weight: 600; }
-.toolnote { display: block; font-size: 12px; margin-top: 2px; }
-td.act select { max-width: 150px; }
-td.act select { font: inherit; font-size: 12.5px; padding: 5px 28px 5px 8px; border: 1px solid var(--line); border-radius: 8px; background-color: var(--surface-2); color: var(--text); }
-/* the native arrow sits flush against the border, so draw our own chevron
-   inset from the edge, in the text color so it follows the theme */
-td.act select { appearance: none; -webkit-appearance: none; background-image: linear-gradient(45deg, transparent calc(50% - 0.8px), currentColor calc(50% - 0.8px), currentColor calc(50% + 0.8px), transparent calc(50% + 0.8px)), linear-gradient(135deg, transparent calc(50% - 0.8px), currentColor calc(50% - 0.8px), currentColor calc(50% + 0.8px), transparent calc(50% + 0.8px)); background-position: calc(100% - 17px) 55%, calc(100% - 12px) 55%; background-size: 5px 5px; background-repeat: no-repeat; }
-/* whose choice a control is holding. The select itself never changes its
-   words, so the state has to be visible beside it. */
-.ctl { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 3px; }
-.ctl.inline { display: inline; }
-.ctl .state { font-size: 11px; line-height: 1.3; color: var(--muted); white-space: nowrap; }
-.ctl .state:empty { display: none; }
-.ctl[data-state="suggested"] select { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.ctl[data-state="suggested"] .state { color: var(--accent); font-weight: 600; }
-.ctl[data-state="yours"] select { border-color: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
-.ctl[data-state="yours"] .state { color: var(--ok); font-weight: 600; }
-.note.key { margin-bottom: 14px; }
-.note.key .state { font-size: inherit; line-height: inherit; }
-.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; color: var(--muted); font-size: 12.5px; margin: 0 0 12px; }
-.legendk { font-size: 11.5px; letter-spacing: .1em; text-transform: uppercase; font-weight: 600; }
-.legenditem { display: inline-flex; align-items: center; gap: 6px; }
-tr.detail td { background: var(--surface-2); padding: 14px 18px 16px 58px; }
-tr.detail dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; max-width: 96ch; font-size: 12.5px; }
-tr.detail dt { color: var(--muted); }
-tr.detail dd { margin: 0; }
-tr.detail dd.desc { white-space: pre-wrap; }
-
-details > summary { cursor: pointer; color: var(--accent); font-weight: 700; }
-.names { color: var(--muted); font-size: 12.5px; margin: 0 0 10px; }
-
-.codeblock { border: 1px solid var(--line); border-radius: 14px; background: var(--surface); overflow: hidden; }
-.codehead { display: flex; align-items: center; gap: 10px; padding: 9px 10px 9px 16px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
-.codetitle { color: var(--muted); font-size: 12.5px; margin-right: auto; }
-.go.sm, .ghost.sm { min-height: 30px; padding: 4px 12px; font-size: 12.5px; }
-textarea {
-  display: block; width: 100%; min-height: 240px; padding: 14px 16px; border: 0; resize: vertical;
-  font-family: ${MONO}; font-size: 12.5px; line-height: 1.55; background: var(--surface); color: var(--text);
-}
-[hidden] { display: none !important; }
-@media (max-width: 640px) { .wrap { padding: 24px 14px 72px; } h1 { font-size: 24px; } }
-`
-}
-
-/* ------------------------------------------------------------------ code */
-
-function script (labels) {
-  return `
-(function () {
-  var LABELS = ${JSON.stringify(labels || {})};
-  function labelOf (id) { return LABELS[id] || id; }
-  var report = {};
-  try { report = JSON.parse(document.getElementById('report-data').textContent); } catch (e) { report = {}; }
-  var skills = report.skills || [];
-  var selects = [].slice.call(document.querySelectorAll('select.action'));
-  var modeSelects = [].slice.call(document.querySelectorAll('select.mode'));
-  var allSelects = selects.concat(modeSelects);
-  var rows = [].slice.call(document.querySelectorAll('#rows tr'));
-  var search = document.getElementById('search');
-  var rowCount = document.getElementById('row-count');
-  var changed = document.getElementById('changed-count');
-  var box = document.getElementById('decisions-json');
-  var root = document.documentElement;
-
-  /* system default, then dark, then light, so a reader on either setting can
-     reach the other one */
-  on(document.getElementById('theme-toggle'), 'click', function () {
-    var now = root.getAttribute('data-theme');
-    if (now === 'dark') { root.setAttribute('data-theme', 'light'); return; }
-    if (now === 'light') { root.removeAttribute('data-theme'); return; }
-    root.setAttribute('data-theme', 'dark');
-  });
-  var note = document.getElementById('export-note');
-  var filter = 'all';
-  var openDetail = {};
-  var MODE_LABEL = { context: 'Context', command: 'Command' };
-
-  /* whose choice a control is holding: the tool's, yours, or nobody's. A type
-     control also says what the skill is today, because the select hides it. */
-  function stateOf (sel) {
-    var isMode = sel.classList.contains('mode');
-    var base = isMode ? sel.getAttribute('data-today') : 'keep';
-    var rec = sel.getAttribute('data-rec');
-    var today = isMode ? ', ' + (MODE_LABEL[base] || base) + ' today' : '';
-    if (sel.value === rec) return rec === base ? ['', ''] : ['suggested', 'suggested' + today];
-    if (sel.value === base) return ['declined', 'kept as is'];
-    return ['yours', 'your change' + today];
-  }
-  function paint (sel) {
-    var ctl = sel.parentNode;
-    if (!ctl || !ctl.classList || !ctl.classList.contains('ctl')) return;
-    var st = stateOf(sel);
-    ctl.setAttribute('data-state', st[0]);
-    var label = ctl.querySelector('.state');
-    if (label) label.textContent = st[1];
-  }
-
-  var index = skills.map(function (s) {
-    var rec = s.recommendation || {};
-    return [(s.names || [])[0], s.name, s.plugin, s.location, s.description, rec.reason].filter(Boolean).join(' ').toLowerCase();
-  });
-  function on (el, ev, fn) { if (el) el.addEventListener(ev, fn); }
-  function say (t) { if (note) note.textContent = t; }
-
-  var chips = [].slice.call(document.querySelectorAll('[data-filter]'));
-  chips.forEach(function (chip) {
-    on(chip, 'click', function () {
-      filter = chip.getAttribute('data-filter');
-      chips.forEach(function (c) {
-        var active = c === chip;
-        c.classList.toggle('on', active);
-        c.setAttribute('aria-pressed', active ? 'true' : 'false');
-      });
-      apply();
-    });
-  });
-  on(search, 'input', apply);
-
-  function apply () {
-    var q = search ? search.value.trim().toLowerCase() : '';
-    var shown = 0;
-    rows.forEach(function (tr) {
-      var flags = ' ' + (tr.getAttribute('data-flags') || '') + ' ';
-      var passF = filter === 'all' ? true
-        : filter === 'changed' ? tr.getAttribute('data-changed') === 'yes'
-        : flags.indexOf(' ' + filter + ' ') !== -1;
-      var i = Number(tr.getAttribute('data-index'));
-      var passQ = !q || (index[i] || '').indexOf(q) !== -1;
-      var vis = passF && passQ;
-      tr.hidden = !vis;
-      if (openDetail[i]) openDetail[i].hidden = !vis;
-      if (vis) shown++;
-    });
-    if (rowCount) rowCount.textContent = shown === rows.length ? rows.length + ' skills' : shown + ' of ' + rows.length + ' skills';
-  }
-
-  function pathOf (sel) {
-    var s = skills[Number(sel.getAttribute('data-index'))] || {};
-    return s.path || s.realPath || '';
-  }
-
-  /* A row can send two entries: the kind only when it differs from today's
-     value, and the disposition whenever it is not Keep. */
-  function decisions () {
-    var out = [];
-    modeSelects.forEach(function (sel) {
-      if (sel.value === sel.getAttribute('data-today')) return;
-      out.push({ name: sel.getAttribute('data-name'), path: pathOf(sel), action: sel.value, note: '' });
-    });
-    selects.forEach(function (sel) {
-      if (sel.value === 'keep') return;
-      out.push({ name: sel.getAttribute('data-name'), path: pathOf(sel), action: sel.value, note: '' });
-    });
-    return { version: 1, generatedOn: report.generatedOn || null, source: 'token-coupons html report', decisions: out };
-  }
-
-  function refresh () {
-    var touched = {};
-    allSelects.forEach(function (sel) {
-      var i = Number(sel.getAttribute('data-index'));
-      paint(sel);
-      if (sel.value !== sel.getAttribute('data-rec')) touched[i] = true;
-    });
-    var n = 0;
-    rows.forEach(function (tr) {
-      var i = Number(tr.getAttribute('data-index'));
-      var isChanged = !!touched[i];
-      if (isChanged) n++;
-      tr.setAttribute('data-changed', isChanged ? 'yes' : 'no');
-    });
-    if (changed) changed.textContent = n === 1 ? '1 row changed' : n + ' rows changed';
-    if (box) box.value = JSON.stringify(decisions(), null, 2);
-    if (filter === 'changed') apply();
-  }
-  allSelects.forEach(function (sel) { on(sel, 'change', refresh); });
-
-  on(document.getElementById('reset'), 'click', function () {
-    allSelects.forEach(function (sel) { sel.value = sel.getAttribute('data-rec'); });
-    if (search) search.value = '';
-    filter = 'all';
-    chips.forEach(function (c) {
-      var active = c.getAttribute('data-filter') === 'all';
-      c.classList.toggle('on', active);
-      c.setAttribute('aria-pressed', active ? 'true' : 'false');
-    });
-    refresh(); apply();
-    say('Back to the suggestions, filters cleared.');
-  });
-
-  on(document.getElementById('copy'), 'click', function () {
-    if (!box) return;
-    var done = false;
-    box.focus(); box.select();
-    try { done = document.execCommand('copy'); } catch (e) { done = false; }
-    if (done) { say('Copied. Paste it into your next message and add: proceed with these decisions.'); return; }
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(box.value).then(
-        function () { say('Copied. Paste it into your next message and add: proceed with these decisions.'); },
-        function () { say('Copying is blocked here. The text is selected, so copy it with your keyboard.'); });
-      return;
-    }
-    say('Copying is blocked here. The text is selected, so copy it with your keyboard.');
-  });
-
-  [].slice.call(document.querySelectorAll('button[data-detail]')).forEach(function (btn) {
-    on(btn, 'click', function () {
-      var i = Number(btn.getAttribute('data-detail'));
-      var tr = rows[i];
-      if (!tr) return;
-      if (openDetail[i]) {
-        openDetail[i].parentNode.removeChild(openDetail[i]);
-        delete openDetail[i];
-        btn.setAttribute('aria-expanded', 'false');
-        return;
-      }
-      var s = skills[i] || {};
-      var rec = s.recommendation || {};
-      var d = document.createElement('tr');
-      d.className = 'detail';
-      var td = document.createElement('td');
-      td.colSpan = 7;
-      var dl = document.createElement('dl');
-      function add (k, v, cls) {
-        var dt = document.createElement('dt'); dt.textContent = k;
-        var dd = document.createElement('dd'); dd.textContent = v; if (cls) dd.className = cls;
-        dl.appendChild(dt); dl.appendChild(dd);
-      }
-      add('Description', s.description || '(none)', 'desc');
-      add('Length', (s.descriptionChars || 0) + ' characters, about ' + (s.descriptionTokens || 0) + ' tokens a message');
-      if (typeof s.dollarsPerMonth === 'number') add('Costs', '$' + s.dollarsPerMonth.toFixed(2) + ' a month');
-      add('Where', s.path || s.realPath || '');
-      if (s.sourcePath) add('Source copy', s.sourcePath);
-      add('Used', (s.calls || 0) + ' times in Claude Code: ' + (s.contextCalls || 0) + ' picked by the agent, ' + (s.commandCalls || 0) + ' typed by you' + (s.lastSeen ? ', last on ' + s.lastSeen : ''));
-      var by = s.callsByClient || {};
-      var elsewhere = Object.keys(by).filter(function (k) { return k !== 'claude' && by[k] && by[k].calls > 0; });
-      if (elsewhere.length) {
-        add('Used elsewhere', elsewhere.map(function (k) {
-          return labelOf(k) + ' ' + by[k].calls + ' (' + (by[k].contextCalls || 0) + ' picked, ' + (by[k].commandCalls || 0) + ' typed' + (by[k].lastSeen ? ', last on ' + by[k].lastSeen : '') + ')';
-        }).join('; '));
-      }
-      var listed = (s.listedIn || []).filter(function (k) { return k !== 'claude'; });
-      var unmeasured = s.unmeasuredClients || [];
-      if (listed.length) {
-        add('Also listed by', listed.map(labelOf).join(', ') + (unmeasured.length ? '. ' + unmeasured.map(labelOf).join(', ') + ': chats not read this run, so uses there are unknown' : ''));
-      }
-      add('Why', rec.reason || '');
-      td.appendChild(dl); d.appendChild(td);
-      tr.parentNode.insertBefore(d, tr.nextSibling);
-      openDetail[i] = d;
-      btn.setAttribute('aria-expanded', 'true');
-    });
-  });
-
-  refresh();
-})();
-`
+const svg = (d, extra = '') => '<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"' + extra + '>' + d + '</svg>'
+const ICON = {
+  info: svg('<circle cx="8" cy="8" r="6.2"/><path d="M8 7.2v3.6M8 5.2v.1"/>'),
+  theme: svg('<circle cx="8" cy="8" r="5.5"/><path d="M8 2.5a5.5 5.5 0 0 0 0 11z" fill="currentColor"/>'),
+  search: svg('<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/>'),
+  check: svg('<path d="m3.5 8.5 3 3 6-7"/>'),
+  x: svg('<path d="m4 4 8 8M12 4l-8 8"/>'),
+  plug: svg('<path d="M6 2v3M10 2v3M4.5 5h7v2.5a3.5 3.5 0 0 1-7 0zM8 11v3"/>'),
+  lock: svg('<rect x="3.5" y="7" width="9" height="6.5" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/>'),
+  link: svg('<path d="M7 9a3 3 0 0 0 4.2 0l2-2a3 3 0 0 0-4.2-4.2l-.6.6M9 7a3 3 0 0 0-4.2 0l-2 2a3 3 0 0 0 4.2 4.2l.6-.6"/>'),
+  folder: svg('<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.8l1.4 1.6h4.8A1.5 1.5 0 0 1 14 6.1v5.4a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>'),
+  pen: svg('<path d="M10.5 2.5 13.5 5.5 6 13H3v-3z"/>'),
+  copy: svg('<rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M3 10.5V3.8A1.3 1.3 0 0 1 4.3 2.5H10"/>'),
+  chev: svg('<path d="m6 4 4 4-4 4"/>', ' class="chev"'),
 }

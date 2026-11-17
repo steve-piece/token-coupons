@@ -123,6 +123,49 @@ describe('recommend: rules in priority order', () => {
     assert.ok(sentences(rec.reason) <= 2 && short(rec.reason), 'short: ' + rec.reason)
   })
 
+  // "Started by you" used to mean every single use. One pick by the agent in
+  // forty and a skill stopped counting, however plainly it was a command run by
+  // hand. Four typed uses in five is the bar now.
+  test('rule 5: typed four times in five counts as started by you, and the reason shows the trade', () => {
+    const rec = only(run([row({
+      name: 'alpha', calls: 16, commandCalls: 13, contextCalls: 3, descriptionChars: 200,
+    })]))
+    assert.equal(rec.action, 'command')
+    assert.deepEqual(rec.flags, ['summoned-only'])
+    assert.equal(rec.impactTokensPerCall, 50)
+    assert.match(rec.reason, /Used 16 times, 13 of them by you typing its name/)
+    assert.match(rec.reason, /the agent picked it 3 times, and you would type those too/, 'gating gives those picks up, so they are named')
+    assert.equal(/never picked by the agent/.test(rec.reason), false, 'it was picked, so the sentence must not say otherwise')
+    assert.ok(sentences(rec.reason) <= 2 && short(rec.reason), 'short: ' + rec.reason)
+  })
+
+  test('rule 5: the bar is 80 percent exactly, and under it the skill is left to the agent', () => {
+    const at = only(run([row({ calls: 5, commandCalls: 4, contextCalls: 1 })]))
+    assert.equal(at.action, 'command', '4 of 5 is 80 percent')
+    assert.match(at.reason, /the agent picked it once, and you would type that one too/)
+    const under = only(run([row({ calls: 4, commandCalls: 3, contextCalls: 1 })]))
+    assert.equal(under.action, 'keep', '3 of 4 is 75 percent')
+    assert.deepEqual(under.flags, [])
+  })
+
+  test('rule 5: the bar is a threshold like the others, and 1 brings the old all or nothing rule back', () => {
+    const mostly = row({ calls: 16, commandCalls: 13, contextCalls: 3 })
+    assert.equal(only(run([mostly], { thresholds: { typedShare: 0.9 } })).action, 'keep')
+    assert.equal(only(run([mostly], { thresholds: { typedShare: 1 } })).action, 'keep')
+    const always = row({ calls: 4, commandCalls: 4, contextCalls: 0 })
+    assert.equal(only(run([always], { thresholds: { typedShare: 1 } })).action, 'command')
+  })
+
+  test('rule 5: mostly typed here but picked by Cursor on its own is still kept, since the gate is shared', () => {
+    const rec = only(run([row({
+      calls: 10, commandCalls: 9, contextCalls: 1,
+      callsByClient: { claude: { calls: 10, commandCalls: 9, contextCalls: 1 }, cursor: { calls: 6, commandCalls: 0, contextCalls: 6 } },
+    })]))
+    assert.equal(rec.action, 'keep')
+    assert.ok(rec.flags.includes('summoned-only') && rec.flags.includes('picked-elsewhere'))
+    assert.match(rec.reason, /You nearly always type it here, but Cursor did \(6 times\)/)
+  })
+
   test('rule 6: routed to but heavy gets a rewrite, not a gate', () => {
     const rec = only(run([row({
       name: 'alpha', calls: 6, commandCalls: 2, contextCalls: 4, descriptionChars: 800,
@@ -299,6 +342,7 @@ describe('recommend: thresholds', () => {
   test('defaults are exported and returned', () => {
     assert.deepEqual(DEFAULT_THRESHOLDS, {
       thinChars: 60, heavyChars: 600, optimizeTargetChars: 350, staleDays: 90, newSkillDays: 14, heaviestListSize: 15,
+      typedShare: 0.8,
     })
     assert.deepEqual(run([]).thresholds, DEFAULT_THRESHOLDS)
   })

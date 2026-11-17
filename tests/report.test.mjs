@@ -144,7 +144,14 @@ describe('buildReport', () => {
         assert.equal(s.unroutable, 0)
         assert.equal(s.listingTokensPerCall, r.economics.perSession.totalListingTokens)
         assert.equal(s.wastedTokensPerCall, r.economics.wastedPerCall.tokens)
-        assert.equal(s.savedTokensPerCallIfApplied, r.economics.ifGated.savedTokensPerSession)
+        // The headline saving is the sum of the rows that act, so a person can
+        // add the column up and get it. It used to be the figure for gating
+        // every unused skill, which promised tokens for rows marked keep.
+        const acted = r.skills.filter((x) => ['command', 'delete', 'optimize'].includes(x.recommendation.action))
+        assert.equal(s.savedTokensPerCallIfApplied, acted.reduce((n, x) => n + x.recommendation.impactTokensPerCall, 0))
+        assert.equal(s.savedTokensPerCallIfApplied, r.economics.ifApplied.tokens)
+        assert.equal(r.economics.ifApplied.count, acted.length)
+        assert.equal(s.savedOnYourModel.tokens, s.savedTokensPerCallIfApplied)
         assert.equal(s.fitsAfter, true)
         assert.ok(s.wastedPerWeekOnYourModel, 'expected a priced model')
         assert.equal(s.wastedPerWeekOnYourModel.model, 'Claude Opus 5')
@@ -244,6 +251,190 @@ describe('joinCalls', () => {
     assert.equal(rows[1].lastSeen, '2026-08-03')
     assert.equal(rows[2].calls, 1, 'a plugin prefixed call falls back to the bare name')
     assert.deepEqual(unmatchedCalls, [{ client: 'claude', skill: 'nope', calls: 2 }])
+    assert.equal(rows[1].recentCalls, 0, 'with no window given, nothing counts as recent')
+  })
+
+  test('counts the calls inside the recent window, per skill and per tool', () => {
+    const calls = [
+      { skill: 'x', bare: 'x', ts: '2026-07-01T00:00:00Z', mode: 'context' },
+      { skill: 'x', bare: 'x', ts: '2026-08-02T00:00:00Z', mode: 'command' },
+      { skill: 'x', bare: 'x', ts: '2026-08-03T00:00:00Z', mode: 'context' },
+      { skill: 'y', bare: 'y', ts: '2026-07-31T23:59:59Z', mode: 'context' },
+      { client: 'cursor', skill: 'y', bare: 'y', ts: '2026-08-05T00:00:00Z', mode: 'context' },
+    ]
+    const { rows } = joinCalls(skills, calls, { perEntryCap: 1536 }, { recentSince: '2026-08-01' })
+    assert.equal(rows[1].calls, 3)
+    assert.equal(rows[1].recentCalls, 2, 'the July call is outside the window')
+    assert.equal(rows[2].recentCalls, 0, 'one second before the window is still before it')
+    assert.equal(rows[2].callsByClient.cursor.recent, 1, 'another tool keeps its own count, and it is not Claude Code')
+  })
+})
+
+describe('the saving is what the recommendations give back', () => {
+  const sum = (r) => r.skills
+    .filter((x) => ['command', 'delete', 'optimize'].includes(x.recommendation.action))
+    .reduce((n, x) => n + x.recommendation.impactTokensPerCall, 0)
+
+  test('a skill kept for being new is not counted, though gating everything would count it', async () => {
+    const long = 'Does a long list of things for a long list of people on a long list of occasions, every one of them useful.'
+    const fx = makeFixtureHome({
+      today: TODAY,
+      skills: [
+        { name: 'old', description: long, mtimeDaysAgo: 40 },
+        { name: 'fresh', description: long, mtimeDaysAgo: 3 },
+      ],
+      transcripts: [{ session: 's', date: '2026-08-10T10:00:00Z', turns: [{ user: 'hi' }, { assistant: 'hello' }] }],
+    })
+    try {
+      await withHome(fx.home, () => {
+        const r = buildReport({ today: TODAY })
+        const by = Object.fromEntries(r.skills.map((s) => [s.name, s]))
+        assert.equal(by.old.recommendation.action, 'command')
+        assert.equal(by.fresh.recommendation.action, 'keep')
+        assert.equal(r.summary.savedTokensPerCallIfApplied, by.old.recommendation.impactTokensPerCall, 'one row acts, so the saving is that row')
+        assert.ok(r.economics.ifGated.savedTokensPerSession > r.summary.savedTokensPerCallIfApplied, 'gating both would save more, and is not what is recommended')
+        const text = renderText(r)
+        assert.match(text, /Take the 1 suggestion below and you save about \d+ tokens on every message\./)
+        assert.equal(/Set those/.test(text), false)
+        // The saving is stated and that is all: an account of what was not
+        // suggested, and why, read as a second number to puzzle over.
+        assert.equal(/left alone|more unused skill/.test(text), false)
+        assert.equal('leftAlone' in r.economics.ifApplied, false)
+      })
+    } finally { fx.cleanup() }
+  })
+
+  test('a skill another tool picks is not counted either', async () => {
+    const long = 'Does a long list of things for a long list of people on a long list of occasions, every one of them useful.'
+    const fx = makeFixtureHome({
+      today: TODAY,
+      skills: [
+        { name: 'mine', description: long, mtimeDaysAgo: 40 },
+        { name: 'theirs', description: long, mtimeDaysAgo: 40 },
+      ],
+      transcripts: [{ session: 's', date: '2026-08-10T10:00:00Z', turns: [{ user: 'hi' }, { assistant: 'hello' }] }],
+      cursor: { transcripts: [{ id: 'c', date: '2026-08-11T10:00:00Z', turns: [{ user: 'help' }, { read: '__HOME__/.claude/skills/theirs/SKILL.md' }, { assistant: 'ok' }] }] },
+    })
+    try {
+      await withHome(fx.home, () => {
+        const r = buildReport({ today: TODAY })
+        assert.equal(r.summary.savedTokensPerCallIfApplied, sum(r))
+        assert.equal(r.economics.ifApplied.count, 1)
+        const by = Object.fromEntries(r.skills.map((x) => [x.name, x]))
+        assert.equal(by.theirs.recommendation.action, 'keep')
+        assert.equal(r.summary.savedTokensPerCallIfApplied, by.mine.recommendation.impactTokensPerCall)
+      })
+    } finally { fx.cleanup() }
+  })
+
+  test('a shortened description counts, which gating alone never did', async () => {
+    const heavy = 'Use this whenever someone wants the heavy treatment for a file, a folder or a repo. '.repeat(10)
+    const fx = makeFixtureHome({
+      today: TODAY,
+      skills: [{ name: 'heavy', description: heavy, mtimeDaysAgo: 40 }],
+      transcripts: [{ session: 's', date: '2026-08-10T10:00:00Z', turns: [{ user: 'do it' }, { skill: 'heavy' }] }],
+    })
+    try {
+      await withHome(fx.home, () => {
+        const r = buildReport({ today: TODAY })
+        const [row] = r.skills
+        assert.equal(row.recommendation.action, 'optimize')
+        assert.ok(row.recommendation.impactTokensPerCall > 0)
+        assert.equal(r.economics.ifGated.savedTokensPerSession, 0, 'nothing is unused, so gating everything unused saves nothing')
+        assert.equal(r.summary.savedTokensPerCallIfApplied, row.recommendation.impactTokensPerCall)
+        assert.ok(r.summary.savedOnYourModel.dollarsPerMonth > 0, 'priced off the whole list when nothing is wasted')
+      })
+    } finally { fx.cleanup() }
+  })
+
+  test('the dollars follow the tokens: the same price per token as the waste', async () => {
+    const fx = fixture()
+    try {
+      await withHome(fx.home, () => {
+        const s = buildReport({ today: TODAY }).summary
+        const perToken = s.wastedPerWeekOnYourModel.dollarsPerMonth / s.wastedTokensPerCall
+        assert.ok(Math.abs(s.savedOnYourModel.dollarsPerMonth - perToken * s.savedTokensPerCallIfApplied) < 0.001)
+        assert.ok(s.savedOnYourModel.dollarsPerMonth <= s.wastedPerWeekOnYourModel.dollarsPerMonth)
+      })
+    } finally { fx.cleanup() }
+  })
+
+  test('fits afterwards is judged on what the recommendations free, not on gating everything', async () => {
+    const long = 'Does a long list of things for a long list of people on a long list of occasions, every one of them useful.'
+    const fx = makeFixtureHome({
+      today: TODAY,
+      skills: [
+        { name: 'old', description: long, mtimeDaysAgo: 40 },
+        { name: 'fresh', description: long, mtimeDaysAgo: 3 },
+        { name: 'fresher', description: long, mtimeDaysAgo: 2 },
+      ],
+      transcripts: [{ session: 's', date: '2026-08-10T10:00:00Z', turns: [{ user: 'hi' }, { assistant: 'hello' }] }],
+    })
+    try {
+      await withHome(fx.home, () => {
+        // room for two of the three descriptions, so one has to go
+        const r = buildReport({ today: TODAY, budgetOpts: { fixedChars: 150 } })
+        assert.equal(r.economics.perSession.fitsBudget, false)
+        assert.equal(r.economics.ifGated.fitsBudgetAfter, true, 'gating all three would fit')
+        assert.equal(r.summary.fitsAfter, false, 'but only one is recommended, and that is not enough')
+        assert.match(renderText(r), /though the list is still over its allowance\./)
+      })
+    } finally { fx.cleanup() }
+  })
+})
+
+describe('what was used lately', () => {
+  test('counts listed skills used in the last thirty days, and the uses, from the day the report is told it is', async () => {
+    const fx = makeFixtureHome({
+      today: '2026-08-15',
+      skills: [
+        { name: 'now', description: 'Used this month by the agent, and so it counts as recent use.', mtimeDaysAgo: 60 },
+        { name: 'then', description: 'Used long ago and not since, so it was used but not lately.', mtimeDaysAgo: 60 },
+        { name: 'never', description: 'Never used by anyone at all in any session that was read.', mtimeDaysAgo: 60 },
+      ],
+      transcripts: [
+        { session: 'old', date: '2026-06-01T10:00:00Z', turns: [{ user: 'a' }, { skill: 'then' }, { user: 'b' }, { skill: 'now' }] },
+        { session: 'new', date: '2026-08-10T10:00:00Z', turns: [{ user: 'c' }, { skill: 'now' }, { user: 'd' }, { skill: 'now' }] },
+      ],
+    })
+    try {
+      await withHome(fx.home, () => {
+        const r = buildReport({ today: '2026-08-15' })
+        assert.deepEqual(r.totals.usedRecently, { days: 30, skills: 1, uses: 2 })
+        assert.equal(r.totals.calledSkills, 2, 'used ever is still its own count')
+        const by = Object.fromEntries(r.skills.map((s) => [s.name, s]))
+        assert.equal(by.now.recentCalls, 2)
+        assert.equal(by.now.calls, 3)
+        assert.equal(by.then.recentCalls, 0)
+      })
+    } finally { fx.cleanup() }
+  })
+
+  test('never claims a longer window than the history that was read', async () => {
+    const fx = makeFixtureHome({
+      today: '2026-08-15',
+      skills: [{ name: 'now', description: 'Used in the only week of history there is on this machine.', mtimeDaysAgo: 60 }],
+      transcripts: [{ session: 'new', date: '2026-08-08T10:00:00Z', turns: [{ user: 'c' }, { skill: 'now' }] }],
+    })
+    try {
+      await withHome(fx.home, () => {
+        const r = buildReport({ today: '2026-08-15' })
+        assert.equal(r.totals.usedRecently.days, 7, 'seven days of sessions, so seven days is what it says')
+        assert.equal(r.totals.usedRecently.skills, 1)
+        const since = buildReport({ today: '2026-08-15', since: '2026-08-12' })
+        assert.equal(since.totals.usedRecently.days, 3, 'a --since inside the month shortens the window to match')
+        assert.equal(since.totals.usedRecently.skills, 0)
+      })
+    } finally { fx.cleanup() }
+  })
+
+  test('with no history at all it says thirty days and zero, not a guess', async () => {
+    const fx = makeFixtureHome({ skills: [{ name: 'a', description: 'A skill on a machine with no sessions at all yet.' }] })
+    try {
+      await withHome(fx.home, () => {
+        assert.deepEqual(buildReport({ today: '2026-08-15' }).totals.usedRecently, { days: 30, skills: 0, uses: 0 })
+      })
+    } finally { fx.cleanup() }
   })
 })
 

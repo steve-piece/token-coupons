@@ -42,10 +42,10 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 | `overBudgetRatio` | 1.0 means it exactly fills the space Claude Code allows; 2.5 means two and a half times over |
 | `neverCalledContext` | open to the router, never once chosen by it |
 | `unroutable` | listed by name only, because Claude Code dropped their descriptions to fit |
-| `summonedOnly` | only ever reached by typing a slash, yet still paying to sit in the router's list |
-| `wastedTokensPerCall` | never called plus summoned only, per API call |
-| `savedTokensPerCallIfApplied` | what the recommendations recover, per API call |
-| `fitsAfter` | true if the listing fits the budget once the recommendations are applied |
+| `summonedOnly` | reached by typing a slash at least four times in five, yet still paying to sit in the router's list. The key keeps its old name; the bar was every use before, and `economics.summonedOnlyContext.share` says what it is now |
+| `wastedTokensPerCall` | never called plus started by you, per API call |
+| `savedTokensPerCallIfApplied` | what the recommendations recover, per API call: exactly the sum of `impactTokensPerCall` over the rows whose action is command, delete or optimize |
+| `fitsAfter` | true if the listing fits the budget once the recommendations are applied, judged on what those rows free and nothing more |
 | `wastedPerWeekOnYourModel` | `{ model, dollars, dollarsPerMonth }` for the model the transcripts actually ran on, or null when none of them is in the price list |
 | `savedOnYourModel` | `{ model, dollars, dollarsPerMonth, tokens }`: what taking the recommendations is worth on that same model. A share of the waste, never all of it, because a gated skill still costs its name line. Null whenever the field above is |
 | `recommendedActions` | how many skills landed on each action: `command`, `delete`, `optimize`, `review`, `keep`, `context`. The six add up to `skills` |
@@ -56,8 +56,15 @@ being in the listing, so they cost nothing per message. It is reassurance, never
   where that window was read from. See [listing-budget](listing-budget.md).
 - `totals`: raw counts (skills, how many declare the gate, transcripts read, calls matched), plus
   `onDiskNotListed`, `notListedByReason` and `withSourceCopy`. Useful when someone doubts a number.
+  `usedRecently` is the one worth quoting unprompted: `{ days, skills, uses }`, how many skills in the
+  list Claude Code actually used in the last thirty days (or fewer, when less history was read) and
+  how many uses that was. Say it beside the never used count: "17 of 129 used in the last 30 days".
 - `economics`: the same waste split into never called, overflow, and summoned only, each with a
-  plain `note` sentence you can quote as is.
+  plain `note` sentence you can quote as is. Two "what if" blocks sit beside them and are easy to
+  confuse. `ifApplied` is what the recommendations as given give back, and it is the one to quote:
+  `tokens`, `count` and `byAction`. `ifGated` is what gating every unused skill would save. It is
+  larger, nothing recommends it, and it is never the headline. Quote the saving and stop: do not
+  walk anyone through the difference between the two unless they ask.
 - `stats`: sessions, API calls per session, models seen, input tokens per week, cache shares. This is
   the multiplier that turns a listing size into money.
 - `cost`: per model dollars per week and per month, cached and uncached, the wasted tokens per week and month in `cost.volume`, plus the share of input line. `cost.assumptions` is where those dollars come from and is the block to quote when someone asks why: requests per chat, chats per week, whether it was `measured`, and `cacheWritesPerSession` with the `cacheBreaks` behind it (chat starts, model switches, effort switches, gaps past `cacheTtlMinutes`). See [cost-model](cost-model.md).
@@ -67,7 +74,9 @@ being in the listing, so they cost nothing per message. It is reassurance, never
   `reason`, sorted by use in any tool. A skill another tool lists says so in `listedIn`. Nothing here
   is scored: an unlisted skill costs Claude Code nothing per message.
 - `clients`: one entry per tool on this machine (Claude Code, then Codex, Cursor, Gemini CLI as
-  present): how many skills its list holds and what that costs in its own messages, its allowance
+  present): how many skills its list holds, how many of those are the same folders Claude Code lists
+  (`alsoInClaude`; the lists overlap, because one folder is often linked into several tools, so never
+  add them up or describe them as separate sets), what the list costs in its own messages, its allowance
   where it publishes one, how many of its chats were read and how many skill uses came out, and a
   `coverage` block saying which sources were and were not opened, with a plain sentence for each
   gap. Quote the gap sentence whenever a per tool count is quoted: "Cursor usage is from its command
@@ -84,7 +93,7 @@ being in the listing, so they cost nothing per message. It is reassurance, never
 | Flag | What it means |
 |---|---|
 | `never-called` | in the listing every session, never once chosen |
-| `summoned-only` | you always type its slash; the router never picked it |
+| `summoned-only` | you type its slash at least four times in five; the router picked it rarely or never, and the reason says how often |
 | `heavy-description` | its description is long enough to crowd out others |
 | `thin-description` | too short for the router to tell when it applies |
 | `capped` | past the per entry limit, so part of it is already cut off |
