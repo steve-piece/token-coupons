@@ -97,12 +97,24 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   const summoned = eco.summonedOnlyContext || {}
   line('  ' + padEnd(fmt(never.count || 0), 5) + ' never used, but described on every message' + paint.dim('  ' + fmt(never.tokens || 0) + ' tokens per message'))
   line('  ' + padEnd(fmt(unroutable.count || 0), 5) + ' cannot be reached (their description is being dropped to fit)')
-  line('  ' + padEnd(fmt(summoned.count || 0), 5) + ' only ever started by you typing their name' + paint.dim('  ' + fmt(summoned.tokens || 0) + ' tokens per message'))
+  line('  ' + padEnd(fmt(summoned.count || 0), 5) + ' started by you typing their name, ' + trimNum((Number(summoned.share) || 0.8) * 100) + ' percent of the time or more' + paint.dim('  ' + fmt(summoned.tokens || 0) + ' tokens per message'))
 
-  // savings sentence
+  // savings sentence: what the recommendations below give back, which is the
+  // sum of their rows, never the larger figure for gating everything unused.
   const gated = eco.ifGated || {}
+  const applied = eco.ifApplied || null
   line()
-  if ((gated.count || 0) > 0) {
+  if (applied && applied.count > 0) {
+    line('  ' + paint.cyan('Take the ' + fmt(applied.count) + (applied.count === 1 ? ' suggestion' : ' suggestions') + ' below and you save about ' +
+      fmt(applied.tokens) + ' tokens on every message') + (per.fitsBudget === false
+      ? (applied.fitsBudgetAfter ? ', and the list fits its allowance again.' : ', though the list is still over its allowance.')
+      : '.'))
+  } else if (applied) {
+    line('  ' + paint.green((gated.count || 0) > 0
+      ? 'Nothing to change right now.'
+      : 'Nothing here is being wasted: every described skill has been chosen by the agent at least once.'))
+  } else if ((gated.count || 0) > 0) {
+    // A report from before the recommendations were summed: say what it knew.
     line('  ' + paint.cyan('Set those ' + fmt(gated.count) + ' skills to start only when you type their name and you save about ' +
       fmt(gated.savedTokensPerSession || 0) + ' tokens on every message') + (gated.fitsBudgetAfter
       ? ', and the list fits its allowance again.'
@@ -224,10 +236,15 @@ export function renderText (report, { color = false, top = 15 } = {}) {
   if (!others.length) line('  none found: no Codex, Cursor or Gemini CLI folder on this machine')
   else {
     line(paint.dim('  each tool sends its own skill list with its own messages, on its own model, so these are not added to the figures above.'))
+    const mine = clients.find((c) => c.id === 'claude')
+    if (mine && mine.alsoElsewhere > 0) {
+      line(paint.dim('  The lists overlap: ' + fmt(mine.alsoElsewhere) + ' of your ' + fmt(mine.skills) + ' skills are in another tool\'s list too, one folder linked into each. Shorten or delete one and it changes in all of them.'))
+    }
     for (const c of others) {
       line()
       line('  ' + paint.bold(c.label))
-      line('    In its list: ' + fmt(c.skills) + (c.skills === 1 ? ' skill' : ' skills') + ', about ' + fmt(c.listingTokens) + ' tokens per message' +
+      line('    In its list: ' + fmt(c.skills) + (c.skills === 1 ? ' skill' : ' skills') +
+        (typeof c.alsoInClaude === 'number' ? ' (' + fmt(c.alsoInClaude) + ' shared with Claude Code)' : '') + ', about ' + fmt(c.listingTokens) + ' tokens per message' +
         (c.budget ? ' (room for about ' + fmt(c.budget.tokens) + ': ' + c.budget.source + ')' : ' (it publishes no allowance)') +
         (c.overBudget ? ' ' + paint.red('over its allowance') : ''))
       if (Array.isArray(c.onlyHere) && c.onlyHere.length) {

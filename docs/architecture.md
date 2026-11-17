@@ -47,6 +47,9 @@ there too.
   and U+2212. `node tests/dash-scan.mjs` fails the build if one appears.
 - Every module reads roots through `src/paths.mjs` so tests can point the
   whole tool at a fixture with `TOKEN_COUPONS_HOME=<dir>`.
+- Everything the tool needs at runtime lives under `skills/token-coupons`. The
+  mod under `hooks/` is the one thing outside it, and it is a view: the skill
+  never depends on it, and it only ever calls the skill's `panel` command.
 - Reads local files only. No network, ever. Pricing is a data file with a
   verified-on date; refreshing it is a human or agent action, not a fetch.
 - Nothing `apply` or `describe` does is unrecoverable: deletes move to a trash
@@ -64,7 +67,7 @@ missing on every machine but this one. The root holds the README, the tests, the
 plugin manifests, and a private `package.json` that exists for `pnpm test`.
 
 ```
-bin/token-coupons.mjs      CLI: report (default) | apply | describe | pricing | help
+bin/token-coupons.mjs      CLI: report (default) | apply | describe | pricing | panel | help
 src/version.mjs            VERSION, the one place the number is written
 src/paths.mjs              homeDir(), claudeDir(), projectsDir(), pluginsDir(), trashDir(), runsDir(), tildify(),
                            agentsDir(), codexDir(), cursorDir(), geminiDir(), etcCodexSkillsDir(), cursorAppDbCandidates()
@@ -86,7 +89,9 @@ src/recommend.mjs          recommend(rows, {economics, budget, thresholds, today
 src/pricing.mjs            loadPricing(path?, {today}?) -> Pricing, costModel({wastedTokens, listingTokens, stats, pricing, cached, today}) -> Cost
 src/report.mjs             buildReport(opts) -> Report   (joins everything above; opts.cwd reaches discover, opts.cacheTtlMinutes reaches calls)
 src/render-text.mjs        renderText(report, {color, top}) -> string
-src/render-list.mjs        renderList(report, {cardHref}) -> the dark decision list, companion to the card
+src/render-list.mjs        renderList(report, {cardHref}) -> the decision list, companion to the card (styles and script in src/list/)
+src/render-panel.mjs       panelOf(report, {rows}) -> Panel ; panelFromRun(run) -> the top half of one ; emptyPanel()
+                           the report cut down to a few KB of JSON, for a view too small for the report
 src/score.mjs              scoreReport(report) -> {score, grade, parts, ratios, tokens} ; headline() ; GRADE_COLOR
 src/render-card.mjs        renderCardSvg(report, {repoUrl}) -> svg ; renderCardPage(report) -> the postable saved card
 src/apply.mjs              planApply(decisions, {skills}) -> Plan ; applyPlan(plan, {yes, trashDir}) -> Result ; cacheNote(result) -> the re-send warning
@@ -100,6 +105,11 @@ references/, evals/        the skill's own reading and its evals
 
 # at the repo root
 .claude-plugin/marketplace.json    the one plugin marketplace that points at this repo
+.claude-plugin/plugin.json         the plugin manifest; `types` names the mod's contract
+hooks/hooks.json           names the one hooks module, which is the mod
+hooks/token-coupons.mjs    the mod: a line under the prompt, /coupons, and a pane (see "The mod" below)
+types/index.d.ts           the mod's contract: the Panel shape and the five values it keeps in $.state
+tests/mod.test.tsx         the mod, run inside the engine: `claude plugin test .` (not part of node --test)
 tests/*.test.mjs           node:test, one file per module, fixture built under a temp TOKEN_COUPONS_HOME
 tests/helpers.mjs          makeFixtureHome({skills, transcripts, settings}) -> {home, cleanup}
 tests/dash-scan.mjs        fails on any forbidden dash in the repo
@@ -182,7 +192,8 @@ the returned list, so one plugin skill is one row.
 ### Row (Skill joined with calls, produced in report.mjs)
 
 Skill plus: `calls, commandCalls, contextCalls, firstSeen, lastSeen`
-(YYYY-MM-DD or null), which are Claude Code's, because those are the numbers
+(YYYY-MM-DD or null) and `recentCalls` (the calls on or after the day
+`joinCalls` is given as `recentSince`), which are Claude Code's, because those are the numbers
 that say whether Claude Code's router has ever chosen the skill; then
 `callsByClient: { claude: {calls, commandCalls, contextCalls, firstSeen, lastSeen}, codex: {...}, ... }`
 holding only the tools that used it, `callsElsewhere` (every tool but Claude
@@ -224,7 +235,7 @@ Rules, in priority order (first match wins; flags accumulate regardless):
 3b. `mode === 'context'`, `contextCalls === 0`, and a gate honouring tool other than Claude Code (Cursor) has `contextCalls > 0` in `callsByClient`: action `keep`, flag `picked-elsewhere`. Claude Code never picked it, but Cursor's agent did and reads the same line, so gating it here would take it away there. Covers both never called and summoned only.
 4. `mode === 'context'`, `calls === 0`, `location` in `user`, `user-symlink`, `project`, `modifiedOn` older than `thresholds.staleDays`, `callsElsewhere === 0`, and `unmeasuredClients` empty: action `delete`, flags `never-called`, `stale`. Alternative offered in the UI: `command`. A use in any other tool, or a listing tool whose chats could not be read, drops this to rule 5 with a clause saying which.
 5. `mode === 'context'`, `calls === 0`: action `command`, flag `never-called`.
-6. `mode === 'context'`, `calls > 0`, `contextCalls === 0`: action `command`, flag `summoned-only`.
+6. `mode === 'context'`, `calls > 0`, and `commandCalls / calls >= thresholds.typedShare` (0.8): action `command`, flag `summoned-only`. The flag keeps its name from when the bar was every use. It is four uses in five now, because one pick by the agent in forty uses does not make a skill something the agent routes to. The bar asks for evidence by itself: one pick needs four typed uses beside it. `isMostlyTyped()` in economics.mjs is the one test, used by the economics count and by this rule, so the count and the flagged rows are the same rows. When the agent did pick it a few times the reason says how many, since gating gives those up. Rule 3b outranks this one in the same way: a skill you mostly type here but that Cursor's agent picks on its own is kept.
 7. `mode === 'context'`, `contextCalls > 0`, (`descriptionChars > thresholds.heavyChars` or `capped`): action `optimize`, flag `heavy-description` (and `capped` when over the per-entry cap).
 8. otherwise `keep`.
 
@@ -244,7 +255,9 @@ chats could not be read, so it is gated rather than deleted.
 
 Default thresholds (exported, overridable): `thinChars: 60`, `heavyChars: 600`,
 `optimizeTargetChars: 350`, `staleDays: 90`, `newSkillDays: 14`,
-`heaviestListSize: 15`.
+`heaviestListSize: 15`, `typedShare: 0.8` (set it to 1 for the old all or
+nothing rule). `buildReport` hands the same `typedShare` to `economics()` and
+to `recommend()`.
 
 `heaviest`: top `heaviestListSize` context rows by `descriptionChars`, each with
 `calls` shown, regardless of recommendation. `thin`: every row carrying
@@ -372,6 +385,8 @@ measured sessions per day and per week.
   clients: [{                    // one per tool ON THIS MACHINE, Claude Code first
     id, label, honoursGate, sigil,
     skills,                      // rows this tool lists from cwd
+    alsoElsewhere,               // of those, how many another tool lists too (one folder, linked into each)
+    alsoInClaude,                // of those, how many Claude Code lists; null on Claude Code's own entry
     listingChars, listingTokens, // what that list costs in its own messages (Claude Code's are the priced figures above)
     budget: { chars, tokens, contextWindow, source } | null,   // null where the tool publishes no allowance
     overBudget: bool | null,
@@ -394,6 +409,34 @@ measured sessions per day and per week.
 }
 ```
 
+`summary.savedTokensPerCallIfApplied`, `fitsAfter` and `savedOnYourModel` are
+read from `economics.ifApplied`, never from `economics.ifGated`. The two answer
+different questions. `ifGated` is what gating every unused skill would save.
+`ifApplied` is what the recommendations as given give back: the sum of
+`impactTokensPerCall` over the rows whose action is command, delete or
+optimize, so a person can add the column up and get the headline. It is built
+by `ifApplied(rankedRows, economics, { optimizeTargetChars })` in economics.mjs
+and attached in `buildReport` after ranking, because it cannot be known before:
+
+```js
+ifApplied: {
+  tokens, chars, count, byAction: { command, delete, optimize },
+  charsAfter, tokensAfter, fitsBudgetAfter,
+  note,
+}
+```
+
+The headline was `ifGated` for a long time, which promised tokens for rows the
+same report marked keep. On one machine that was 10,893 tokens against the
+6,420 its rows added up to, and $101 a month against $60. The reports state
+the saving and stop there. An earlier draft also printed how many unused skills
+the recommendations did not touch, what those were worth and why; it read as a
+second number to reconcile and was dropped, along with the field behind it.
+Each such row still says why on its own line. Dollars follow the tokens
+at the price a token of the list costs, read off the waste, or off the whole
+list when nothing is wasted and the saving is all shortened descriptions. A
+shortened description counts in `ifApplied`; it never did in `ifGated`.
+
 `previous.skills` is carried through rather than summarised because it is the
 only record of what the listing looked like before the last pass, and the share
 card diffs it to say what actually changed.
@@ -414,8 +457,11 @@ declaredContext, gateDeclaredAnywhere, transcriptsRead, callsTotal,
 callsMatched, calledSkills, neverCalled, neverCalledCommand, neverCalledContext`,
 and adds three: `onDiskNotListed` (the length of `notLoaded`),
 `notListedByReason` (`{reason: count}`) and `withSourceCopy` (listed rows
-carrying a `sourcePath`), then four for the other tools: `clientsRead` (ids),
+carrying a `sourcePath`), then five for the other tools: `clientsRead` (ids),
 `listedByOtherToolsOnly` (unlisted rows some other tool lists),
+`listedByAnyTool` (that plus `skills`: every skill some tool lists, once each),
+and `usedRecently: { days, skills, uses }` (listed skills Claude Code used in
+the recent window, the uses that was, and the window in days),
 `callsElsewhere` (uses in other tools, listed and unlisted rows together) and
 `usedElsewhere` (listed rows with any such use). `skills` and every
 never-called count are over listed rows and Claude Code's calls;
@@ -479,8 +525,17 @@ token-coupons report [--since=YYYY-MM-DD] [--cwd=DIR] [--window=N] [--fraction=F
 token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
+token-coupons panel [--last] [--rows=N] [--cwd=DIR]
 token-coupons help
 ```
+
+`panel` prints a Panel (shape under "The mod") as JSON and nothing else. It
+takes every setting `report` does and runs them through the same `measure()`
+the report does, so what the last run was told carries forward into both and
+the two can never measure differently. It writes nothing: no file, and no run
+record. `--last` skips measuring and prints `panelFromRun(loadLastRun())`,
+which is the top half only, or the empty panel when there is no history.
+`--rows=N` sets how many rows worth acting on come back (default 8).
 
 `--cache-ttl=MIN` is how long the saved prompt survives with no traffic, and it
 decides when a gap counts as a cache break. The default is 60 minutes, which is
@@ -548,6 +603,135 @@ report; apply exits 1 if any step errored.
   `description-rewrite.md`, `cost-model.md`, `listing-budget.md`. Each 40 to
   100 lines, plain language, no dashes.
 - `evals/evals.json` in the agentskills.io shape with three realistic prompts.
+
+## The mod (hooks/token-coupons.mjs)
+
+A Claude Code mod is a hooks module that ships inside a plugin and runs in the
+session. This one is a view of the report and nothing else, and it is the one
+part of the repo that lives outside `skills/token-coupons` on purpose.
+
+**Optional, in both directions.** `skills add` copies the skill folder alone,
+so a standalone install never has the mod and must lose nothing by it: no file
+under `skills/token-coupons` may import, path to, or mention needing anything
+under `hooks/` or `types/`, and `tests/panel.test.mjs` fails if one does. The
+plugin install gets the mod with the skill. On a Claude Code build that
+predates mods the hooks module is not loaded and the plugin works as before.
+
+**It decides nothing.** The mod runs exactly two commands, `panel --last` and
+`panel`, and draws what comes back. Every number, rank and sentence on the
+pane is built in `render-panel.mjs`, where it is tested on a bare Node. If the
+pane and the report ever disagree, the bug is in one place.
+
+```js
+Panel: {
+  version: 1, tool: '0.1.0',
+  state: 'measured' | 'last-run' | 'empty',
+  generatedOn, ranAt, cwd,                      // cwd tildified
+  listing: { skills, notListed, tokens, allowanceTokens | null, alsoElsewhere | null, overRatio, fits } | null,
+  counts:  { neverUsed, neverUsedTokens | null, outOfReach, typedOnly, typedOnlyTokens | null } | null,
+  wastedTokens,
+  saving:  { tokens, fitsAfter },
+  money:   { model, wastedPerWeek, wastedPerMonth, savedPerMonth } | null,   // null when the model is not priced
+  actions: { command, delete, optimize, review, keep, context },
+  score:   { score, grade } | null,
+  installed: n | null,                             // distinct skills at least one tool lists (totals.listedByAnyTool)
+  top:     [{ rank, action, saves, name, why }],   // every action but keep, in rank order, capped at `rows`
+  more:    n,                                      // rows worth acting on that the cap cut
+  tools:   [{ id, label, skills, alsoInClaude | null, tokens, allowanceTokens | null, over, chats, uses, readsGate, notes }],
+  drift:   [note],
+}
+```
+
+`listing.alsoElsewhere` is how many of Claude Code's skills another tool lists
+too, and `tools[].alsoInClaude` how many of that tool's are the same folders
+Claude Code lists. Both come straight from the report's `clients` block. They
+exist because the lists overlap (one folder, linked into several tools, is an
+entry in each list), and a view that printed four totals with nothing between
+them would read as four separate piles of skills. `installed` is the same
+fact as one number: every skill some tool lists, counted once, which is less
+than the per tool counts added together. The pane leads its tool list with it
+(`319  Skills Installed`, then one line per tool, largest first), so the
+overlap shows as the gap between the total and the lines under it. A view
+written before a field existed must still draw a panel that lacks it: the mod
+prints the number only when it is there, since a hot reload keeps whatever
+panel the session already held.
+
+`panelFromRun` fills the same fields from a run record's `summary`. A record
+keeps neither the allowance, nor the overlap, nor the token count behind each
+of the three counts, so those are null rather than derived (dividing the ratio back out of
+the total lands a few tokens off the real allowance), and `top` and `tools`
+are empty. `state` says which source it was. `types/index.d.ts` carries this
+shape as `TokenCouponsPanel`; a change to it bumps `PANEL_VERSION` here and in
+the mod together, and the mod refuses a version it does not know with a
+sentence saying to update, rather than drawing zeros.
+
+What the mod does, event by event:
+
+- `session.start`, every session: registers `/coupons`, then, unawaited so
+  the first prompt never waits, reads `panel --last` (one small file, no
+  measuring) and pins the line under the prompt. Never gate this on
+  `e.isInteractive`: it is true only under the terminal's own prompt and false
+  in the desktop app, which hosts the session the way an SDK caller does, and
+  nothing at a start tells the app from a `claude -p` run. The first version
+  did gate on it, and `/coupons` did not exist in the desktop app. A headless
+  run therefore pays the same one small read, which is the cheaper mistake.
+- The line: `skills list: N tokens a message, N unused, N out of reach
+  (/coupons)`. Absent when nothing is unused, nothing is out of reach and the
+  list fits, and before the tool has ever run: a line that is always there
+  stops being read. `/coupons quiet` turns it off across sessions (`$.store`),
+  `/coupons loud` brings it back.
+- `/coupons` (also `/coupons refresh`): opens the pane and, unless a measured
+  panel is already held, starts `panel`. Measuring reads every tool's chat
+  history and can take tens of seconds, which is why it is never started
+  unasked.
+- The pane (`ui.render` on `{ component: 'Pane', requestId: 'token-coupons' }`):
+  Box, Text and Button only, which every surface draws (terminal, desktop,
+  VS Code, mobile). Colour is set in one place, `tint()`, from the engine's
+  theme keys and always with bold. Never a raw colour name: the first version
+  used `yellow`, which is one fixed shade and could not be read on the desktop
+  app's light theme, where a theme key is the shade that theme chose for the
+  job. One colour, one meaning, wherever it appears: `error` (red) for skills
+  nobody uses, their count and `delete`; `warning` (yellow) for the allowance,
+  being over it and the count it drops out of reach; `inactive` (gray) for the
+  count started by you; `remember` (dark blue) for `command`; `skill` (purple)
+  for `shorten`; `planMode` (teal) for `review` and `context`; `success`
+  (green) for what comes back. The saving sentence is one bold Text in the
+  text colour with the token count as a green Text inside it, so it wraps as
+  one sentence. A wait ("Measuring now") takes no colour: yellow already
+  means the allowance. Two buttons: Refresh measures again, and Decide what to
+  change runs the skill's own slash command (`token-coupons:token-coupons`
+  under a plugin install, `token-coupons` beside a standalone one), shown only
+  when `$.command.list()` has one of them. It starts one run at a time: the
+  press claims `isAuditing` with a compare and set, the label reads "Audit
+  started", and presses until that run finishes do nothing. Neither button has
+  a hotkey. The first version had `r` and `d`; a letter hotkey fires on that
+  letter typed while the pane holds the keyboard, and between that and a
+  button that showed nothing after a press, one person queued six whole audits
+  in five seconds.
+
+Finding the CLI: `$.plugin.root + '/skills/token-coupons/bin/token-coupons.mjs'`
+first, then the same path under `~/.claude` and `~/.agents`, so a copy of the
+mod loaded from a bare folder works beside a standalone skill. It is run as
+`node <cli> panel`, from the session's working directory, which is what makes
+the pane count the same project skills the session lists.
+
+Two constraints that are easy to break:
+
+- **No imports.** State is read and written with `$.state.get` and
+  `$.state.set` directly. The state library's helpers (`atom`, `read`,
+  `update`) would be tidier, but builds before 2.1.286 refuse a module that
+  hands `$` to an imported function, and the plugin has to validate on them.
+- **Never a run record.** A record is the baseline the next report compares
+  against, and the share card counts what a pass changed by diffing the record
+  before it. A glance from the pane landing between an apply and the report
+  after it would become that baseline, and the card would report that the pass
+  changed nothing. So the mod only ever runs `panel`, and `panel` never saves.
+
+Checks: `claude plugin validate .claude-plugin/plugin.json` reads the module
+the way the engine will (it passes on 2.1.263, 2.1.273 and 2.1.286), and
+`claude plugin test .` runs `tests/mod.test.tsx` inside the engine, mounting
+the pane on all four surfaces. That file is `.tsx` so Node's own runner never
+picks it up: the tool's suite must keep passing on a bare Node.
 
 ## Run history (src/runs.mjs)
 
@@ -673,23 +857,52 @@ Three constraints shape the card and must not be broken casually:
 
 ## The decision list (src/render-list.mjs)
 
-`--html=FILE` writes the companion to the card: the same dark ground and mono
-voice, carrying every row behind the headline figure so a person can change any
-of them. Three rules shape it.
+`--html=FILE` writes the companion to the card: every row behind the headline
+figure, so a person can change any of them. The stylesheet and the page script
+live beside the renderer in `src/list/` (`page.css`, `page.js`, `logos.mjs`),
+read once at load and inlined, so the page stays one self contained file. Four
+rules shape it.
 
 **Money, not tokens.** A token count is a unit nobody has intuition for. Every
-row is priced per month from `cost.dollarsPerTokenPerMonth`, the single rate
-`report.mjs` derives from the model the transcripts actually ran on, so the card
-and the list can never disagree about what a skill costs. When no priced model
-matches, rows fall back to token counts rather than a guessed price.
+row is priced per month from its own `dollarsPerMonth`, which comes from the
+single rate `report.mjs` derives from the model the transcripts actually ran on,
+so the card and the list can never disagree about what a skill costs.
 
-**Context and command, right above the list.** The page explains the two kinds and
-nothing else, because nobody can make these decisions without knowing what they
-are, and that difference is the only lever the tool pulls. A test asserts the
-explainer sits above the table.
+**The waste is accounted for in full.** The panel under the score carries the
+wasted figure and splits it in one bar, so "wasted" and "back" can never read
+as two numbers that fail to meet. The wasted set is the same two lists the
+economics block prices (`neverCalledContext` and `summonedOnlyContext`), and
+each wasted skill sits in exactly one part:
 
-**One dark look**, matching the card it ships beside.
+| Part | What it holds |
+|---|---|
+| Back with your choices | what the current choices on wasted rows recover |
+| New, check back in 14 days | `too-new` rows: unused, but too young for that to mean anything |
+| *Tool* picks these | `picked-elsewhere` rows, named after the tool that picks them |
+| Still listed | unused rows nothing in the current choices takes out (hidden at $0) |
+| Name lines stay | the line a command still costs, on rows that were gated |
 
-The earlier light report page is gone. It stopped being reachable when the dark
-list took over `--html`, and dead code that renders one of the two documents the
-tool exists to produce is worse than no code at all.
+The headline is the sum of the rows, not `summary.wastedPerWeekOnYourModel`,
+so the parts add back up exactly; the two differ by rounding only. Changing a
+row moves its dollars between parts. What shortening a skill you *do* use saves
+is not waste, so it gets its own line under the bar ("plus $X from shortening N
+skills you do use, so $Y back in all"), and the tray's total is that $Y. The new
+and other tool parts are buttons that filter the list to exactly their rows,
+through `waste-fresh` and `waste-elsewhere` entries in each row's `data-flags`.
+
+**Data, not sentences.** Usage (agent picks, your typed uses, last seen),
+description length against the per entry cap, and age are drawn in their own
+cells. Tags are kept for what those cells cannot show: out of reach, cut off,
+you type it, already a command, usage unknown, new, and the other tool that
+uses or picks the skill.
+
+**Two questions, two controls.** Context or command, and keep, shorten or
+delete, are separate segmented controls, each preset to the suggestion. A dot
+marks the suggestion and a dashed outline marks what the skill is today, shown
+only while today is not the choice, so the current state is never hidden behind
+a proposal. Delete is disabled on a plugin cache folder. A sticky tray counts
+the changes and the dollars back, and copies the decisions file; the file is
+also rendered into the page so it is right before any script runs.
+
+The page follows the reader's light or dark setting, with a toggle in the mast,
+and is the same bytes every time it is built from the same report.

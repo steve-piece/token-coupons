@@ -186,7 +186,7 @@ describe('headline', () => {
       summonedOnlyContext: { count: 7 },
     }, { tokens: { wasted: 7777 } })
     assert.equal(lines.length, 2)
-    assert.equal(lines[0], '65 skills have never been used. 7 more you only type yourself.')
+    assert.equal(lines[0], '65 skills have never been used. 7 more you mostly run by hand.')
     assert.equal(lines[1], 'Their descriptions cost 7,777 tokens in every message you send.')
     for (const l of lines) assert.ok(l.length <= 64, 'fits the 64 character column: ' + l)
   })
@@ -195,7 +195,7 @@ describe('headline', () => {
     const only = headline({}, { neverCalledContext: { count: 1 }, summonedOnlyContext: { count: 0 } }, { tokens: { wasted: 300 } })
     assert.equal(only[0], '1 skill has never been used.')
     const summonedOnly = headline({}, { neverCalledContext: { count: 0 }, summonedOnlyContext: { count: 4 } }, { tokens: { wasted: 300 } })
-    assert.equal(summonedOnly[0], '4 more you only type yourself.')
+    assert.equal(summonedOnly[0], '4 more you mostly run by hand.')
   })
 
   test('says so plainly when nothing is wasted', () => {

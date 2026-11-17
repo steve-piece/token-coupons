@@ -7,3 +7,8 @@ node_modules/
 report.json
 report.html
 decisions.json
+# written by Claude Code each time it loads the mod from this folder
+.claude-plugin/types/
+# agency workflow files, never part of the shipped repo
+future-recommendations.md
+.claude/

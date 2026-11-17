@@ -7,6 +7,7 @@
 //   token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 //   token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]
 //   token-coupons pricing [--pricing=FILE] [--json]
+//   token-coupons panel [--last] [--rows=N] [--cwd=DIR]
 //   token-coupons help
 
 import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs'
@@ -19,6 +20,7 @@ import { buildReport } from '../src/report.mjs'
 import { renderText } from '../src/render-text.mjs'
 import { renderCardPage } from '../src/render-card.mjs'
 import { renderList } from '../src/render-list.mjs'
+import { panelOf, panelFromRun } from '../src/render-panel.mjs'
 import { discoverSkills } from '../src/discover.mjs'
 import { parseDecisions, planApply, applyPlan, summarizeApply } from '../src/apply.mjs'
 import { parseEdits, planDescribe, applyDescribe, summarizeDescribe } from '../src/describe.mjs'
@@ -32,8 +34,8 @@ export function version () { return VERSION }
 
 /* ------------------------------------------------------------------ args */
 
-const VALUE_FLAGS = new Set(['since', 'window', 'fraction', 'budget', 'pricing', 'html', 'out', 'trash', 'today', 'top', 'cwd', 'cache-ttl', 'card', 'runs'])
-const BOOL_FLAGS = new Set(['uncached', 'json', 'open', 'no-color', 'color', 'yes', 'help', 'version', 'h', 'v', 'fresh'])
+const VALUE_FLAGS = new Set(['since', 'window', 'fraction', 'budget', 'pricing', 'html', 'out', 'trash', 'today', 'top', 'cwd', 'cache-ttl', 'card', 'runs', 'rows'])
+const BOOL_FLAGS = new Set(['uncached', 'json', 'open', 'no-color', 'color', 'yes', 'help', 'version', 'h', 'v', 'fresh', 'last'])
 
 /** Parse argv into { command, positional, flags }. Accepts --k=v and --k v. */
 export function parseArgs (argv) {
@@ -79,6 +81,7 @@ export function helpText () {
     '  token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]',
     '  token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]',
     '  token-coupons pricing [--pricing=FILE] [--json]',
+    '  token-coupons panel [--last] [--rows=N] [--cwd=DIR]',
     '  token-coupons help',
     '',
     'report (the default) reads the skills on this machine and your session history, then prints what the skill list costs,',
@@ -120,6 +123,13 @@ export function helpText () {
     '',
     'pricing prints the price table the dollar figures come from, with the date it was checked.',
     '',
+    'panel prints the report cut down to a few kilobytes of JSON: what the list costs, the three counts, the first',
+    'rows worth acting on and one line per other tool. It is what the pane that comes with the plugin install draws,',
+    'and it takes the same settings report does. It writes nothing, not even a run record, so looking never moves',
+    'the baseline the next report compares against.',
+    '  --last           do not measure: print what the last run recorded (the top half only)',
+    '  --rows=N         how many rows worth acting on to include (default 8)',
+    '',
   ].join('\n')
 }
 
@@ -159,10 +169,13 @@ function num (v) {
   return Number.isFinite(n) ? n : null
 }
 
-export async function runReport (flags, io) {
-  // What the last run was told is carried forward unless it was typed again, so
-  // asking for a window or a folder once does not quietly stop applying. The
-  // report then says what moved, which is the other half of a steady number.
+/**
+ * Build the Report the way the last run was told to, which is the front half
+ * of both `report` and `panel`. What the last run was told is carried forward
+ * unless it was typed again, so asking for a window or a folder once does not
+ * quietly stop applying, and the two commands can never measure differently.
+ */
+function measure (flags) {
   const runsPath = flags.runs || runsDir()
   const previous = flags.fresh ? null : loadLastRun(runsPath)
   const merged = mergeFlags(flags, previous)
@@ -185,6 +198,33 @@ export async function runReport (flags, io) {
     runFlags: f,
   })
   if (report.previous) report.previous.reused = merged.reused
+  return { report, runsPath }
+}
+
+/**
+ * The panel: a few kilobytes of JSON for a view too small for the report.
+ *
+ * It never saves a run record. A record is the baseline the next report
+ * compares against, and the scorecard counts what a pass changed by diffing
+ * the record before it. A glance from a pane landing between an apply and the
+ * report after it would become that baseline, and the card would say the pass
+ * changed nothing.
+ */
+export async function runPanel (flags, io) {
+  const rows = num(flags.rows)
+  const opts = rows === null ? {} : { rows }
+  if (flags.last) {
+    io.out(JSON.stringify(panelFromRun(loadLastRun(flags.runs || runsDir())), null, 2) + '\n')
+    return 0
+  }
+  io.out(JSON.stringify(panelOf(measure(flags).report, opts), null, 2) + '\n')
+  return 0
+}
+
+export async function runReport (flags, io) {
+  // The report says what moved since the last run, which is the other half of
+  // a steady number; measure() is where the settings carry forward.
+  const { report, runsPath } = measure(flags)
 
   const notes = []
   try {
@@ -341,7 +381,8 @@ export async function main (argv = process.argv.slice(2), io = null) {
     if (command === 'apply') return await runApply(positional, flags, o)
     if (command === 'describe') return await runDescribe(positional, flags, o)
     if (command === 'pricing') return await runPricing(flags, o)
-    o.err('unknown command "' + command + '". Try report, apply, describe, pricing, or help.\n')
+    if (command === 'panel') return await runPanel(flags, o)
+    o.err('unknown command "' + command + '". Try report, apply, describe, pricing, panel, or help.\n')
     return 2
   } catch (e) {
     o.err('token-coupons could not finish: ' + (e && e.stack ? e.stack : e) + '\n')

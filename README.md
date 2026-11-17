@@ -28,71 +28,75 @@ It reads Codex, Cursor and Gemini CLI too, so a skill you keep for another tool 
 
 ## What it tells you
 
-Real output, from the author's machine on 2026-09-16, trimmed to fit:
+Real output, from the author's machine on 2026-10-05, trimmed to fit:
 
 ```text
 WHAT THE LISTING COSTS
-  Skills in your listing: 119 (118 let the agent pick them, 1 starts only when you type its name)
+  Skills in your listing: 129 (122 let the agent pick them, 7 start only when you type their name)
   Allowance for the list: 40,000 characters, about 10,000 tokens (1 percent of a 1,000,000 token window)
-  Sent with every message: about 14,517 tokens
-  Over the allowance by 18,037 characters (1.45x). Past that line Claude Code drops descriptions
+  Sent with every message: about 15,450 tokens
+  Over the allowance by 21,524 characters (1.54x). Past that line Claude Code drops descriptions
   quietly, least used first, so those skills cannot be found by the agent.
 
-  86    never used, but described on every message  10,436 tokens per message
-  24    cannot be reached (their description is being dropped to fit)
-  4     only ever started by you typing their name    326 tokens per message
+  88    never used, but described on every message  11,138 tokens per message
+  28    cannot be reached (their description is being dropped to fit)
+  5     started by you typing their name, 80 percent of the time or more  364 tokens per message
 
-  Set those 90 skills to start only when you type their name and you save about 10,178 tokens
-  on every message, and the list fits its allowance again.
+  Take the 60 suggestions below and you save about 6,420 tokens on every message, and the list
+  fits its allowance again.
 
 WHAT IT COSTS IN DOLLARS
     model                     wasted/week  wasted/month  uncached/week  whole list/month
-  * Claude Opus 5                  $22.73        $98.51        $147.83           $132.89
-  * Claude Fable 5                 $45.47       $197.03        $295.65           $265.77
-  * Claude Sonnet 5                 $9.09        $39.41         $59.13            $53.15
+  * Claude Opus 5                  $24.67       $106.88        $161.12           $143.57
+  * Claude Fable 5                 $49.33       $213.77        $322.24           $287.14
+  * Claude Sonnet 5                 $9.87        $42.75         $64.45            $57.43
   * seen in your own sessions
-  Assumes 136 messages per chat and 20.2 chats per week, measured from your sessions.
-  On Claude Opus 5, the model you actually use, the unused descriptions cost about $22.73 a week
-  ($98.51 a month).
+  Assumes 136 messages per chat and 20.6 chats per week, measured from your sessions.
+  On Claude Opus 5, the model you actually use, the unused descriptions cost about $24.67 a week
+  ($106.88 a month).
 
 RECOMMENDED
-  29 to make a command, 12 to delete, 10 to rewrite (optimize), 68 to keep
+  38 to make a command, 12 to delete, 10 to rewrite (optimize), 6 to review, 63 to keep
 
    #  action    saves/msg  skill
-   1  command         263  library-app-parity
-       Never used in these sessions, yet its 1,051 chars description costs 269 tokens a message.
-  10  delete          137  on-page-seo-auditor
-       Never used, last edited 203 days ago, 547 chars sent every message.
-  43  command          67  testing-skills-with-subagents
+   1  command         270  registry-sweep
+       Never used in these sessions, yet its 1,082 chars description costs 275 tokens a message.
+  11  delete          137  on-page-seo-auditor
+       Never used, last edited 222 days ago, 547 chars sent every message.
+  49  command          67  testing-skills-with-subagents
        Never used in these sessions, yet its 270 chars description costs 76 tokens a message.
        Used 1 time in Cursor, so keep the folder.
-  52  keep              0  typescript-e2e-testing
+  61  keep              0  typescript-e2e-testing
        Claude Code never picked it on its own, but Cursor did (2 times) and reads the same
        setting, so gating it here would take it away there. Leave it.
 
 OTHER TOOLS
+  The lists overlap: 68 of your 129 skills are in another tool's list too, one folder linked
+  into each. Shorten or delete one and it changes in all of them.
   Codex
-    In its list: 57 skills, about 6,731 tokens per message (room for about 5,168: 2 percent of a
-    258400 token window, seen in its chats) over its allowance
+    In its list: 57 skills (36 shared with Claude Code), about 6,731 tokens per message (room for
+    about 5,168: 2 percent of a 258400 token window, seen in its chats) over its allowance
     Chats read: 23 (2026-02-11 to 2026-03-23), 35 skill uses, 32 matched to a skill on disk
   Cursor
-    In its list: 241 skills, about 23,102 tokens per message (it publishes no allowance)
-    Chats read: 3,185 (2026-01-28 to 2026-09-15), 1,269 skill uses, 1,109 matched to a skill on disk
-    read Cursor command line chats at ~/.cursor/projects (653)
-    read Cursor app chats at ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb (2,533)
+    In its list: 242 skills (62 shared with Claude Code), about 23,173 tokens per message (it
+    publishes no allowance)
+    Chats read: 3,187 (2026-01-28 to 2026-09-20), 1,271 skill uses, 1,111 matched to a skill on disk
+    read Cursor command line chats at ~/.cursor/projects (654)
+    read Cursor app chats at ~/Library/Application Support/Cursor/User/globalStorage/state.vscdb (2,534)
   Gemini CLI
-    In its list: 1 skill, about 58 tokens per message (it publishes no allowance)
+    In its list: 1 skill (0 shared with Claude Code), about 58 tokens per message (it publishes no
+    allowance)
     Chats read: 0, 0 skill uses, 0 matched to a skill on disk
     no Gemini CLI chats found under ~/.gemini/tmp
 ```
 
 > [!NOTE]
-> **Row 52 is worth a second look.** An earlier version of this excerpt had `typescript-e2e-testing` as its number one delete: never used, months untouched, the biggest description on the list. Cursor's agent had been reading it the whole time. Now that the report reads every tool on the machine, it stays.
+> **Row 61 is worth a second look.** An earlier version of this excerpt had `typescript-e2e-testing` as its number one delete: never used, months untouched, the biggest description on the list. Cursor's agent had been reading it the whole time. Now that the report reads every tool on the machine, it stays.
 
 Next, it hands you a page where every row is already set to what it recommends, you change the ones you disagree with, and it carries out your decisions.
 
 <p align="center">
-  <img src="./assets/readme/decision-page.png" width="100%" alt="The decision page: a score of 43 out of 100 with the grade F, 66 skills never used, the two modes explained, $52.59 a month back against $55.72 wasted, and the ranked list where each row shows the skill, its mode today, how often the agent and you used it, its cost a month, the suggested action, why, and a dropdown for your call.">
+  <img src="./assets/readme/decision-page.png" width="100%" alt="The decision page: a score of 23 out of 100 with the grade F, $129.36 wasted a month split into one bar (back with your choices $23.14, new skills to check back on in 14 days $87.94, skills Cursor picks $16.84, name lines $1.44), and the ranked list where each row shows the skill, how often the agent and you used it, its description length and age, its cost and saving a month, and two switches for your call: context or command, and keep, shorten or delete.">
 </p>
 
 ## Why this happens
@@ -109,7 +113,7 @@ Three numbers follow, and the report leads with whichever is worst:
 | --- | --- |
 | **Never called** | The agent has never chosen it, and its description still ships with every message |
 | **Cannot be reached** | The listing is over its allowance and this description is one of the ones being dropped |
-| **Summoned only** | It is used, but only when you type its name, so its description buys nothing |
+| **Started by you** | It is used, but at least four times in five by you typing its name, so its description buys almost nothing |
 
 ## Install
 
@@ -123,7 +127,8 @@ Then say `/token-coupons` in Claude Code. Node 20 or newer is the only requireme
 <summary>Other ways in</summary>
 
 ```bash
-# Claude Code plugin: this repo is a marketplace with one plugin
+# Claude Code plugin: this repo is a marketplace with one plugin.
+# Same skill, plus the optional pane described under "The pane" below.
 claude plugin marketplace add steve-piece/token-coupons
 claude plugin install token-coupons@token-coupons
 ```
@@ -157,6 +162,51 @@ sequenceDiagram
 ```
 
 Nothing on disk changes while it waits for you. The agent runs `apply` without `--yes` first and shows you the plan, asks, then runs it.
+
+## The pane
+
+The plugin install adds one optional extra: a [mod](https://claude.dev/blog/getting-started-with-claude-code-mods/) that puts the same numbers where you are already looking. From the author's machine, trimmed to fit:
+
+```text
+Your skills list  measured 2026-10-05
+15,450 tokens with every message
+1.54x its allowance of 10,000 tokens
+
+   88  never used, still described  11,138 tokens
+   28  out of reach, description dropped
+    5  nearly always started by you  364 tokens
+
+Take the suggestions and 6,420 tokens come off every message, and the list fits again.
+On Claude Opus 5: $24.67 a week unread  API prices, cached
+
+WORTH ACTING ON
+   270  command  registry-sweep
+   263  command  library-app-parity
+   146  shorten  future-recommendations
+        and 58 more in the full report
+
+319  Skills Installed
+
+• Cursor: 242
+• Claude: 129
+• Codex: 57
+• Gemini: 1
+
+[ Refresh ]  [ Decide what to change ]
+```
+
+| What | How |
+| --- | --- |
+| **`/coupons`** | opens the pane beside the conversation and measures |
+| **A line under the prompt** | `skills list: 15,450 tokens a message, 11,502 unused, 28 out of reach (/coupons)`, shown only while there is something to act on. `/coupons quiet` turns it off for good, `/coupons loud` brings it back |
+| **Refresh** | measures again. It reads every tool's chat history, so it takes a moment |
+| **Decide what to change** | starts `/token-coupons`, the loop above |
+
+The total counts each skill once, however many tools it is linked into, so the four lines under it add up to more: the difference is the skills those tools share. Each colour means one thing: red for skills nobody uses, yellow for the allowance and what it drops out of reach, gray for the ones you start yourself, dark blue for `command`, purple for `shorten`, green for what comes back. They come from your Claude Code theme, so they stay readable on a light background as well as a dark one.
+
+It is a view and nothing else. Every number comes from the skill's own `panel` command, the pane changes no file, and it leaves no run record, so a glance never becomes the baseline your next report compares against.
+
+**Installed the skill on its own?** Then you do not have the pane, and nothing is missing: the skill never reads from it and never depends on it. It needs Claude Code 2.1.287 or newer; on an older build the plugin loads as before and the pane is simply not there.
 
 ## What it can change, and how to undo it
 
@@ -195,6 +245,8 @@ Codex, Cursor and Gemini CLI each keep skills in their own folders, send their o
 | **Cursor** | `~/.cursor/skills`, its bundled skills, `~/.agents/skills`, `~/.claude/skills` and `~/.codex/skills` as compatibility paths, installed plugins | `~/.cursor/projects`, plus the app's own chat database on Node 22.5 or newer | an attached skill or `/name`, or a read of the SKILL.md |
 | **Gemini CLI** | `~/.gemini/skills`, extensions | `~/.gemini/tmp` | `activate_skill` |
 
+**The lists overlap, and the report says by how much.** A skill kept in one folder and linked into several tools is one row here and an entry in each of their lists. On the author's machine the four lists add up to 431 entries but 320 distinct skills: 36 of Codex's 57 and 63 of Cursor's 243 are the same folders Claude Code lists. So the tools are never shown as separate piles, a use in any of them lands on the one row, and shortening or deleting a shared skill changes it everywhere it is linked.
+
 Three rules follow:
 
 - **A skill another tool has used is never proposed for deletion.**
@@ -209,6 +261,7 @@ Only Claude Code's list is priced. Each tool sends its own list with its own mes
 - **Messages per chat and chats per week are measured**, not assumed. When no history is found, the report says so instead of guessing.
 - **On a subscription, dollars are the wrong unit**, so the report also gives the listing as a share of everything you send.
 - **Prices are a data file** with a verified-on date, never code, and the report warns you when that date is more than 60 days old.
+- **The saving is the sum of its rows.** "Take the 60 suggestions and you save 6,420 tokens" is those sixty rows added up, so you can check it against the page.
 
 <details>
 <summary>Two runs a week apart should be comparable</summary>
@@ -235,6 +288,7 @@ TC report --html=report.html --open        # the decision page
 TC report --card=scorecard.html --open     # the shareable card, exports itself as a PNG
 TC apply decisions.json                    # the plan, writes nothing
 TC apply decisions.json --yes              # make the changes
+TC panel                                   # the report as a few KB of JSON, writes nothing
 ```
 
 `apply -` and `describe -` read the same JSON from stdin, so `pbpaste | TC apply -` works too.
@@ -249,6 +303,7 @@ token-coupons report [--since=YYYY-MM-DD] [--cwd=DIR] [--window=N] [--fraction=F
 token-coupons apply <decisions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons describe <descriptions.json | -> [--yes] [--trash=DIR] [--json]
 token-coupons pricing [--pricing=FILE] [--json]
+token-coupons panel [--last] [--rows=N] [--cwd=DIR]
 token-coupons help
 
   --since=DATE     only read sessions on or after this day
@@ -270,9 +325,13 @@ token-coupons help
   --runs=DIR       where run history is kept (default ~/.token-coupons/runs)
   --yes            apply and describe only: actually make the changes
   --trash=DIR      apply and describe only: where deleted folders and replaced files go
+  --last           panel only: do not measure, print what the last run recorded
+  --rows=N         panel only: how many rows worth acting on to include (default 8)
 ```
 
-`report` exits 0 when it finishes. `apply` and `describe` exit 1 if a step failed, 0 otherwise; refusals are not failures. An unknown flag or command exits 2.
+`report` and `panel` exit 0 when they finish. `apply` and `describe` exit 1 if a step failed, 0 otherwise; refusals are not failures. An unknown flag or command exits 2.
+
+`panel` takes the same settings `report` does and carries them forward the same way, so the two never measure differently. It prints JSON only: what the list costs, the three counts, the first rows worth acting on, and one line per other tool.
 
 </details>
 
@@ -280,7 +339,7 @@ token-coupons help
 
 - **Local files only.** Your skill folders, the chat history each tool already keeps on disk (every path is in [the table above](#every-tool-on-the-machine)), and each tool's own config, for which plugins are on and which model you run. A tool whose folder is not on the machine is not looked for.
 - **No network access, ever.** Prices ship as a data file with a date on them; refreshing them is a human action, not a fetch.
-- **`report` writes nothing** beyond the paths you give it and its own run record.
+- **`report` writes nothing** beyond the paths you give it and its own run record. **`panel` writes nothing at all**, and it is the only command the pane ever runs.
 - Set `TOKEN_COUPONS_HOME` to point the whole tool at a different home directory.
 
 ## Contributing
@@ -288,9 +347,13 @@ token-coupons help
 ```bash
 pnpm test                    # node --test, no dependencies to install
 node tests/dash-scan.mjs     # fails on any em dash or en dash in the repo
+claude plugin test .         # the pane, run inside Claude Code itself (needs 2.1.286 or newer)
+claude plugin validate .claude-plugin/plugin.json
 ```
 
 The whole tool is `skills/token-coupons`, and `tests/` at the repo root reaches into it. Nothing the tool needs at runtime may live outside that directory: `skills add` copies it on its own, and anything left behind would simply be missing. [docs/architecture.md](docs/architecture.md) is the contract every module is written against; change it there first.
+
+The pane is the one thing that lives outside it, on purpose: `hooks/token-coupons.mjs` and its contract in `types/` ship with the plugin and only ever call the skill's `panel` command. A test fails if anything inside the skill folder reaches back out for them.
 
 One rule that trips everyone up: no em dashes or en dashes anywhere in this repo, including code, comments, strings, docs, and generated HTML. Run the dash scan before you open a pull request.
 
